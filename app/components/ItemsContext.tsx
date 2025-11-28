@@ -9,8 +9,10 @@ interface TopicItem {
   title: string;
   content?: string;
   youtube_id?: string;
+  youtube_url?: string;
   parent_id?: string;
   children?: TopicItem[];
+  order_index?: number;
 }
 
 interface ItemsContextType {

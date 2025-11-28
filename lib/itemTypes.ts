@@ -18,27 +18,27 @@ export interface ItemTypeConfig {
 export const ITEM_TYPES: ItemTypeConfig[] = [
   {
     type: "section",
-    label: "Seção",
+    label: "Pasta",
     emoji: "📂",
     icon: FolderIcon,
+  },
+  {
+    type: "note",
+    label: "Bloco de notas",
+    emoji: "📝",
+    icon: NoteIcon,
+  },
+  {
+    type: "task",
+    label: "To do list",
+    emoji: "✅",
+    icon: TaskIcon,
   },
   {
     type: "video",
     label: "Vídeo",
     emoji: "🎥",
     icon: VideoIcon,
-  },
-  {
-    type: "task",
-    label: "Tarefa",
-    emoji: "✅",
-    icon: TaskIcon,
-  },
-  {
-    type: "note",
-    label: "Nota",
-    emoji: "📝",
-    icon: NoteIcon,
   },
 ];
 

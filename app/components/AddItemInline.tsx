@@ -102,9 +102,16 @@ export default function AddItemInline({
           {/* Header with type selection and actions */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              {ITEM_TYPES.filter(
-                (itemType) => allowSections || itemType.type !== "section"
-              ).map((itemType, index) => (
+              {ITEM_TYPES.filter((itemType) => {
+                // Always show: section, note, task, video
+                const allowedTypes: ItemType[] = [
+                  "section",
+                  "note",
+                  "task",
+                  "video",
+                ];
+                return allowedTypes.includes(itemType.type);
+              }).map((itemType, index) => (
                 <button
                   key={itemType.type}
                   type="button"
