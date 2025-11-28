@@ -1,0 +1,135 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import SidebarItem from "./SidebarItem";
+import { type ItemType } from "@/lib/itemTypes";
+
+interface TopicItem {
+  id: string;
+  type: ItemType;
+  title: string;
+  parent_id?: string;
+  children?: TopicItem[];
+}
+
+interface SidebarNavigationProps {
+  items: TopicItem[];
+}
+
+export default function SidebarNavigation({
+  items: initialItems,
+}: SidebarNavigationProps) {
+  const [activeId, setActiveId] = useState("");
+  const [items, setItems] = useState(initialItems);
+
+  // Update items when initialItems change
+  useEffect(() => {
+    setItems(initialItems);
+  }, [initialItems]);
+
+  useEffect(() => {
+    // Set initial active from URL hash
+    if (window.location.hash) {
+      setActiveId(window.location.hash.slice(1));
+    }
+
+    // Track scroll position to highlight current section
+    const handleScroll = () => {
+      const sections = document.querySelectorAll("[id]");
+      let currentId = "";
+
+      sections.forEach((section) => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 150 && rect.bottom >= 150) {
+          currentId = section.id;
+        }
+      });
+
+      if (currentId) {
+        setActiveId(currentId);
+      }
+    };
+
+    // Listen to hash changes
+    const handleHashChange = () => {
+      if (window.location.hash) {
+        setActiveId(window.location.hash.slice(1));
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    window.addEventListener("hashchange", handleHashChange);
+
+    // Initial check
+    handleScroll();
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("hashchange", handleHashChange);
+    };
+  }, []);
+
+  const updateItem = (id: string, field: "title", value: string) => {
+    const updateItemRecursive = (items: TopicItem[]): TopicItem[] => {
+      return items.map((item) => {
+        if (item.id === id) {
+          return { ...item, [field]: value };
+        }
+        if (item.children) {
+          return { ...item, children: updateItemRecursive(item.children) };
+        }
+        return item;
+      });
+    };
+
+    const updatedItems = updateItemRecursive(items);
+    setItems(updatedItems);
+
+    // Send to backend
+    fetch(`http://localhost:3001/topics/items/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [field]: value }),
+    }).catch((error) => {
+      console.error("Error updating item:", error);
+    });
+  };
+
+  const deleteItem = (id: string) => {
+    const deleteItemRecursive = (items: TopicItem[]): TopicItem[] => {
+      return items
+        .filter((item) => item.id !== id)
+        .map((item) => {
+          if (item.children) {
+            return { ...item, children: deleteItemRecursive(item.children) };
+          }
+          return item;
+        });
+    };
+
+    const updatedItems = deleteItemRecursive(items);
+    setItems(updatedItems);
+
+    // Send to backend
+    fetch(`http://localhost:3001/topics/items/${id}`, {
+      method: "DELETE",
+    }).catch((error) => {
+      console.error("Error deleting item:", error);
+    });
+  };
+
+  return (
+    <nav className="space-y-1">
+      {items.map((item) => (
+        <SidebarItem
+          key={item.id}
+          item={item}
+          level={0}
+          activeId={activeId}
+          onUpdate={updateItem}
+          onDelete={deleteItem}
+        />
+      ))}
+    </nav>
+  );
+}
