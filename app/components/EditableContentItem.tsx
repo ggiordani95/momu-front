@@ -1,28 +1,19 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useMemo } from "react";
 import VideoPlayer from "./VideoPlayer";
 import EditableText from "./EditableText";
 import RichTextEditor from "./RichTextEditor";
-import { GripVertical } from "lucide-react";
+import { GripVertical, Check } from "lucide-react";
 import {
   getItemTypeEmoji,
   getItemTypeIcon,
   type ItemType,
 } from "@/lib/itemTypes";
-
-interface TopicItem {
-  id: string;
-  type: ItemType;
-  title: string;
-  content?: string;
-  youtube_id?: string;
-  parent_id?: string;
-  children?: TopicItem[];
-}
+import type { HierarchicalItem } from "@/lib/types";
 
 interface EditableContentItemProps {
-  item: TopicItem;
+  item: HierarchicalItem;
   onUpdate: (id: string, field: "title" | "content", value: string) => void;
   onAddChild?: (parentId: string) => void;
   showAddFormForParentId?: string;
@@ -32,8 +23,8 @@ interface EditableContentItemProps {
     targetItemId: string,
     position: "before" | "inside" | "after"
   ) => void;
-  allItems?: TopicItem[];
-  setAllItems?: (items: TopicItem[]) => void;
+  allItems?: HierarchicalItem[];
+  setAllItems?: (items: HierarchicalItem[]) => void;
   isNested?: boolean;
   // Shared drag state from parent
   draggedItemId?: string | null;
@@ -74,6 +65,10 @@ export default function EditableContentItem({
     "before" | "inside" | "after" | null
   >(null);
   const draggedItemIdRef = useRef<string | null>(null);
+  const checklistPreview = useMemo(
+    () => parseChecklistPreview(item.content, item.children),
+    [item.content, item.children]
+  );
   const getIcon = (type: ItemType, size: number = 24) => {
     const IconComponent = getItemTypeIcon(type);
     if (IconComponent) {
@@ -82,20 +77,8 @@ export default function EditableContentItem({
     return getItemTypeEmoji(type);
   };
 
-  const handleUpdate = async (field: "title" | "content", value: string) => {
-    // Call parent update function
+  const handleUpdate = (field: "title" | "content", value: string) => {
     onUpdate(item.id, field, value);
-
-    // TODO: Send to backend
-    try {
-      await fetch(`http://localhost:3001/topics/items/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [field]: value }),
-      });
-    } catch (error) {
-      console.error("Error updating item:", error);
-    }
   };
 
   const handleDragStart = (e: React.DragEvent) => {
@@ -391,7 +374,7 @@ export default function EditableContentItem({
               className="ml-6 space-y-6 border-l-2 pl-6"
               style={{ borderColor: "var(--border-color)" }}
             >
-              {item.children.map((child) => (
+              {item.children.map((child: HierarchicalItem) => (
                 <EditableContentItem
                   key={child.id}
                   item={child}
@@ -478,7 +461,7 @@ export default function EditableContentItem({
           style={{ borderColor: "var(--border-color)" }}
         >
           <input type="checkbox" className="mt-1 w-4 h-4" />
-          <div className="flex-1">
+          <div className="flex-1 space-y-2">
             <EditableText
               value={item.title}
               onSave={(value) => handleUpdate("title", value)}
@@ -486,13 +469,48 @@ export default function EditableContentItem({
               as="h4"
               placeholder="Nome da tarefa..."
             />
-            <EditableText
-              value={item.content || ""}
-              onSave={(value) => handleUpdate("content", value)}
-              className="text-sm opacity-70 mt-1"
-              placeholder="Descrição da tarefa..."
-              multiline
-            />
+            {checklistPreview.length > 0 ? (
+              <div className="space-y-1.5">
+                {checklistPreview.slice(0, 5).map((todo) => (
+                  <div
+                    key={todo.id}
+                    className="flex items-center gap-2 text-sm text-foreground/80"
+                  >
+                    <span
+                      className={`w-4 h-4 rounded border flex items-center justify-center ${
+                        todo.completed
+                          ? "bg-blue-600 border-blue-600 text-white"
+                          : "border-foreground/30"
+                      }`}
+                    >
+                      {todo.completed && <Check size={10} strokeWidth={3} />}
+                    </span>
+                    <span
+                      className={
+                        todo.completed
+                          ? "line-through text-foreground/50"
+                          : "text-foreground"
+                      }
+                    >
+                      {todo.text}
+                    </span>
+                  </div>
+                ))}
+                {checklistPreview.length > 5 && (
+                  <p className="text-xs text-foreground/50">
+                    +{checklistPreview.length - 5} itens
+                  </p>
+                )}
+              </div>
+            ) : (
+              <EditableText
+                value={item.content || ""}
+                onSave={(value) => handleUpdate("content", value)}
+                className="text-sm opacity-70 mt-1"
+                placeholder="Descrição da tarefa..."
+                multiline
+              />
+            )}
           </div>
         </div>
       )}
@@ -520,4 +538,70 @@ export default function EditableContentItem({
       )}
     </div>
   );
+}
+
+function parseChecklistPreview(raw?: string, children?: HierarchicalItem[]) {
+  if (!raw || !raw.trim()) {
+    if (children && children.length > 0) {
+      return children.map((child, index) => ({
+        id: child.id || `child-${index}`,
+        text: child.title || "Item",
+        completed: false,
+      }));
+    }
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed.map((item, index) => {
+        if (typeof item === "string") {
+          return {
+            id: `preview-${index}`,
+            text: item,
+            completed: false,
+          };
+        }
+
+        if (typeof item === "object" && item !== null) {
+          return {
+            id: item.id || `preview-${index}`,
+            text: item.text || String(item.text ?? ""),
+            completed: Boolean(item.completed),
+          };
+        }
+
+        return {
+          id: `preview-${index}`,
+          text: String(item),
+          completed: false,
+        };
+      });
+    }
+  } catch {
+    // Not JSON, treat as plain text list split by newline
+    const lines = raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    if (lines.length > 0) {
+      return lines.map((text, index) => ({
+        id: `preview-${index}`,
+        text,
+        completed: false,
+      }));
+    }
+  }
+
+  if (children && children.length > 0) {
+    return children.map((child, index) => ({
+      id: child.id || `child-${index}`,
+      text: child.title || "Item",
+      completed: false,
+    }));
+  }
+
+  return [];
 }

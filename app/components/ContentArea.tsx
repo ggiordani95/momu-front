@@ -1,12 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import EditableContentItem from "./EditableContentItem";
 import AddItemInline from "./AddItemInline";
 import AddItemButton from "./AddItemButton";
 import RichTextEditor from "./RichTextEditor";
 import { useItems } from "./ItemsContext";
 import { type ItemType, getItemTypeIcon } from "@/lib/itemTypes";
+import { HierarchicalItem } from "@/lib/types";
+import {
+  useCreateItem,
+  useUpdateItem,
+  useUpdateItemOrder,
+} from "@/lib/hooks/useItems";
+import { toast } from "sonner";
 
 interface TopicItem {
   id: string;
@@ -35,11 +42,15 @@ export default function ContentArea({
 }: ContentAreaProps) {
   const itemsContext = useItems();
   const [items, setItems] = useState(initialItems);
+  const createItemMutation = useCreateItem(topicId);
+  const updateItemMutation = useUpdateItem(topicId);
+  const updateItemOrderMutation = useUpdateItemOrder(topicId);
+  const optimisticIdRef = useRef(0);
 
   // Sync items with context when they change
   useEffect(() => {
     if (itemsContext) {
-      itemsContext.setItems(items);
+      itemsContext.setItems(items as HierarchicalItem[]);
     }
   }, [items, itemsContext]);
   const [addItemPosition, setAddItemPosition] =
@@ -102,9 +113,11 @@ export default function ContentArea({
         (m) => m.id === selectedModuleId && m.type === "section"
       );
       if (!updatedModule && modules.length > 0) {
-        // If selected module was deleted, select first available
-        setSelectedModuleId(modules[0].id);
-        window.location.hash = modules[0].id;
+        // If selected module was deleted, schedule state update outside the render/effect cycle
+        setTimeout(() => {
+          setSelectedModuleId(modules[0].id as string);
+          window.location.hash = modules[0].id;
+        }, 0);
       }
     }
   }, [items, selectedModuleId, modules]);
@@ -114,82 +127,76 @@ export default function ContentArea({
     field: "title" | "content",
     value: string
   ) => {
-    const updateItem = (items: TopicItem[]): TopicItem[] => {
+    const updateItemInTree = (items: TopicItem[]): TopicItem[] => {
       return items.map((item) => {
         if (item.id === id) {
           return { ...item, [field]: value };
         }
         if (item.children) {
-          return { ...item, children: updateItem(item.children) };
+          return { ...item, children: updateItemInTree(item.children) };
         }
         return item;
       });
     };
 
-    setItems(updateItem(items));
+    const previousItems = items;
+    const updatedItems = updateItemInTree(items);
+    setItems(updatedItems);
+
+    updateItemMutation.mutate(
+      { itemId: id, data: { [field]: value } },
+      {
+        onError: (error) => {
+          console.error("Error updating item:", error);
+          setItems(previousItems);
+          toast.error("Não foi possível salvar a edição. Tente novamente.");
+        },
+      }
+    );
   };
 
-  const handleAddItem = async (itemData: {
+  const handleAddItem = (itemData: {
     type: ItemType;
     title: string;
     content?: string;
     youtube_url?: string;
     parent_id?: string;
   }) => {
-    try {
-      const response = await fetch(
-        `http://localhost:3001/topics/${topicId}/items`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(itemData),
-        }
-      );
+    optimisticIdRef.current += 1;
+    const optimisticId = `temp-${optimisticIdRef.current}`;
+    const optimisticItem: TopicItem = {
+      id: optimisticId as string,
+      type: itemData.type,
+      title: itemData.title,
+      content: itemData.content,
+      youtube_id: undefined,
+      parent_id: itemData.parent_id,
+      children: [],
+    };
 
-      if (!response.ok) throw new Error("Failed to create item");
+    setItems((prev) => insertItem(prev, optimisticItem, itemData.parent_id));
+    setAddItemPosition(null);
 
-      const newItem = await response.json();
-
-      // Convert flat item to hierarchical structure
-      const hierarchicalItem: TopicItem = {
-        id: newItem.id,
-        type: newItem.type,
-        title: newItem.title,
-        content: newItem.content,
-        youtube_id: newItem.youtube_id,
-        parent_id: newItem.parent_id,
-        children: [],
-      };
-
-      // Add to items list
-      if (itemData.parent_id) {
-        // Add as child to parent
-        const addToParent = (items: TopicItem[]): TopicItem[] => {
-          return items.map((item) => {
-            if (item.id === itemData.parent_id) {
-              return {
-                ...item,
-                children: [...(item.children || []), hierarchicalItem],
-              };
-            }
-            if (item.children) {
-              return { ...item, children: addToParent(item.children) };
-            }
-            return item;
-          });
+    createItemMutation.mutate(itemData, {
+      onSuccess: (newItem) => {
+        const mappedItem: TopicItem = {
+          id: newItem.id,
+          type: newItem.type,
+          title: newItem.title,
+          content: newItem.content,
+          youtube_id: newItem.youtube_id,
+          parent_id: newItem.parent_id ?? undefined,
+          children: [],
         };
-        setItems(addToParent(items));
-      } else {
-        // Add as root item
-        setItems([...items, hierarchicalItem]);
-      }
 
-      // Close add item form
-      setAddItemPosition(null);
-    } catch (error) {
-      console.error("Error creating item:", error);
-      alert("Erro ao criar item. Tente novamente.");
-    }
+        setItems((prev) => replaceItemById(prev, optimisticId, mappedItem));
+      },
+      onError: (error) => {
+        console.error("Error creating item:", error);
+        setItems((prev) => removeItemById(prev, optimisticId));
+        toast.error("Não foi possível criar o item. Tente novamente.");
+      },
+    });
   };
 
   const openAddItem = (position: AddItemPosition) => {
@@ -229,7 +236,57 @@ export default function ContentArea({
     return false;
   };
 
-  const removeItemById = (items: TopicItem[], id: string): TopicItem[] => {
+  function insertItem(
+    items: TopicItem[],
+    newItem: TopicItem,
+    parentId?: string
+  ): TopicItem[] {
+    if (!parentId) {
+      return [...items, newItem];
+    }
+
+    return items.map((item) => {
+      if (item.id === parentId) {
+        return {
+          ...item,
+          children: [...(item.children || []), newItem],
+        };
+      }
+      if (item.children) {
+        return {
+          ...item,
+          children: insertItem(item.children, newItem, parentId),
+        };
+      }
+      return item;
+    });
+  }
+
+  function replaceItemById(
+    items: TopicItem[],
+    targetId: string,
+    newItem: TopicItem
+  ): TopicItem[] {
+    return items.map((item) => {
+      if (item.id === targetId) {
+        return {
+          ...newItem,
+          children: newItem.children?.length
+            ? newItem.children
+            : item.children || [],
+        };
+      }
+      if (item.children) {
+        return {
+          ...item,
+          children: replaceItemById(item.children, targetId, newItem),
+        };
+      }
+      return item;
+    });
+  }
+
+  function removeItemById(items: TopicItem[], id: string): TopicItem[] {
     return items
       .filter((item) => item.id !== id)
       .map((item) => {
@@ -238,7 +295,7 @@ export default function ContentArea({
         }
         return item;
       });
-  };
+  }
 
   const moveItemToParent = (
     items: TopicItem[],
@@ -295,18 +352,21 @@ export default function ContentArea({
 
     flatten(items);
 
-    await Promise.all(
-      flatItems.map((item) =>
-        fetch(`http://localhost:3001/topics/items/${item.id}/order`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            order_index: item.order_index,
-            parent_id: item.parent_id,
-          }),
-        })
-      )
-    );
+    try {
+      await Promise.all(
+        flatItems.map((item) =>
+          updateItemOrderMutation.mutateAsync({
+            itemId: item.id,
+            orderIndex: item.order_index,
+            parentId: item.parent_id ?? null,
+          })
+        )
+      );
+    } catch (error) {
+      console.error("Error updating item order:", error);
+      toast.error("Não foi possível reordenar os itens. Tente novamente.");
+      throw error;
+    }
   };
 
   // Unified function to handle moving items (works for root and nested items)
@@ -555,7 +615,7 @@ export default function ContentArea({
             {items.map((item) => (
               <div key={item.id} className="space-y-8">
                 <EditableContentItem
-                  item={item}
+                  item={item as HierarchicalItem}
                   onUpdate={handleUpdate}
                   onAddChild={(parentId) =>
                     openAddItem({ type: "child", parentId })
@@ -576,8 +636,8 @@ export default function ContentArea({
                     ) : undefined
                   }
                   onMoveItem={handleMoveItem}
-                  allItems={items}
-                  setAllItems={setItems}
+                  allItems={items as HierarchicalItem[]}
+                  setAllItems={setItems as (items: HierarchicalItem[]) => void}
                 />
               </div>
             ))}
@@ -655,7 +715,7 @@ export default function ContentArea({
           {displayItems.map((item) => (
             <div key={item.id} className="space-y-8">
               <EditableContentItem
-                item={item}
+                item={item as HierarchicalItem}
                 onUpdate={handleUpdate}
                 onAddChild={(parentId) =>
                   openAddItem({ type: "child", parentId })
@@ -676,9 +736,9 @@ export default function ContentArea({
                   ) : undefined
                 }
                 onMoveItem={handleMoveItem}
-                allItems={items}
+                allItems={items as HierarchicalItem[]}
                 setAllItems={(newItems) => {
-                  setItems(newItems);
+                  setItems(newItems as TopicItem[]);
                   if (selectedModuleId) {
                     const updatedModule = newItems.find(
                       (m) => m.id === selectedModuleId && m.type === "section"

@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import SidebarItem from "./SidebarItem";
 import { useItems } from "./ItemsContext";
 import { type ItemType } from "@/lib/itemTypes";
+import { HierarchicalItem } from "@/lib/types";
+import { useUpdateItem } from "@/lib/hooks/useItems";
 
 interface TopicItem {
   id: string;
@@ -15,13 +17,23 @@ interface TopicItem {
 
 interface SidebarNavigationProps {
   items: TopicItem[];
+  workspaceId?: string;
 }
 
 export default function SidebarNavigation({
   items: initialItems,
+  workspaceId,
 }: SidebarNavigationProps) {
   const [activeId, setActiveId] = useState("");
   const itemsContext = useItems();
+
+  const derivedWorkspaceId =
+    workspaceId ||
+    (itemsContext?.items && itemsContext.items[0]?.workspace_id) ||
+    (initialItems[0] as HierarchicalItem | undefined)?.workspace_id ||
+    null;
+
+  const updateItemMutation = useUpdateItem(derivedWorkspaceId || "");
 
   // Use items from context if available, otherwise use initialItems
   const items = itemsContext?.items || initialItems;
@@ -75,6 +87,7 @@ export default function SidebarNavigation({
   }, []);
 
   const updateItem = (id: string, field: "title", value: string) => {
+    const previousItems = items as TopicItem[];
     const updateItemRecursive = (items: TopicItem[]): TopicItem[] => {
       return items.map((item) => {
         if (item.id === id) {
@@ -87,19 +100,29 @@ export default function SidebarNavigation({
       });
     };
 
-    const updatedItems = updateItemRecursive(items);
+    const updatedItems = updateItemRecursive(items as TopicItem[]);
     if (itemsContext) {
-      itemsContext.setItems(updatedItems);
+      itemsContext.setItems(updatedItems as HierarchicalItem[]);
     }
 
-    // Send to backend
-    fetch(`http://localhost:3001/topics/items/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [field]: value }),
-    }).catch((error) => {
-      console.error("Error updating item:", error);
-    });
+    if (!derivedWorkspaceId) {
+      console.error(
+        "Não foi possível identificar o workspace para atualizar o item."
+      );
+      return;
+    }
+
+    updateItemMutation.mutate(
+      { itemId: id, data: { [field]: value } },
+      {
+        onError: (error) => {
+          console.error("Error updating item:", error);
+          if (itemsContext) {
+            itemsContext.setItems(previousItems as HierarchicalItem[]);
+          }
+        },
+      }
+    );
   };
 
   const deleteItem = (id: string) => {
@@ -114,16 +137,21 @@ export default function SidebarNavigation({
         });
     };
 
-    const updatedItems = deleteItemRecursive(items);
+    const updatedItems = deleteItemRecursive(items as TopicItem[]);
     if (itemsContext) {
-      itemsContext.setItems(updatedItems);
+      itemsContext.setItems(updatedItems as HierarchicalItem[]);
     }
 
-    // Send to backend
-    fetch(`http://localhost:3001/topics/items/${id}`, {
-      method: "DELETE",
-    }).catch((error) => {
-      console.error("Error deleting item:", error);
+    if (!derivedWorkspaceId) {
+      console.error(
+        "Não foi possível identificar o workspace para atualizar o item."
+      );
+      return;
+    }
+
+    updateItemMutation.mutate({
+      itemId: id,
+      data: { active: false },
     });
   };
 
@@ -132,7 +160,7 @@ export default function SidebarNavigation({
       {items.map((item) => (
         <SidebarItem
           key={item.id}
-          item={item}
+          item={item as TopicItem}
           level={0}
           activeId={activeId}
           onUpdate={updateItem}

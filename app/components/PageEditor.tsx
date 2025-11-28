@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import RichTextEditor from "./RichTextEditor";
 import EditableText from "./EditableText";
 import Checklist from "./Checklist";
+import type { HierarchicalItem } from "@/lib/types";
 
 interface ChecklistItem {
   id: string;
@@ -12,20 +13,8 @@ interface ChecklistItem {
   completed: boolean;
 }
 
-interface TopicItem {
-  id: string;
-  type: string;
-  title: string;
-  content?: string;
-  youtube_id?: string;
-  youtube_url?: string;
-  parent_id?: string;
-  children?: TopicItem[];
-  order_index?: number;
-}
-
 interface PageEditorProps {
-  item: TopicItem;
+  item: HierarchicalItem;
   onBack: () => void;
   onUpdate: (id: string, field: "title" | "content", value: string) => void;
 }
@@ -41,24 +30,42 @@ export default function PageEditor({
   // Parse checklist from content if it's a task
   const parsedChecklistItems = useMemo((): ChecklistItem[] => {
     if (item.type !== "task") return [];
-    if (!item.content) return [];
-
-    try {
-      const parsed = JSON.parse(item.content);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+    if (item.content?.trim()) {
+      try {
+        const parsed = JSON.parse(item.content);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((todo, index) => ({
+            ...todo,
+            id: todo.id || `checklist-item-${index}`,
+            text: todo.text || String(todo),
+            completed: Boolean(todo.completed),
+          }));
+        }
+      } catch {
+        // ignore parsing errors
       }
-    } catch {
-      // If parsing fails, treat as plain text
     }
 
-    // Legacy: if content is not JSON, create a single item
-    if (item.content.trim()) {
-      return [{ id: "1", text: item.content, completed: false }];
+    if (item.children && item.children.length > 0) {
+      return item.children.map((child, index) => ({
+        id: child.id || `child-checklist-${index}`,
+        text: child.title || "Item",
+        completed: false,
+      }));
+    }
+
+    if (item.content?.trim()) {
+      return [
+        {
+          id: `checklist-item-${item.id}`,
+          text: item.content,
+          completed: false,
+        },
+      ];
     }
 
     return [];
-  }, [item.content, item.type]);
+  }, [item.content, item.id, item.type, item.children]);
 
   const [checklistItems, setChecklistItems] =
     useState<ChecklistItem[]>(parsedChecklistItems);
@@ -124,6 +131,7 @@ export default function PageEditor({
               content={content}
               onSave={handleContentSave}
               placeholder="Comece a escrever..."
+              autoFocus={item.type === "note"}
             />
           )}
         </div>

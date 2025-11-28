@@ -4,15 +4,17 @@ import SidebarNavigation from "../../components/SidebarNavigation";
 import ContentArea from "../../components/ContentArea";
 import { ItemsProvider } from "../../components/ItemsContext";
 import { type ItemType } from "@/lib/itemTypes";
+import { HierarchicalItem, Folder } from "@/lib/types";
 
 async function getTopicItems(id: string) {
   try {
-    const res = await fetch(`http://localhost:3001/topics/${id}/items`, {
+    const res = await fetch(`http://localhost:3001/folders/${id}/items`, {
       cache: "no-store",
     });
     if (!res.ok) return [];
     return res.json();
-  } catch (e) {
+  } catch (error) {
+    console.error("Error fetching workspace items:", error);
     return [];
   }
 }
@@ -24,8 +26,9 @@ async function getTopic(id: string) {
     });
     if (!res.ok) return null;
     const topics = await res.json();
-    return topics.find((t: any) => t.id === id) || null;
-  } catch (e) {
+    return topics.find((t: Folder) => t.id === id) || null;
+  } catch (error: unknown) {
+    console.error("Error fetching topic:", error);
     return null;
   }
 }
@@ -79,14 +82,12 @@ export default async function TopicPage({
   const hierarchicalItems = buildHierarchy(items);
 
   return (
-    <ItemsProvider initialItems={hierarchicalItems}>
+    <ItemsProvider initialItems={hierarchicalItems as HierarchicalItem[]}>
       <div className="flex h-screen overflow-hidden relative bg-background">
         {/* Glassmorphism background with 2-color gradient */}
         <div
           className="fixed inset-0 pointer-events-none z-0"
           style={{
-            background:
-              "radial-gradient(circle 600px at 20% 30%, rgba(59, 130, 246, 0.12) 0%, transparent 70%), radial-gradient(circle 500px at 80% 70%, rgba(139, 92, 246, 0.1) 0%, transparent 70%), radial-gradient(ellipse 130% 110% at 50% 50%, rgba(0, 0, 0, 0.9) 0%, rgba(11, 10, 10, 0.97) 100%)",
             backdropFilter: "blur(50px) saturate(180%)",
             WebkitBackdropFilter: "blur(50px) saturate(180%)",
           }}
@@ -118,7 +119,7 @@ export default async function TopicPage({
               <Plus size={16} />
               Adicionar Item
             </button>
-            <SidebarNavigation items={hierarchicalItems} />
+            <SidebarNavigation items={hierarchicalItems} workspaceId={id} />
           </div>
         </aside>
 

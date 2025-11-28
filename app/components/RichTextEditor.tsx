@@ -23,22 +23,26 @@ interface RichTextEditorProps {
   content: string;
   onSave: (html: string) => void;
   placeholder?: string;
+  autoFocus?: boolean;
 }
 
 export default function RichTextEditor({
   content,
   onSave,
   placeholder = "Escreva algo...",
+  autoFocus = false,
 }: RichTextEditorProps) {
-  const [isEditing, setIsEditing] = useState(false);
+  // Always start in editing mode if autoFocus is true
+  const [isEditing, setIsEditing] = useState(autoFocus);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showFloatingToolbar, setShowFloatingToolbar] = useState(false);
   const [toolbarPosition, setToolbarPosition] = useState({ top: 0, left: 0 });
-  const isEditingRef = useRef(false);
+  const isEditingRef = useRef(autoFocus);
   const lastSavedContentRef = useRef(content);
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const floatingToolbarRef = useRef<HTMLDivElement>(null);
+  const hasAutoFocusedRef = useRef(false);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -64,7 +68,7 @@ export default function RichTextEditor({
       attributes: {
         class:
           "prose prose-sm max-w-none focus:outline-none min-h-[100px] p-3 [&_p]:my-0 [&_p:last-child]:mb-0 [&_*:last-child]:mb-0",
-        style: "margin-bottom: 0; padding-bottom: 0;",
+        style: "margin-bottom: 0; padding-bottom: 0; white-space: pre-wrap;",
       },
     },
     onUpdate: ({ editor }) => {
@@ -105,21 +109,50 @@ export default function RichTextEditor({
         lastSavedContentRef.current = html;
         onSave(html);
       }
-      isEditingRef.current = false;
-      setIsEditing(false);
+
+      // Only close editor if autoFocus is false (not a note)
+      if (!autoFocus) {
+        isEditingRef.current = false;
+        setIsEditing(false);
+      }
     },
   });
 
+  // Ensure editor is in editing mode when autoFocus is true
+  useEffect(() => {
+    if (editor && autoFocus) {
+      if (!isEditing) {
+        const timer = setTimeout(() => {
+          setIsEditing(true);
+          isEditingRef.current = true;
+        }, 0);
+        return () => clearTimeout(timer);
+      }
+      // Focus the editor after a short delay to ensure it's rendered
+      if (!hasAutoFocusedRef.current) {
+        const focusTimer = setTimeout(() => {
+          editor.commands.focus();
+          hasAutoFocusedRef.current = true;
+        }, 100);
+        return () => clearTimeout(focusTimer);
+      }
+    }
+  }, [editor, autoFocus, isEditing]);
+
+  // Focus editor when entering editing mode
   useEffect(() => {
     if (editor && isEditing) {
       isEditingRef.current = true;
-      editor.commands.focus();
+      const timer = setTimeout(() => {
+        editor.commands.focus();
+      }, 50);
+      return () => clearTimeout(timer);
     }
   }, [isEditing, editor]);
 
-  // Handle floating toolbar positioning
+  // Handle floating toolbar positioning - always active when editor is available
   useEffect(() => {
-    if (!editor || !isEditing) return;
+    if (!editor) return;
 
     const updateToolbarPosition = () => {
       const { from, to } = editor.state.selection;
@@ -186,7 +219,7 @@ export default function RichTextEditor({
       editor.off("transaction", updateToolbarPosition);
       window.removeEventListener("scroll", handleScroll, true);
     };
-  }, [editor, isEditing, showFloatingToolbar]);
+  }, [editor, showFloatingToolbar]);
 
   // Update editor content when prop changes (from external updates)
   // Only update if we're not currently editing and content actually changed
@@ -213,14 +246,18 @@ export default function RichTextEditor({
     return null;
   }
 
-  // Show read-only content when not editing
-  if (!isEditing) {
+  // For autoFocus (notes), always show editor in editing mode
+  // Show read-only content when not editing (only if autoFocus is false)
+  // If autoFocus is true, force isEditing to true to show editor
+  const shouldShowEditor = isEditing || autoFocus;
+
+  if (!shouldShowEditor) {
     const htmlToShow =
       content || `<span class="opacity-40">${placeholder}</span>`;
     return (
       <div
         onClick={() => setIsEditing(true)}
-        className="cursor-text hover:bg-hover rounded px-2 py-1 transition-colors prose prose-sm max-w-none [&_p]:my-0 [&_p]:mb-0 [&_*]:mb-0 [&_*:last-child]:mb-0"
+        className="cursor-text hover:bg-hover rounded px-2 py-1 transition-colors prose prose-sm max-w-none [&_p]:my-0 [&_p]:mb-0 **:mb-0 [&_*:last-child]:mb-0"
         style={{ marginBottom: "0 !important", paddingBottom: "0 !important" }}
         title="Clique para editar"
         dangerouslySetInnerHTML={{
@@ -266,7 +303,7 @@ export default function RichTextEditor({
       }}
     >
       {/* Floating Toolbar - Notion Style */}
-      {showFloatingToolbar && isEditing && (
+      {showFloatingToolbar && shouldShowEditor && (
         <div
           ref={floatingToolbarRef}
           className="fixed z-50 flex items-center gap-0.5 px-1.5 py-1.5 rounded-lg shadow-lg border"
@@ -443,7 +480,8 @@ export default function RichTextEditor({
       <div
         className="border rounded-lg"
         style={{
-          borderColor: isEditing ? "var(--border-color)" : "transparent",
+          borderColor:
+            isEditing || autoFocus ? "var(--border-color)" : "transparent",
         }}
       >
         <EditorContent editor={editor} />

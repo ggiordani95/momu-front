@@ -29,7 +29,7 @@ export default function Checklist({
     if (!newItemText.trim()) return;
 
     const newItem: ChecklistItem = {
-      id: `checklist-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: `checklist-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
       text: newItemText.trim(),
       completed: false,
     };
@@ -65,9 +65,9 @@ export default function Checklist({
   return (
     <div className="space-y-3">
       {/* Checklist Items */}
-      {items.map((item) => (
+      {items.map((item, index) => (
         <div
-          key={item.id}
+          key={item.id || `checklist-${index}-${item.text}`}
           className="flex items-center gap-3 p-3 rounded-lg transition-colors group hover:bg-hover/30"
         >
           <button

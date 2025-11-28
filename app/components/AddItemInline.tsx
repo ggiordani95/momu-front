@@ -23,9 +23,7 @@ export default function AddItemInline({
   parentId,
   allowSections = false,
 }: AddItemInlineProps) {
-  const [selectedType, setSelectedType] = useState<ItemType>(
-    allowSections ? "section" : "video"
-  );
+  const [selectedType, setSelectedType] = useState<ItemType | null>(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
@@ -46,11 +44,14 @@ export default function AddItemInline({
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!title.trim()) return;
+    if (!selectedType) return;
+
+    // For video, require title
+    if (selectedType === "video" && !title.trim()) return;
 
     onAdd({
       type: selectedType,
-      title: title.trim(),
+      title: title.trim() || "Novo item",
       content: content.trim() || undefined,
       youtube_url: youtubeUrl.trim() || undefined,
       parent_id: parentId,
@@ -60,7 +61,28 @@ export default function AddItemInline({
     setTitle("");
     setContent("");
     setYoutubeUrl("");
-    setSelectedType(allowSections ? "section" : "video");
+    setSelectedType(null);
+  };
+
+  const handleTypeClick = (type: ItemType) => {
+    // If clicking on video, select it and show form
+    if (type === "video") {
+      setSelectedType(type);
+      // Focus input after a short delay
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+      return;
+    }
+
+    // For other types, create immediately
+    onAdd({
+      type,
+      title: "Novo item",
+      content: undefined,
+      youtube_url: undefined,
+      parent_id: parentId,
+    });
   };
 
   const handleCancel = () => {
@@ -94,11 +116,11 @@ export default function AddItemInline({
           className="absolute inset-0 pointer-events-none"
           style={{
             background:
-              "linear-gradient(135deg, rgba(12, 12, 12, 0.6) 0%, rgba(11, 10, 10, 0.863) 100%)",
+              "linear-gradient(135deg, rgba(14, 17, 22, 0.694) 0%, rgba(15, 15, 15, 0.677) 100%)",
             borderRadius: "inherit",
           }}
         />
-        <form onSubmit={handleSubmit} className="p-4 space-y-4 relative z-10">
+        <form onSubmit={handleSubmit} className="p-2 space-y-4 relative z-10">
           {/* Header with type selection and actions */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -115,7 +137,7 @@ export default function AddItemInline({
                 <button
                   key={itemType.type}
                   type="button"
-                  onClick={() => setSelectedType(itemType.type)}
+                  onClick={() => handleTypeClick(itemType.type)}
                   className="relative p-2.5 rounded-lg transition-all duration-200 group"
                   style={{
                     backgroundColor:
@@ -172,37 +194,39 @@ export default function AddItemInline({
               ))}
             </div>
             <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={handleSubmit}
-                className="p-2 rounded-lg transition-all duration-200"
-                style={{
-                  color: "#3b82f6",
-                  backgroundColor: title.trim()
-                    ? "rgba(59, 130, 246, 0.1)"
-                    : "transparent",
-                  opacity: title.trim() ? 1 : 0.4,
-                  cursor: title.trim() ? "pointer" : "not-allowed",
-                }}
-                disabled={!title.trim()}
-                title="Adicionar (Enter)"
-                onMouseEnter={(e) => {
-                  if (title.trim()) {
-                    e.currentTarget.style.backgroundColor =
-                      "rgba(59, 130, 246, 0.15)";
-                    e.currentTarget.style.transform = "scale(1.05)";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (title.trim()) {
-                    e.currentTarget.style.backgroundColor =
-                      "rgba(59, 130, 246, 0.1)";
-                    e.currentTarget.style.transform = "scale(1)";
-                  }
-                }}
-              >
-                <Check size={16} strokeWidth={2.5} />
-              </button>
+              {selectedType === "video" && (
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  className="p-2 rounded-lg transition-all duration-200"
+                  style={{
+                    color: "#3b82f6",
+                    backgroundColor: title.trim()
+                      ? "rgba(59, 130, 246, 0.1)"
+                      : "transparent",
+                    opacity: title.trim() ? 1 : 0.4,
+                    cursor: title.trim() ? "pointer" : "not-allowed",
+                  }}
+                  disabled={!title.trim()}
+                  title="Adicionar (Enter)"
+                  onMouseEnter={(e) => {
+                    if (title.trim()) {
+                      e.currentTarget.style.backgroundColor =
+                        "rgba(59, 130, 246, 0.15)";
+                      e.currentTarget.style.transform = "scale(1.05)";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (title.trim()) {
+                      e.currentTarget.style.backgroundColor =
+                        "rgba(59, 130, 246, 0.1)";
+                      e.currentTarget.style.transform = "scale(1)";
+                    }
+                  }}
+                >
+                  <Check size={16} strokeWidth={2.5} />
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleCancel}
@@ -228,54 +252,57 @@ export default function AddItemInline({
             </div>
           </div>
 
-          {/* Title Input */}
-          <div
-            style={{
-              opacity: isExpanded ? 1 : 0,
-              transform: isExpanded ? "translateY(0)" : "translateY(5px)",
-              transition: "all 0.3s ease-out 0.2s",
-            }}
-          >
-            <input
-              ref={inputRef}
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Título..."
-              className="w-full px-4 py-3 rounded-lg text-base focus:outline-none transition-all duration-200"
+          {/* Title Input - Only show when video is selected */}
+          {selectedType === "video" && (
+            <div
               style={{
-                backgroundColor: "rgba(255, 255, 255, 0.01)",
-                backdropFilter: "blur(6px) saturate(110%)",
-                WebkitBackdropFilter: "blur(6px) saturate(110%)",
-                borderColor: "rgba(255, 255, 255, 0.12)",
-                borderWidth: "1px",
-                borderStyle: "solid",
-                color: "var(--foreground)",
+                opacity: isExpanded ? 1 : 0,
+                transform: isExpanded ? "translateY(0)" : "translateY(5px)",
+                transition: "all 0.3s ease-out 0.2s",
               }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleSubmit();
-                } else if (e.key === "Escape") {
-                  handleCancel();
-                }
-              }}
-              onFocus={(e) => {
-                e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.5)";
-                e.currentTarget.style.boxShadow =
-                  "0 0 0 3px rgba(59, 130, 246, 0.15), inset 0 1px 0 0 rgba(255, 255, 255, 0.1)";
-                e.currentTarget.style.backgroundColor =
-                  "rgba(59, 130, 246, 0.08)";
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.12)";
-                e.currentTarget.style.boxShadow = "none";
-                e.currentTarget.style.backgroundColor =
-                  "rgba(255, 255, 255, 0.01)";
-              }}
-              required
-            />
-          </div>
+            >
+              <input
+                ref={inputRef}
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Título..."
+                className="w-full px-4 py-3 rounded-lg text-base focus:outline-none transition-all duration-200"
+                style={{
+                  backgroundColor: "rgba(255, 255, 255, 0.01)",
+                  backdropFilter: "blur(6px) saturate(110%)",
+                  WebkitBackdropFilter: "blur(6px) saturate(110%)",
+                  borderColor: "rgba(255, 255, 255, 0.12)",
+                  borderWidth: "1px",
+                  borderStyle: "solid",
+                  color: "var(--foreground)",
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleSubmit();
+                  } else if (e.key === "Escape") {
+                    handleCancel();
+                  }
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.5)";
+                  e.currentTarget.style.boxShadow =
+                    "0 0 0 3px rgba(59, 130, 246, 0.15), inset 0 1px 0 0 rgba(255, 255, 255, 0.1)";
+                  e.currentTarget.style.backgroundColor =
+                    "rgba(59, 130, 246, 0.08)";
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor =
+                    "rgba(255, 255, 255, 0.12)";
+                  e.currentTarget.style.boxShadow = "none";
+                  e.currentTarget.style.backgroundColor =
+                    "rgba(255, 255, 255, 0.01)";
+                }}
+                required
+              />
+            </div>
+          )}
 
           {/* YouTube URL (only for video type) */}
           {selectedType === "video" && (

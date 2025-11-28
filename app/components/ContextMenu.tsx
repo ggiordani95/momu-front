@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Trash2, Copy, Scissors, FileEdit, FolderPlus } from "lucide-react";
 
 interface ContextMenuOption {
   label: string;
@@ -11,11 +10,21 @@ interface ContextMenuOption {
   disabled?: boolean;
 }
 
+export interface ContextMenuAnchorRect {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
 interface ContextMenuProps {
   x: number;
   y: number;
   options: ContextMenuOption[];
   onClose: () => void;
+  anchorRect?: ContextMenuAnchorRect;
 }
 
 export default function ContextMenu({
@@ -23,6 +32,7 @@ export default function ContextMenu({
   y,
   options,
   onClose,
+  anchorRect,
 }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -39,7 +49,6 @@ export default function ContextMenu({
       }
     };
 
-    // Add listeners after a small delay to avoid immediate close
     setTimeout(() => {
       document.addEventListener("mousedown", handleClickOutside);
       document.addEventListener("contextmenu", handleClickOutside);
@@ -53,51 +62,37 @@ export default function ContextMenu({
     };
   }, [onClose]);
 
-  // Adjust position if menu would go off screen
-  const [adjustedPosition, setAdjustedPosition] = useState({ x, y });
+  const [adjustedPosition, setAdjustedPosition] = useState<{
+    x: number;
+    y: number;
+  }>(() => ({ x: 140, y: 80 }));
 
   useEffect(() => {
-    if (menuRef.current) {
-      const rect = menuRef.current.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
+    const raf = requestAnimationFrame(() => {
+      setAdjustedPosition({ x: 140, y: 80 });
+    });
 
-      let newX = x;
-      let newY = y;
-
-      if (x + rect.width > viewportWidth) {
-        newX = viewportWidth - rect.width - 10;
-      }
-      if (y + rect.height > viewportHeight) {
-        newY = viewportHeight - rect.height - 10;
-      }
-
-      // Avoid setting state synchronously in the effect
-      // Only update if value changed to prevent re-render loop
-      setAdjustedPosition((pos) => {
-        if (pos.x !== newX || pos.y !== newY) {
-          return { x: newX, y: newY };
-        }
-        return pos;
-      });
-    }
-  }, [x, y]);
+    return () => cancelAnimationFrame(raf);
+  }, [x, y, anchorRect]);
 
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg py-1 min-w-[180px]"
+      className="fixed z-50 shadow-2xl min-w-[200px]"
       style={{
         left: `${adjustedPosition.x}px`,
         top: `${adjustedPosition.y}px`,
+        backgroundColor: "rgba(32, 32, 32, 0.331)",
+        backdropFilter: "blur(20px) saturate(180%)",
+        WebkitBackdropFilter: "blur(20px) saturate(180%)",
+        border: "1px solid rgba(255, 255, 255, 0.1)",
+        borderRadius: "8px",
+        color: "rgba(255, 255, 255, 0.9)",
       }}
       onClick={(e) => e.stopPropagation()}
     >
       {options.map((option, index) => (
         <div key={index}>
-          {option.separator && index > 0 && (
-            <div className="h-px bg-gray-200 dark:bg-gray-700 my-1" />
-          )}
           <button
             onClick={() => {
               if (!option.disabled) {
@@ -106,16 +101,39 @@ export default function ContextMenu({
               }
             }}
             disabled={option.disabled}
-            className={`w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left transition-colors ${
-              option.disabled
-                ? "text-gray-400 dark:text-gray-600 cursor-not-allowed"
-                : "text-gray-700 dark:text-gray-200 hover:bg-hover"
-            }`}
+            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors"
+            style={{
+              color: option.disabled
+                ? "rgba(255, 255, 255, 0.3)"
+                : "rgba(255, 255, 255, 0.9)",
+              cursor: option.disabled ? "not-allowed" : "pointer",
+              backgroundColor: "transparent",
+              borderTop:
+                index > 0 ? "1px solid rgba(255, 255, 255, 0.1)" : "none",
+            }}
+            onMouseEnter={(e) => {
+              if (!option.disabled) {
+                e.currentTarget.style.backgroundColor =
+                  "rgba(255, 255, 255, 0.1)";
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "transparent";
+            }}
           >
-            {option.icon && (
-              <span className="w-4 h-4 shrink-0">{option.icon}</span>
-            )}
-            <span>{option.label}</span>
+            {/* {option.icon && (
+              <span
+                className="shrink-0 flex items-center justify-center"
+                style={{
+                  width: "20px",
+                  height: "20px",
+                  opacity: option.disabled ? 0.3 : 0.9,
+                }}
+              >
+                {option.icon}
+              </span>
+            )} */}
+            <span className="flex-1">{option.label}</span>
           </button>
         </div>
       ))}

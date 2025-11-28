@@ -1,11 +1,11 @@
 "use client";
 
-import { FolderTree, Settings } from "lucide-react";
+import { FolderTree, Settings, Trash2 } from "lucide-react";
 import Image from "next/image";
 
 interface SimpleSidebarProps {
-  onNavigate: (view: "explorer" | "settings") => void;
-  currentView: "explorer" | "settings";
+  onNavigate: (view: "explorer" | "settings" | "trash") => void;
+  currentView: "explorer" | "settings" | "trash";
 }
 
 export default function SimpleSidebar({
@@ -14,22 +14,22 @@ export default function SimpleSidebar({
 }: SimpleSidebarProps) {
   return (
     <aside
-      className="w-64 bg-black/80 shrink-0 border-r flex flex-col relative z-10"
+      className="w-64 bg-[#0b0b0b] shrink-0 border-r flex flex-col relative z-10"
       style={{
         borderColor: "var(--border-color)",
       }}
     >
       <div
-        className="border-b flex items-center"
+        className="flex items-center"
         style={{ borderColor: "var(--border-color)" }}
       >
         <div className="flex items-center justify-center">
           <Image
             src="/momu.png"
             alt="MOMU"
-            width={80}
-            height={40}
-            className="h-16 object-contain"
+            width={70}
+            height={60}
+            className="h-18 object-contain"
             priority
           />
         </div>
@@ -47,6 +47,18 @@ export default function SimpleSidebar({
           >
             <FolderTree size={18} />
             Meu explorador
+          </button>
+
+          <button
+            onClick={() => onNavigate("trash")}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors ${
+              currentView === "trash"
+                ? "bg-hover text-foreground"
+                : "hover:bg-hover/50 text-foreground/70"
+            }`}
+          >
+            <Trash2 size={18} />
+            Lixeira
           </button>
 
           <button

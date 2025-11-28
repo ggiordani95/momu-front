@@ -86,12 +86,7 @@ export default function SidebarItem({
       label: "Excluir",
       icon: <Trash2 size={14} />,
       onClick: () => {
-        if (
-          onDelete &&
-          confirm(`Tem certeza que deseja excluir "${item.title}"?`)
-        ) {
-          onDelete(item.id);
-        }
+        onDelete?.(item.id);
       },
     },
   ];
