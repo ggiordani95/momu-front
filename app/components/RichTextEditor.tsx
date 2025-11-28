@@ -6,16 +6,16 @@ import Underline from "@tiptap/extension-underline";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
 import TextAlign from "@tiptap/extension-text-align";
+import TiptapLink from "@tiptap/extension-link";
 import {
   Bold,
   Italic,
   Underline as UnderlineIcon,
-  List,
-  ListOrdered,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
+  Strikethrough,
+  Code,
+  Link,
   Palette,
+  MoreHorizontal,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 
@@ -32,10 +32,13 @@ export default function RichTextEditor({
 }: RichTextEditorProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showFloatingToolbar, setShowFloatingToolbar] = useState(false);
+  const [toolbarPosition, setToolbarPosition] = useState({ top: 0, left: 0 });
   const isEditingRef = useRef(false);
   const lastSavedContentRef = useRef(content);
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
+  const floatingToolbarRef = useRef<HTMLDivElement>(null);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -49,11 +52,19 @@ export default function RichTextEditor({
       TextAlign.configure({
         types: ["heading", "paragraph"],
       }),
+      TiptapLink.configure({
+        openOnClick: false,
+        HTMLAttributes: {
+          class: "text-blue-600 underline cursor-pointer",
+        },
+      }),
     ],
     content,
     editorProps: {
       attributes: {
-        class: "prose prose-sm max-w-none focus:outline-none min-h-[100px] p-3",
+        class:
+          "prose prose-sm max-w-none focus:outline-none min-h-[100px] p-3 [&_p]:my-0 [&_p:last-child]:mb-0 [&_*:last-child]:mb-0",
+        style: "margin-bottom: 0; padding-bottom: 0;",
       },
     },
     onUpdate: ({ editor }) => {
@@ -106,6 +117,77 @@ export default function RichTextEditor({
     }
   }, [isEditing, editor]);
 
+  // Handle floating toolbar positioning
+  useEffect(() => {
+    if (!editor || !isEditing) return;
+
+    const updateToolbarPosition = () => {
+      const { from, to } = editor.state.selection;
+      const isEmpty = from === to;
+
+      if (isEmpty) {
+        setShowFloatingToolbar(false);
+        return;
+      }
+
+      // Get selection coordinates
+      const { view } = editor;
+      const start = view.coordsAtPos(from);
+      const end = view.coordsAtPos(to);
+
+      // Calculate toolbar position (above selection, centered)
+      const selectionTop = Math.min(start.top, end.top);
+      const selectionLeft = (start.left + end.left) / 2;
+
+      // Calculate position relative to viewport
+      const top = selectionTop + window.scrollY - 50; // 50px above selection
+      const left = selectionLeft + window.scrollX;
+
+      // Get toolbar width to center it properly
+      if (floatingToolbarRef.current) {
+        const toolbarWidth = floatingToolbarRef.current.offsetWidth;
+        const centeredLeft = left - toolbarWidth / 2;
+
+        // Ensure toolbar stays within viewport
+        const viewportWidth = window.innerWidth;
+        const minLeft = 10;
+        const maxLeft = viewportWidth - toolbarWidth - 10;
+        const clampedLeft = Math.max(minLeft, Math.min(maxLeft, centeredLeft));
+
+        setToolbarPosition({
+          top: Math.max(10, top),
+          left: clampedLeft,
+        });
+        setShowFloatingToolbar(true);
+      } else {
+        setToolbarPosition({ top, left });
+        setShowFloatingToolbar(true);
+      }
+    };
+
+    // Update on selection change
+    editor.on("selectionUpdate", updateToolbarPosition);
+    editor.on("transaction", updateToolbarPosition);
+
+    // Also update on scroll
+    const handleScroll = () => {
+      if (showFloatingToolbar) {
+        updateToolbarPosition();
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll, true);
+
+    // Initial check
+    setTimeout(updateToolbarPosition, 0);
+
+    return () => {
+      editor.off("selectionUpdate", updateToolbarPosition);
+      editor.off("transaction", updateToolbarPosition);
+      window.removeEventListener("scroll", handleScroll, true);
+    };
+  }, [editor, isEditing, showFloatingToolbar]);
+
   // Update editor content when prop changes (from external updates)
   // Only update if we're not currently editing and content actually changed
   useEffect(() => {
@@ -138,7 +220,8 @@ export default function RichTextEditor({
     return (
       <div
         onClick={() => setIsEditing(true)}
-        className="cursor-text hover:bg-hover rounded px-2 py-1 transition-colors min-h-[60px] prose prose-sm max-w-none"
+        className="cursor-text hover:bg-hover rounded px-2 py-1 transition-colors prose prose-sm max-w-none [&_p]:my-0 [&_p]:mb-0 [&_*]:mb-0 [&_*:last-child]:mb-0"
+        style={{ marginBottom: "0 !important", paddingBottom: "0 !important" }}
         title="Clique para editar"
         dangerouslySetInnerHTML={{
           __html: htmlToShow,
@@ -163,249 +246,208 @@ export default function RichTextEditor({
     "#14B8A6",
   ];
 
+  const handleToolbarAction = (action: () => void) => {
+    return (e: React.MouseEvent) => {
+      e.stopPropagation();
+      action();
+      // Keep focus on editor after button click
+      requestAnimationFrame(() => {
+        editor.commands.focus();
+      });
+    };
+  };
+
   return (
     <div
       ref={editorContainerRef}
-      className="border rounded-lg"
-      style={{ borderColor: "var(--border-color)" }}
+      className="relative mb-0"
+      style={{
+        marginBottom: "0 !important",
+      }}
     >
-      {/* Toolbar */}
-      <div
-        className="flex items-center gap-1 p-2 border-b flex-wrap"
-        style={{
-          borderColor: "var(--border-color)",
-          backgroundColor: "var(--sidebar-bg)",
-        }}
-      >
-        {/* Text Formatting */}
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            editor.chain().focus().toggleBold().run();
-            // Keep focus on editor after button click
-            setTimeout(() => {
-              editor.commands.focus();
-            }, 0);
+      {/* Floating Toolbar - Notion Style */}
+      {showFloatingToolbar && isEditing && (
+        <div
+          ref={floatingToolbarRef}
+          className="fixed z-50 flex items-center gap-0.5 px-1.5 py-1.5 rounded-lg shadow-lg border"
+          style={{
+            top: `${toolbarPosition.top}px`,
+            left: `${toolbarPosition.left}px`,
+            backgroundColor: "var(--sidebar-bg)",
+            backdropFilter: "blur(12px) saturate(180%)",
+            WebkitBackdropFilter: "blur(12px) saturate(180%)",
+            borderColor: "var(--border-color)",
+            transform: "translateX(-50%)",
+            color: "var(--foreground)",
           }}
-          className={`p-2 rounded hover:bg-[var(--hover-bg)] ${
-            editor.isActive("bold") ? "bg-blue-100 dark:bg-blue-900/30" : ""
-          }`}
-          title="Negrito (Cmd+B)"
-        >
-          <Bold size={16} />
-        </button>
-
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            editor.chain().focus().toggleItalic().run();
-            setTimeout(() => {
-              editor.commands.focus();
-            }, 0);
-          }}
-          className={`p-2 rounded hover:bg-[var(--hover-bg)] ${
-            editor.isActive("italic") ? "bg-blue-100 dark:bg-blue-900/30" : ""
-          }`}
-          title="Itálico (Cmd+I)"
-        >
-          <Italic size={16} />
-        </button>
-
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            editor.chain().focus().toggleUnderline().run();
-            setTimeout(() => {
-              editor.commands.focus();
-            }, 0);
-          }}
-          className={`p-2 rounded hover:bg-[var(--hover-bg)] ${
-            editor.isActive("underline")
-              ? "bg-blue-100 dark:bg-blue-900/30"
-              : ""
-          }`}
-          title="Sublinhado (Cmd+U)"
-        >
-          <UnderlineIcon size={16} />
-        </button>
-
-        <div className="w-px h-6 bg-[var(--border-color)] mx-1" />
-
-        {/* Headings */}
-        <select
-          onChange={(e) => {
-            const level = parseInt(e.target.value);
-            if (level === 0) {
-              editor.chain().focus().setParagraph().run();
-            } else {
-              editor
-                .chain()
-                .focus()
-                .toggleHeading({ level: level as 1 | 2 | 3 })
-                .run();
+          onMouseDown={(e) => {
+            // Only prevent default on the container, not on buttons
+            if (e.target === e.currentTarget) {
+              e.preventDefault();
             }
-            setTimeout(() => {
-              editor.commands.focus();
-            }, 0);
           }}
-          onBlur={(e) => {
-            // Prevent closing editor when selecting from dropdown
-            e.stopPropagation();
-          }}
-          className="px-2 py-1 rounded text-sm border-0 bg-transparent hover:bg-[var(--hover-bg)]"
-          value={
-            editor.isActive("heading", { level: 1 })
-              ? "1"
-              : editor.isActive("heading", { level: 2 })
-              ? "2"
-              : editor.isActive("heading", { level: 3 })
-              ? "3"
-              : "0"
-          }
         >
-          <option value="0">Normal</option>
-          <option value="1">Título 1</option>
-          <option value="2">Título 2</option>
-          <option value="3">Título 3</option>
-        </select>
-
-        <div className="w-px h-6 bg-[var(--border-color)] mx-1" />
-
-        {/* Lists */}
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            editor.chain().focus().toggleBulletList().run();
-            setTimeout(() => {
-              editor.commands.focus();
-            }, 0);
-          }}
-          className={`p-2 rounded hover:bg-[var(--hover-bg)] ${
-            editor.isActive("bulletList")
-              ? "bg-blue-100 dark:bg-blue-900/30"
-              : ""
-          }`}
-          title="Lista"
-        >
-          <List size={16} />
-        </button>
-
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            editor.chain().focus().toggleOrderedList().run();
-            setTimeout(() => {
-              editor.commands.focus();
-            }, 0);
-          }}
-          className={`p-2 rounded hover:bg-[var(--hover-bg)] ${
-            editor.isActive("orderedList")
-              ? "bg-blue-100 dark:bg-blue-900/30"
-              : ""
-          }`}
-          title="Lista Numerada"
-        >
-          <ListOrdered size={16} />
-        </button>
-
-        <div className="w-px h-6 bg-[var(--border-color)] mx-1" />
-
-        {/* Alignment */}
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            editor.chain().focus().setTextAlign("left").run();
-            setTimeout(() => {
-              editor.commands.focus();
-            }, 0);
-          }}
-          className={`p-2 rounded hover:bg-[var(--hover-bg)] ${
-            editor.isActive({ textAlign: "left" })
-              ? "bg-blue-100 dark:bg-blue-900/30"
-              : ""
-          }`}
-          title="Alinhar à Esquerda"
-        >
-          <AlignLeft size={16} />
-        </button>
-
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            editor.chain().focus().setTextAlign("center").run();
-            setTimeout(() => {
-              editor.commands.focus();
-            }, 0);
-          }}
-          className={`p-2 rounded hover:bg-[var(--hover-bg)] ${
-            editor.isActive({ textAlign: "center" })
-              ? "bg-blue-100 dark:bg-blue-900/30"
-              : ""
-          }`}
-          title="Centralizar"
-        >
-          <AlignCenter size={16} />
-        </button>
-
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            editor.chain().focus().setTextAlign("right").run();
-            setTimeout(() => {
-              editor.commands.focus();
-            }, 0);
-          }}
-          className={`p-2 rounded hover:bg-[var(--hover-bg)] ${
-            editor.isActive({ textAlign: "right" })
-              ? "bg-blue-100 dark:bg-blue-900/30"
-              : ""
-          }`}
-          title="Alinhar à Direita"
-        >
-          <AlignRight size={16} />
-        </button>
-
-        <div className="w-px h-6 bg-[var(--border-color)] mx-1" />
-
-        {/* Color Picker */}
-        <div className="relative">
+          {/* Bold */}
           <button
-            onClick={() => setShowColorPicker(!showColorPicker)}
-            className="p-2 rounded hover:bg-[var(--hover-bg)]"
-            title="Cor do Texto"
+            onClick={handleToolbarAction(() => {
+              editor.chain().focus().toggleBold().run();
+            })}
+            className={`p-1.5 rounded transition-colors ${
+              editor.isActive("bold") ? "bg-hover" : "hover:bg-hover/50"
+            }`}
+            title="Negrito (Cmd+B)"
           >
-            <Palette size={16} />
+            <Bold size={14} />
           </button>
 
-          {showColorPicker && (
-            <div className="absolute top-full left-0 mt-1 p-2 bg-white dark:bg-gray-800 border rounded-lg shadow-lg z-10 grid grid-cols-6 gap-1">
-              {colors.map((color) => (
-                <button
-                  key={color}
-                  onClick={() => {
-                    editor.chain().focus().setColor(color).run();
-                    setShowColorPicker(false);
-                  }}
-                  className="w-6 h-6 rounded border border-gray-300 hover:scale-110 transition-transform"
-                  style={{ backgroundColor: color }}
-                  title={color}
-                />
-              ))}
-            </div>
-          )}
+          {/* Italic */}
+          <button
+            onClick={handleToolbarAction(() => {
+              editor.chain().focus().toggleItalic().run();
+            })}
+            className={`p-1.5 rounded transition-colors ${
+              editor.isActive("italic") ? "bg-hover" : "hover:bg-hover/50"
+            }`}
+            title="Itálico (Cmd+I)"
+          >
+            <Italic size={14} />
+          </button>
+
+          {/* Underline */}
+          <button
+            onClick={handleToolbarAction(() => {
+              editor.chain().focus().toggleUnderline().run();
+            })}
+            className={`p-1.5 rounded transition-colors ${
+              editor.isActive("underline") ? "bg-hover" : "hover:bg-hover/50"
+            }`}
+            title="Sublinhado (Cmd+U)"
+          >
+            <UnderlineIcon size={14} />
+          </button>
+
+          {/* Strikethrough */}
+          <button
+            onClick={handleToolbarAction(() => {
+              editor.chain().focus().toggleStrike().run();
+            })}
+            className={`p-1.5 rounded transition-colors ${
+              editor.isActive("strike") ? "bg-hover" : "hover:bg-hover/50"
+            }`}
+            title="Tachado (Cmd+Shift+S)"
+          >
+            <Strikethrough size={14} />
+          </button>
+
+          <div
+            className="w-px h-4 mx-0.5"
+            style={{ backgroundColor: "var(--border-color)" }}
+          />
+
+          {/* Code */}
+          <button
+            onClick={handleToolbarAction(() => {
+              editor.chain().focus().toggleCode().run();
+            })}
+            className={`p-1.5 rounded transition-colors ${
+              editor.isActive("code") ? "bg-hover" : "hover:bg-hover/50"
+            }`}
+            title="Código (Cmd+E)"
+          >
+            <Code size={14} />
+          </button>
+
+          {/* Link */}
+          <button
+            onClick={handleToolbarAction(() => {
+              const url = window.prompt("Digite a URL:");
+              if (url) {
+                editor.chain().focus().setLink({ href: url }).run();
+              }
+            })}
+            className={`p-1.5 rounded transition-colors ${
+              editor.isActive("link") ? "bg-hover" : "hover:bg-hover/50"
+            }`}
+            title="Link (Cmd+K)"
+          >
+            <Link size={14} />
+          </button>
+
+          <div
+            className="w-px h-4 mx-0.5"
+            style={{ backgroundColor: "var(--border-color)" }}
+          />
+
+          {/* Color Picker */}
+          <div className="relative">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowColorPicker(!showColorPicker);
+              }}
+              className={`p-1.5 rounded transition-colors ${
+                showColorPicker ? "bg-hover" : "hover:bg-hover/50"
+              }`}
+              title="Cor do Texto"
+            >
+              <Palette size={14} />
+            </button>
+
+            {showColorPicker && (
+              <div
+                className="absolute top-full left-1/2 -translate-x-1/2 mt-1 p-2 border rounded-lg shadow-lg z-10 grid grid-cols-6 gap-1"
+                style={{
+                  backgroundColor: "var(--sidebar-bg)",
+                  backdropFilter: "blur(12px) saturate(180%)",
+                  WebkitBackdropFilter: "blur(12px) saturate(180%)",
+                  borderColor: "var(--border-color)",
+                }}
+              >
+                {colors.map((color) => (
+                  <button
+                    key={color}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      editor.chain().focus().setColor(color).run();
+                      setShowColorPicker(false);
+                    }}
+                    className="w-5 h-5 rounded border hover:scale-110 transition-transform"
+                    style={{
+                      backgroundColor: color,
+                      borderColor: "var(--border-color)",
+                    }}
+                    title={color}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* More Options */}
+          <div
+            className="w-px h-4 mx-0.5"
+            style={{ backgroundColor: "var(--border-color)" }}
+          />
+
+          <button
+            onClick={handleToolbarAction(() => {})}
+            className="p-1.5 rounded hover:bg-hover/50 transition-colors"
+            title="Mais opções"
+          >
+            <MoreHorizontal size={14} />
+          </button>
         </div>
-      </div>
+      )}
 
       {/* Editor Content */}
-      <EditorContent editor={editor} />
+      <div
+        className="border rounded-lg"
+        style={{
+          borderColor: isEditing ? "var(--border-color)" : "transparent",
+        }}
+      >
+        <EditorContent editor={editor} />
+      </div>
     </div>
   );
 }

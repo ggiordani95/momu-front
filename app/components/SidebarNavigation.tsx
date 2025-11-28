@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import SidebarItem from "./SidebarItem";
+import { useItems } from "./ItemsContext";
 import { type ItemType } from "@/lib/itemTypes";
 
 interface TopicItem {
@@ -20,18 +21,20 @@ export default function SidebarNavigation({
   items: initialItems,
 }: SidebarNavigationProps) {
   const [activeId, setActiveId] = useState("");
-  const [items, setItems] = useState(initialItems);
+  const itemsContext = useItems();
 
-  // Update items when initialItems change
-  useEffect(() => {
-    setItems(initialItems);
-  }, [initialItems]);
+  // Use items from context if available, otherwise use initialItems
+  const items = itemsContext?.items || initialItems;
 
   useEffect(() => {
-    // Set initial active from URL hash
-    if (window.location.hash) {
-      setActiveId(window.location.hash.slice(1));
-    }
+    // Set initial activeId from URL hash after mount (only on client)
+    // Use requestAnimationFrame to ensure DOM is ready and avoid hydration mismatch
+    const setInitialActiveId = () => {
+      if (window.location.hash) {
+        setActiveId(window.location.hash.slice(1));
+      }
+    };
+    requestAnimationFrame(setInitialActiveId);
 
     // Track scroll position to highlight current section
     const handleScroll = () => {
@@ -60,8 +63,10 @@ export default function SidebarNavigation({
     window.addEventListener("scroll", handleScroll);
     window.addEventListener("hashchange", handleHashChange);
 
-    // Initial check
-    handleScroll();
+    // Initial check after a small delay to ensure DOM is ready
+    setTimeout(() => {
+      handleScroll();
+    }, 100);
 
     return () => {
       window.removeEventListener("scroll", handleScroll);
@@ -83,7 +88,9 @@ export default function SidebarNavigation({
     };
 
     const updatedItems = updateItemRecursive(items);
-    setItems(updatedItems);
+    if (itemsContext) {
+      itemsContext.setItems(updatedItems);
+    }
 
     // Send to backend
     fetch(`http://localhost:3001/topics/items/${id}`, {
@@ -108,7 +115,9 @@ export default function SidebarNavigation({
     };
 
     const updatedItems = deleteItemRecursive(items);
-    setItems(updatedItems);
+    if (itemsContext) {
+      itemsContext.setItems(updatedItems);
+    }
 
     // Send to backend
     fetch(`http://localhost:3001/topics/items/${id}`, {

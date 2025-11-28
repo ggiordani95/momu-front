@@ -24,9 +24,8 @@ export default async function Home() {
     >
       {/* Sidebar */}
       <aside
-        className="w-64 shrink-0 border-r flex flex-col"
+        className="w-64 shrink-0 border-r flex flex-col bg-sidebar-bg/60"
         style={{
-          backgroundColor: "var(--sidebar-bg)",
           borderColor: "var(--border-color)",
         }}
       >

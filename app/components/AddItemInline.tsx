@@ -94,7 +94,7 @@ export default function AddItemInline({
           className="absolute inset-0 pointer-events-none"
           style={{
             background:
-              "linear-gradient(135deg, rgba(6, 5, 5, 0.7) 0%, rgba(11, 10, 10, 0.863) 100%)",
+              "linear-gradient(135deg, rgba(12, 12, 12, 0.6) 0%, rgba(11, 10, 10, 0.863) 100%)",
             borderRadius: "inherit",
           }}
         />

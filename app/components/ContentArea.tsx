@@ -5,6 +5,7 @@ import EditableContentItem from "./EditableContentItem";
 import AddItemInline from "./AddItemInline";
 import AddItemButton from "./AddItemButton";
 import RichTextEditor from "./RichTextEditor";
+import { useItems } from "./ItemsContext";
 import { type ItemType, getItemTypeIcon } from "@/lib/itemTypes";
 
 interface TopicItem {
@@ -32,7 +33,15 @@ export default function ContentArea({
   initialItems,
   topicId,
 }: ContentAreaProps) {
+  const itemsContext = useItems();
   const [items, setItems] = useState(initialItems);
+
+  // Sync items with context when they change
+  useEffect(() => {
+    if (itemsContext) {
+      itemsContext.setItems(items);
+    }
+  }, [items, itemsContext]);
   const [addItemPosition, setAddItemPosition] =
     useState<AddItemPosition | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
@@ -572,7 +581,7 @@ export default function ContentArea({
                 />
               </div>
             ))}
-            <div className="flex justify-center pt-4 sticky bottom-0 bg-none pb-4">
+            <div className="flex justify-center pt-4 sticky bg-none pb-4">
               <AddItemButton
                 onClick={() => openAddItem({ type: "end" })}
                 label="Adicionar Item"
@@ -608,9 +617,8 @@ export default function ContentArea({
       {/* Module Header - Card Style */}
       {selectedModule && (
         <div
-          className="mb-8 p-6 rounded-lg border"
+          className="mb-8 p-6 rounded-lg border bg-background/20"
           style={{
-            backgroundColor: "var(--sidebar-bg)",
             borderColor: "var(--border-color)",
           }}
         >
@@ -689,7 +697,7 @@ export default function ContentArea({
           ))}
           {/* Add button at the end - always fixed at the bottom */}
           {addItemPosition?.type !== "end" ? (
-            <div className="flex justify-center pt-4 sticky bottom-0 bg-background pb-4">
+            <div className="flex justify-center rounded-3xl pt-4 sticky bottom-0 pb-4">
               <AddItemButton
                 onClick={() => openAddItem({ type: "end" })}
                 label="Adicionar Item"
