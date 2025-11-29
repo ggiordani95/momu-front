@@ -11,12 +11,14 @@ interface SimpleSidebarProps {
   onNavigate: (view: "explorer" | "settings" | "trash") => void;
   currentView: "explorer" | "settings" | "trash";
   workspaceId: string;
+  hasSynced?: boolean;
 }
 
 export default function SimpleSidebar({
   onNavigate,
   currentView,
   workspaceId,
+  hasSynced,
 }: SimpleSidebarProps) {
   const [trashContextMenu, setTrashContextMenu] = useState<{
     x: number;
@@ -24,7 +26,9 @@ export default function SimpleSidebar({
   } | null>(null);
 
   // React Query hooks
-  const { data: trashItems = [] } = useTrashItems(workspaceId);
+  const { data: trashItems = [] } = useTrashItems(workspaceId, {
+    enabled: hasSynced !== false,
+  });
   const permanentDeleteMutation = usePermanentDeleteItem(workspaceId);
 
   const handleTrashContextMenu = (e: React.MouseEvent) => {

@@ -14,15 +14,19 @@ interface TrashWorkspaceProps {
   topicId: string;
   onRestore?: () => void;
   onPermanentDelete?: (id: string) => void;
+  hasSynced?: boolean;
 }
 
 export function TrashWorkspace({
   topicId,
   onRestore,
   onPermanentDelete,
+  hasSynced,
 }: TrashWorkspaceProps) {
   // React Query hooks
-  const { data: trashItems = [], isLoading: loading } = useTrashItems(topicId);
+  const { data: trashItems = [], isLoading: loading } = useTrashItems(topicId, {
+    enabled: hasSynced !== false,
+  });
   const restoreItemMutation = useRestoreItem(topicId);
   const permanentDeleteMutation = usePermanentDeleteItem(topicId);
 

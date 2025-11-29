@@ -15,14 +15,17 @@ export const itemKeys = {
 /**
  * Hook to fetch items for a workspace
  */
-export function useWorkspaceItems(workspaceId: string) {
+export function useWorkspaceItems(
+  workspaceId: string,
+  options?: { enabled?: boolean }
+) {
   return useQuery({
     queryKey: itemKeys.workspace(workspaceId),
     queryFn: async () => {
       const items = await itemService.getByWorkspace(workspaceId);
       return buildHierarchy(items);
     },
-    enabled: !!workspaceId,
+    enabled: options?.enabled !== false && !!workspaceId,
   });
 }
 

@@ -91,4 +91,31 @@ export const itemService = {
       }
     );
   },
+
+  /**
+   * Sync operations in batch
+   */
+  async syncBatch(
+    workspaceId: string,
+    operations: any[]
+  ): Promise<{
+    success: boolean;
+    synced: number;
+    failed: number;
+    results: any[];
+    errors: string[];
+    tempIdMap?: Record<string, string>;
+  }> {
+    return apiRequest<{
+      success: boolean;
+      synced: number;
+      failed: number;
+      results: any[];
+      errors: string[];
+      tempIdMap?: Record<string, string>;
+    }>(`/folders/${workspaceId}/sync`, {
+      method: "POST",
+      body: JSON.stringify({ operations }),
+    });
+  },
 };

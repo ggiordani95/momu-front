@@ -12,11 +12,14 @@ export const trashKeys = {
 /**
  * Hook to fetch trash items for a workspace
  */
-export function useTrashItems(workspaceId: string) {
+export function useTrashItems(
+  workspaceId: string,
+  options?: { enabled?: boolean }
+) {
   return useQuery({
     queryKey: trashKeys.workspace(workspaceId),
     queryFn: () => trashService.getTrashItems(workspaceId),
-    enabled: !!workspaceId,
+    enabled: options?.enabled !== false && !!workspaceId,
   });
 }
 

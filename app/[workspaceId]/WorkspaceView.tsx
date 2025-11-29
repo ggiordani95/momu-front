@@ -3,12 +3,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 
-import {
-  useWorkspaceItems,
-  useCreateItem,
-  useUpdateItem,
-  useDeleteItem,
-} from "@/lib/hooks/querys/useItems";
+import { useWorkspaceItems } from "@/lib/hooks/querys/useItems";
 import type { HierarchicalItem, CreateItemDto } from "@/lib/types";
 import { ItemsProvider, useItems } from "@/lib/contexts/ItemsContext";
 import SimpleSidebar from "@/components/SimpleSidebar";
@@ -16,6 +11,8 @@ import PageEditor from "@/components/editors/PageEditor";
 import { TrashWorkspace } from "@/components/views/trash/TrashWorkspace";
 import { SettingsWorkspace } from "@/components/views/settings/SettingsWorkspace";
 import { ExplorerWorkspace } from "@/components/views/explorer/ExplorerWorkspace";
+import { useOfflineSync } from "@/lib/hooks/useOfflineSync";
+import { savePendingOperation } from "@/lib/services/offlineSync";
 
 interface WorkspaceViewProps {
   workspaceId: string;
@@ -40,12 +37,20 @@ export default function WorkspaceView({
   >(new Map());
   const previousEditorPathRef = useRef<string | null>(null);
 
+  // Offline sync hook (sincroniza automaticamente em background)
+  // Deve executar ANTES de carregar os dados
+  const { hasSynced } = useOfflineSync(workspaceId);
+
   // React Query hooks
-  const { data: items = [], isLoading: loading } =
-    useWorkspaceItems(workspaceId);
-  const createItemMutation = useCreateItem(workspaceId);
-  const updateItemMutation = useUpdateItem(workspaceId);
-  const deleteItemMutation = useDeleteItem(workspaceId);
+  // Só carrega os dados após o sync ter sido executado (pelo menos uma vez)
+  const { data: items = [], isLoading: loading } = useWorkspaceItems(
+    workspaceId,
+    {
+      enabled: hasSynced !== false, // Aguarda o sync (hasSynced pode ser true ou undefined inicialmente)
+    }
+  );
+  // Note: Mutations are no longer used directly - operations are saved to localStorage
+  // and synced on next page load via useOfflineSync
 
   const pathKey = pathSegments.join("/");
 
@@ -198,74 +203,59 @@ export default function WorkspaceView({
     const pendingItem = pendingItems.get(id);
 
     if (pendingItem) {
-      // If updating title of a pending item, create it in backend
+      // If updating title of a pending item, update the operation in localStorage
       if (field === "title") {
-        try {
-          // If parent_id is a temporary ID, check if parent was already created
-          // If not, create item without parent_id (at root level)
-          let parentId: string | undefined = pendingItem.data.parent_id;
-          if (parentId && parentId.startsWith("temp-")) {
-            // Check if parent was already created in backend
-            const parentPending = pendingItems.get(parentId);
-            if (parentPending) {
-              // Parent is still pending, create item at root level for now
-              console.log(
-                "⚠️ Parent is still pending, creating item at root level"
-              );
-              parentId = undefined;
-            } else {
-              // Parent should exist in backend, but we don't know its real ID
-              // For now, create at root level
-              console.log(
-                "⚠️ Parent was pending but not found, creating item at root level"
-              );
-              parentId = undefined;
-            }
+        // If parent_id is a temporary ID, check if parent was already created
+        // If not, create item without parent_id (at root level)
+        let parentId: string | undefined = pendingItem.data.parent_id;
+        if (parentId && parentId.startsWith("temp-")) {
+          // Check if parent was already created in backend
+          const parentPending = pendingItems.get(parentId);
+          if (parentPending) {
+            // Parent is still pending, create item at root level for now
+            console.log(
+              "⚠️ Parent is still pending, creating item at root level"
+            );
+            parentId = undefined;
+          } else {
+            // Parent should exist in backend, but we don't know its real ID
+            // For now, create at root level
+            console.log(
+              "⚠️ Parent was pending but not found, creating item at root level"
+            );
+            parentId = undefined;
           }
+        }
 
-          const itemDataToCreate = {
+        // Update the pending item data with the new title
+        setPendingItems((prev) => {
+          const newMap = new Map(prev);
+          const existing = newMap.get(id);
+          if (existing) {
+            newMap.set(id, {
+              ...existing,
+              data: { ...existing.data, title: value, parent_id: parentId },
+              item: { ...existing.item, title: value },
+            });
+          }
+          return newMap;
+        });
+
+        // Update the operation in localStorage
+        savePendingOperation({
+          type: "CREATE",
+          id: id, // Keep the same temp ID
+          workspaceId,
+          data: {
             ...pendingItem.data,
             title: value,
-            parent_id: parentId,
-          };
+            parent_id: parentId || null,
+          },
+          timestamp: Date.now(),
+        });
+        console.log(`💾 Updated create operation in localStorage:`, id);
 
-          console.log(`📝 Creating pending item in backend:`, itemDataToCreate);
-
-          const newItem = await createItemMutation.mutateAsync(
-            itemDataToCreate
-          );
-
-          if (!newItem || ("error" in newItem && newItem.error)) {
-            const errorMessage =
-              "error" in newItem ? newItem.error : "Erro desconhecido";
-            console.error("❌ Failed to create pending item:", errorMessage);
-            alert(`Erro ao criar item: ${errorMessage}`);
-            // Remove from pending and close editor
-            setPendingItems((prev) => {
-              const newMap = new Map(prev);
-              newMap.delete(id);
-              return newMap;
-            });
-            handleCloseEditor();
-            return;
-          }
-
-          // Remove from pending items
-          setPendingItems((prev) => {
-            const newMap = new Map(prev);
-            newMap.delete(id);
-            return newMap;
-          });
-
-          // Don't open editor - just create the item
-          // The item will appear in the list and React Query will refetch
-          console.log(`✅ Pending item created successfully:`, newItem);
-        } catch (error) {
-          console.error("❌ Error creating pending item:", error);
-          const errorMessage =
-            error instanceof Error ? error.message : "Erro desconhecido";
-          alert(`Erro ao criar item: ${errorMessage}`);
-        }
+        // Item will be created when sync runs on next page load
       } else {
         // For content updates on pending items, just update the pending data
         setPendingItems((prev) => {
@@ -284,20 +274,24 @@ export default function WorkspaceView({
       return;
     }
 
-    // For existing items, update in backend
-    try {
-      console.log(`📝 Updating existing item:`, { id, field, value });
-      const updatedItem = await updateItemMutation.mutateAsync({
-        itemId: id,
-        data: { [field]: value },
-      });
-      console.log(`✅ Item updated successfully:`, updatedItem);
-    } catch (error) {
-      console.error("❌ Error updating item:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "Erro desconhecido";
-      alert(`Erro ao atualizar item: ${errorMessage}`);
-    }
+    // For existing items, save to localStorage for offline sync
+    // Instead of calling backend immediately
+    savePendingOperation({
+      type: "UPDATE",
+      id,
+      workspaceId,
+      field,
+      value,
+      timestamp: Date.now(),
+    });
+    console.log(`💾 Saved update operation to localStorage:`, {
+      id,
+      field,
+      value,
+    });
+
+    // Note: The actual backend sync will happen on next page load
+    // For now, we update optimistically in the context (already done above)
   };
 
   const handleBack = () => {
@@ -316,38 +310,40 @@ export default function WorkspaceView({
   };
 
   const handleItemDelete = async (id: string) => {
-    // Send to backend (soft delete) - React Query will invalidate and refetch
-    try {
-      await deleteItemMutation.mutateAsync(id);
-    } catch (error) {
-      console.error("Error deleting item:", error);
+    // Save to localStorage for offline sync instead of calling backend immediately
+    // Check if it's a pending item (not yet created in backend)
+    if (id.startsWith("temp-")) {
+      // Just remove from pending items
+      setPendingItems((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(id);
+        return newMap;
+      });
+      console.log(`🗑️ Removed pending item:`, id);
+      return;
     }
+
+    // For existing items, optimistically remove from context first
+    // The item will be removed from UI immediately
+    // Then save delete operation to localStorage for backend sync
+    // Note: The actual removal from context happens in HomeContent via removeOptimisticItem
+
+    // Save delete operation to localStorage
+    savePendingOperation({
+      type: "DELETE",
+      id,
+      workspaceId,
+      timestamp: Date.now(),
+    });
+    console.log(`💾 Saved delete operation to localStorage:`, id);
+
+    // Note: The actual backend sync will happen on next page load
+    // The UI update happens via removeOptimisticItem in HomeContent
   };
 
   const handleAddItem = async (itemData: CreateItemDto) => {
-    // For video, create immediately in backend
-    if (itemData.type === "video") {
-      try {
-        console.log(`📝 Creating video item:`, { ...itemData, workspaceId });
-        const newItem = await createItemMutation.mutateAsync(itemData);
-
-        if (!newItem || ("error" in newItem && newItem.error)) {
-          const errorMessage =
-            "error" in newItem ? newItem.error : "Erro desconhecido";
-          console.error("❌ Failed to create item:", errorMessage);
-          alert(`Erro ao criar item: ${errorMessage}`);
-          return;
-        }
-
-        console.log(`✅ Video item created successfully:`, newItem);
-      } catch (error) {
-        console.error("❌ Error adding item:", error);
-        const errorMessage =
-          error instanceof Error ? error.message : "Erro desconhecido";
-        alert(`Erro ao criar item: ${errorMessage}`);
-      }
-      return;
-    }
+    // For all items (including videos), save to localStorage for offline sync
+    // Videos will also be saved to localStorage and synced on next page load
 
     // For non-video items, create optimistically and open editor
     const tempId = `temp-${Date.now()}-${Math.random()
@@ -452,6 +448,20 @@ export default function WorkspaceView({
     // Don't open editor automatically - let item appear in list for renaming
     setCurrentFolderId(itemData.parent_id || null);
 
+    // Save CREATE operation to localStorage for offline sync
+    savePendingOperation({
+      type: "CREATE",
+      id: tempId,
+      workspaceId,
+      data: {
+        ...itemData,
+        parent_id: itemData.parent_id || null,
+        order_index: nextOrderIndex,
+      },
+      timestamp: Date.now(),
+    });
+    console.log(`💾 Saved create operation to localStorage:`, tempId);
+
     console.log(`📝 Created optimistic item:`, optimisticItem);
 
     // Note: The item will be added to context in HomeContent via useEffect
@@ -535,8 +545,7 @@ export default function WorkspaceView({
     itemId: string,
     itemsList: HierarchicalItem[]
   ): HierarchicalItem[] => {
-    if (!itemId.startsWith("temp-")) return itemsList;
-
+    // Remove both pending (temp-*) and existing items
     const removeFromList = (list: HierarchicalItem[]): HierarchicalItem[] => {
       return list
         .filter((item) => item.id !== itemId)
@@ -609,29 +618,32 @@ export default function WorkspaceView({
   );
 
   return (
-    <ItemsProvider initialItems={items}>
-      <HomeContent
-        currentView={currentView}
-        setCurrentView={setCurrentView}
-        currentFolderId={currentFolderId}
-        selectedItem={selectedItem}
-        handleFolderClick={handleFolderClick}
-        handleItemClick={handleItemClick}
-        handleCloseEditor={handleCloseEditor}
-        handleBack={handleBack}
-        handleItemUpdate={handleItemUpdate}
-        handleAddItem={handleAddItem}
-        handleItemDelete={handleItemDelete}
-        items={items}
-        workspaceId={workspaceId}
-        loading={loading}
-        pendingItems={pendingItems}
-        addOptimisticItem={addOptimisticItemToContext}
-        removeOptimisticItem={removeOptimisticItemFromContext}
-        replaceOptimisticItem={replaceOptimisticItemInContext}
-        updateItemInContext={updateItemInContext}
-      />
-    </ItemsProvider>
+    <>
+      <ItemsProvider initialItems={items}>
+        <HomeContent
+          currentView={currentView}
+          setCurrentView={setCurrentView}
+          currentFolderId={currentFolderId}
+          selectedItem={selectedItem}
+          handleFolderClick={handleFolderClick}
+          handleItemClick={handleItemClick}
+          handleCloseEditor={handleCloseEditor}
+          handleBack={handleBack}
+          handleItemUpdate={handleItemUpdate}
+          handleAddItem={handleAddItem}
+          handleItemDelete={handleItemDelete}
+          items={items}
+          workspaceId={workspaceId}
+          loading={loading}
+          pendingItems={pendingItems}
+          hasSynced={hasSynced}
+          addOptimisticItem={addOptimisticItemToContext}
+          removeOptimisticItem={removeOptimisticItemFromContext}
+          replaceOptimisticItem={replaceOptimisticItemInContext}
+          updateItemInContext={updateItemInContext}
+        />
+      </ItemsProvider>
+    </>
   );
 }
 
@@ -651,6 +663,7 @@ function HomeContent({
   workspaceId,
   loading,
   pendingItems,
+  hasSynced,
   addOptimisticItem,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   removeOptimisticItem, // Not used directly, but kept for consistency with parent component
@@ -676,6 +689,7 @@ function HomeContent({
   workspaceId: string;
   loading: boolean;
   pendingItems: Map<string, { item: HierarchicalItem; data: CreateItemDto }>;
+  hasSynced?: boolean;
   addOptimisticItem: (
     item: HierarchicalItem,
     itemsList: HierarchicalItem[],
@@ -705,8 +719,8 @@ function HomeContent({
   // Wrap handleItemUpdate to add optimistic update
   const wrappedHandleItemUpdate = useCallback(
     async (id: string, field: "title" | "content", value: string) => {
-      // Optimistically update the item in context if it's not a pending item
-      if (itemsContext && !id.startsWith("temp-")) {
+      // Optimistically update the item in context (for both pending and existing items)
+      if (itemsContext) {
         const updatedItems = updateItemInContext(
           id,
           field,
@@ -716,10 +730,25 @@ function HomeContent({
         itemsContext.setItems(updatedItems);
       }
 
-      // Call the original handleItemUpdate
+      // Call the original handleItemUpdate (saves to localStorage)
       await handleItemUpdate(id, field, value);
     },
     [itemsContext, handleItemUpdate, updateItemInContext]
+  );
+
+  // Wrap handleItemDelete to add optimistic removal
+  const wrappedHandleItemDelete = useCallback(
+    async (id: string) => {
+      // Optimistically remove the item from context
+      if (itemsContext) {
+        const updatedItems = removeOptimisticItem(id, itemsContext.items);
+        itemsContext.setItems(updatedItems);
+      }
+
+      // Call the original handleItemDelete (saves to localStorage)
+      await handleItemDelete(id);
+    },
+    [itemsContext, handleItemDelete, removeOptimisticItem]
   );
 
   // Create stable key for pending items to avoid unnecessary recalculations
@@ -903,6 +932,7 @@ function HomeContent({
         onNavigate={setCurrentView}
         currentView={currentView}
         workspaceId={workspaceId}
+        hasSynced={hasSynced}
       />
 
       {/* Main Content */}
@@ -924,7 +954,7 @@ function HomeContent({
               onBack={currentFolderId ? handleBack : undefined}
               onAddItem={handleAddItem}
               onItemUpdate={wrappedHandleItemUpdate}
-              onItemDelete={handleItemDelete}
+              onItemDelete={wrappedHandleItemDelete}
               loading={loading}
               workspaceId={workspaceId}
               pendingItems={pendingItems}
@@ -933,6 +963,7 @@ function HomeContent({
         ) : currentView === "trash" ? (
           <TrashWorkspace
             topicId={workspaceId}
+            hasSynced={hasSynced}
             onRestore={() => {
               // React Query will automatically refetch
             }}
