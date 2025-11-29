@@ -286,12 +286,17 @@ export default function WorkspaceView({
 
     // For existing items, update in backend
     try {
-      await updateItemMutation.mutateAsync({
+      console.log(`📝 Updating existing item:`, { id, field, value });
+      const updatedItem = await updateItemMutation.mutateAsync({
         itemId: id,
         data: { [field]: value },
       });
+      console.log(`✅ Item updated successfully:`, updatedItem);
     } catch (error) {
-      console.error("Error updating item:", error);
+      console.error("❌ Error updating item:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Erro desconhecido";
+      alert(`Erro ao atualizar item: ${errorMessage}`);
     }
   };
 
@@ -536,6 +541,33 @@ export default function WorkspaceView({
     []
   );
 
+  // Helper function to update an item in the items list
+  const updateItemInContext = useCallback(
+    (
+      itemId: string,
+      field: "title" | "content",
+      value: string,
+      itemsList: HierarchicalItem[]
+    ): HierarchicalItem[] => {
+      const updateInList = (list: HierarchicalItem[]): HierarchicalItem[] => {
+        return list.map((item) => {
+          if (item.id === itemId) {
+            return { ...item, [field]: value };
+          }
+          if (item.children) {
+            return {
+              ...item,
+              children: updateInList(item.children),
+            };
+          }
+          return item;
+        });
+      };
+      return updateInList(itemsList);
+    },
+    []
+  );
+
   return (
     <ItemsProvider initialItems={items}>
       <HomeContent
@@ -557,6 +589,7 @@ export default function WorkspaceView({
         addOptimisticItem={addOptimisticItemToContext}
         removeOptimisticItem={removeOptimisticItemFromContext}
         replaceOptimisticItem={replaceOptimisticItemInContext}
+        updateItemInContext={updateItemInContext}
       />
     </ItemsProvider>
   );
@@ -582,6 +615,7 @@ function HomeContent({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   removeOptimisticItem, // Not used directly, but kept for consistency with parent component
   replaceOptimisticItem,
+  updateItemInContext,
 }: {
   currentView: "explorer" | "settings" | "trash";
   setCurrentView: (view: "explorer" | "settings" | "trash") => void;
@@ -619,8 +653,34 @@ function HomeContent({
     realItem: HierarchicalItem,
     itemsList: HierarchicalItem[]
   ) => HierarchicalItem[];
+  updateItemInContext: (
+    itemId: string,
+    field: "title" | "content",
+    value: string,
+    itemsList: HierarchicalItem[]
+  ) => HierarchicalItem[];
 }) {
   const itemsContext = useItems();
+
+  // Wrap handleItemUpdate to add optimistic update
+  const wrappedHandleItemUpdate = useCallback(
+    async (id: string, field: "title" | "content", value: string) => {
+      // Optimistically update the item in context if it's not a pending item
+      if (itemsContext && !id.startsWith("temp-")) {
+        const updatedItems = updateItemInContext(
+          id,
+          field,
+          value,
+          itemsContext.items
+        );
+        itemsContext.setItems(updatedItems);
+      }
+
+      // Call the original handleItemUpdate
+      await handleItemUpdate(id, field, value);
+    },
+    [itemsContext, handleItemUpdate, updateItemInContext]
+  );
 
   // Create stable key for pending items to avoid unnecessary recalculations
   // Use size and keys string as dependencies since Map itself isn't tracked
@@ -656,13 +716,18 @@ function HomeContent({
 
       // Check if a real item with matching parent_id and title exists
       // (since we don't know the real ID yet)
-      const realItem = items.find(
-        (item) =>
-          item.parent_id === optimisticItem.parent_id &&
-          item.type === optimisticItem.type &&
-          item.title === optimisticItem.title &&
-          !item.id.startsWith("temp-")
-      );
+      // Only check for real items (not temp-*), and only if the optimistic item has been renamed
+      // (i.e., title is not "Novo item")
+      const isRenamed = optimisticItem.title !== "Novo item";
+      const realItem = isRenamed
+        ? items.find(
+            (item) =>
+              item.parent_id === optimisticItem.parent_id &&
+              item.type === optimisticItem.type &&
+              item.title === optimisticItem.title &&
+              !item.id.startsWith("temp-")
+          )
+        : null;
 
       if (realItem) {
         console.log("✅ Found real item, replacing:", realItem.id);
@@ -790,7 +855,7 @@ function HomeContent({
               onItemClick={handleItemClick}
               onBack={currentFolderId ? handleBack : undefined}
               onAddItem={handleAddItem}
-              onItemUpdate={handleItemUpdate}
+              onItemUpdate={wrappedHandleItemUpdate}
               onItemDelete={handleItemDelete}
               loading={loading}
               workspaceId={workspaceId}
