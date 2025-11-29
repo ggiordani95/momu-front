@@ -9,7 +9,7 @@ import {
 } from "react";
 
 // UUID do usuário de teste (do seed data)
-const TEST_USER_ID = "00000000-0000-0000-0000-000000000001";
+const TEST_USER_ID = "user-001";
 
 interface AuthContextType {
   userId: string | null;
@@ -23,6 +23,17 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 function getInitialUserId(): string {
   if (typeof window === "undefined") return TEST_USER_ID;
   const storedUserId = localStorage.getItem("userId");
+
+  // Migração: se encontrar o UUID antigo, atualizar para o novo ID
+  if (storedUserId === "00000000-0000-0000-0000-000000000001") {
+    console.log(
+      "[AuthContext] Migrating old UUID to new user ID:",
+      TEST_USER_ID
+    );
+    localStorage.setItem("userId", TEST_USER_ID);
+    return TEST_USER_ID;
+  }
+
   if (storedUserId) {
     return storedUserId;
   }

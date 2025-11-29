@@ -122,7 +122,7 @@ export default function EditableContentItem({
     // Determine drop position based on mouse Y position
     let newDropPosition: "before" | "inside" | "after" | null = null;
 
-    if (item.type === "section" && y > threshold && y < height - threshold) {
+    if (item.type === "folder" && y > threshold && y < height - threshold) {
       // Middle third = inside section
       newDropPosition = "inside";
     } else if (y < threshold) {
@@ -190,7 +190,7 @@ export default function EditableContentItem({
       const height = rect.height;
       const threshold = height / 3;
 
-      if (item.type === "section" && y > threshold && y < height - threshold) {
+      if (item.type === "folder" && y > threshold && y < height - threshold) {
         finalDropPosition = "inside";
       } else if (y < threshold) {
         finalDropPosition = "before";
@@ -322,7 +322,7 @@ export default function EditableContentItem({
                 }}
               />
             )}
-            {dropPosition === "inside" && item.type === "section" && (
+            {dropPosition === "inside" && item.type === "folder" && (
               <div
                 className="absolute left-0 top-0 w-full h-full border-2 border-blue-500 border-dashed rounded-lg"
                 style={{
@@ -344,7 +344,7 @@ export default function EditableContentItem({
             )}
           </>
         )}
-      {item.type === "section" && (
+      {item.type === "folder" && (
         <div
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -396,7 +396,7 @@ export default function EditableContentItem({
           )}
 
           {/* Add child button for sections */}
-          {item.type === "section" && onAddChild && (
+          {item.type === "folder" && onAddChild && (
             <div className="ml-6 mt-4">
               {showAddFormForParentId === item.id && AddItemFormComponent ? (
                 AddItemFormComponent
@@ -452,66 +452,6 @@ export default function EditableContentItem({
             placeholder="Descrição do vídeo..."
             multiline
           />
-        </div>
-      )}
-
-      {item.type === "task" && (
-        <div
-          className="flex items-start gap-3 p-4 border rounded-lg mb-3"
-          style={{ borderColor: "var(--border-color)" }}
-        >
-          <input type="checkbox" className="mt-1 w-4 h-4" />
-          <div className="flex-1 space-y-2">
-            <EditableText
-              value={item.title}
-              onSave={(value) => handleUpdate("title", value)}
-              className="font-medium"
-              as="h4"
-              placeholder="Nome da tarefa..."
-            />
-            {checklistPreview.length > 0 ? (
-              <div className="space-y-1.5">
-                {checklistPreview.slice(0, 5).map((todo) => (
-                  <div
-                    key={todo.id}
-                    className="flex items-center gap-2 text-sm text-foreground/80"
-                  >
-                    <span
-                      className={`w-4 h-4 rounded border flex items-center justify-center ${
-                        todo.completed
-                          ? "bg-blue-600 border-blue-600 text-white"
-                          : "border-foreground/30"
-                      }`}
-                    >
-                      {todo.completed && <Check size={10} strokeWidth={3} />}
-                    </span>
-                    <span
-                      className={
-                        todo.completed
-                          ? "line-through text-foreground/50"
-                          : "text-foreground"
-                      }
-                    >
-                      {todo.text}
-                    </span>
-                  </div>
-                ))}
-                {checklistPreview.length > 5 && (
-                  <p className="text-xs text-foreground/50">
-                    +{checklistPreview.length - 5} itens
-                  </p>
-                )}
-              </div>
-            ) : (
-              <EditableText
-                value={item.content || ""}
-                onSave={(value) => handleUpdate("content", value)}
-                className="text-sm opacity-70 mt-1"
-                placeholder="Descrição da tarefa..."
-                multiline
-              />
-            )}
-          </div>
         </div>
       )}
 

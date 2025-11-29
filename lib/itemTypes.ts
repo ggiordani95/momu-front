@@ -6,7 +6,7 @@ import {
 } from "@/components/icons/ItemIcons";
 import React from "react";
 
-export type ItemType = "section" | "video" | "task" | "note";
+export type ItemType = "folder" | "video" | "note";
 
 export interface ItemTypeConfig {
   type: ItemType;
@@ -17,7 +17,7 @@ export interface ItemTypeConfig {
 
 export const ITEM_TYPES: ItemTypeConfig[] = [
   {
-    type: "section",
+    type: "folder",
     label: "Pasta",
     emoji: "📂",
     icon: FolderIcon,
@@ -27,12 +27,6 @@ export const ITEM_TYPES: ItemTypeConfig[] = [
     label: "Bloco de notas",
     emoji: "📝",
     icon: NoteIcon,
-  },
-  {
-    type: "task",
-    label: "To do list",
-    emoji: "✅",
-    icon: TaskIcon,
   },
   {
     type: "video",

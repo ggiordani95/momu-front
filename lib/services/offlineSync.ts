@@ -56,19 +56,54 @@ interface StoredOperations {
 
 /**
  * Salva uma operação pendente no localStorage
+ * Se já existe uma operação CREATE com o mesmo ID, atualiza ao invés de criar nova
  */
 export function savePendingOperation(operation: PendingOperation): void {
   if (typeof window === "undefined") return;
 
   try {
     const stored = getStoredOperations();
-    stored.operations.push(operation);
+
+    // For CREATE operations, check if one with the same ID already exists
+    if (operation.type === "CREATE") {
+      const existingIndex = stored.operations.findIndex(
+        (op) => op.type === "CREATE" && op.id === operation.id
+      );
+
+      if (existingIndex >= 0) {
+        // Update existing operation but keep original timestamp
+        const existing = stored.operations[existingIndex] as Extract<
+          PendingOperation,
+          { type: "CREATE" }
+        >;
+        stored.operations[existingIndex] = {
+          ...operation,
+          timestamp: existing.timestamp, // Keep original timestamp to preserve creation order
+        } as PendingOperation;
+        console.log(
+          "💾 Updated create operation in localStorage:",
+          operation.id
+        );
+      } else {
+        // Add new operation
+        stored.operations.push(operation);
+        console.log(
+          "💾 Saved pending operation:",
+          operation.type,
+          operation.id
+        );
+      }
+    } else {
+      // For other operations, always add new
+      stored.operations.push(operation);
+      console.log("💾 Saved pending operation:", operation.type, operation.id);
+    }
+
     // Manter apenas as últimas 1000 operações para evitar overflow
     if (stored.operations.length > 1000) {
       stored.operations = stored.operations.slice(-1000);
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
-    console.log("💾 Saved pending operation:", operation.type, operation.id);
   } catch (error) {
     console.error("❌ Error saving pending operation:", error);
   }
@@ -76,15 +111,27 @@ export function savePendingOperation(operation: PendingOperation): void {
 
 /**
  * Remove uma operação pendente do localStorage
+ * Para operações CREATE, usa o ID diretamente (temp ID)
+ * Para operações DELETE, também usa o ID diretamente (item ID)
+ * Para outras operações, usa getOperationId para encontrar a operação
  */
 export function removePendingOperation(operationId: string): void {
   if (typeof window === "undefined") return;
 
   try {
     const stored = getStoredOperations();
-    stored.operations = stored.operations.filter(
-      (op) => getOperationId(op) !== operationId
-    );
+    stored.operations = stored.operations.filter((op) => {
+      // For CREATE operations, match by ID directly (temp ID)
+      if (op.type === "CREATE" && op.id === operationId) {
+        return false; // Remove this operation
+      }
+      // For DELETE operations, match by ID directly (item ID)
+      if (op.type === "DELETE" && op.id === operationId) {
+        return false; // Remove this operation
+      }
+      // For other operations, use getOperationId
+      return getOperationId(op) !== operationId;
+    });
     localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
     console.log("🗑️ Removed pending operation:", operationId);
   } catch (error) {

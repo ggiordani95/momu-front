@@ -21,7 +21,6 @@ export default function AddItemInline({
   onAdd,
   onCancel,
   parentId,
-  allowSections = false,
 }: AddItemInlineProps) {
   const [selectedType, setSelectedType] = useState<ItemType | null>(null);
   const [title, setTitle] = useState("");
@@ -107,7 +106,7 @@ export default function AddItemInline({
       }}
     >
       <div
-        className="p-3 relative overflow-hidden"
+        className="p-4 relative overflow-hidden"
         style={{
           backgroundColor: "rgba(0, 0, 0, 0.03)",
           backdropFilter: "blur(8px) saturate(120%)",
@@ -125,25 +124,20 @@ export default function AddItemInline({
             borderRadius: "inherit",
           }}
         />
-        <form onSubmit={handleSubmit} className="p-2 space-y-4 relative z-10">
+        <form onSubmit={handleSubmit} className="space-y-2 relative z-10">
           {/* Header with type selection and actions */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               {ITEM_TYPES.filter((itemType) => {
-                // Always show: section, note, task, video
-                const allowedTypes: ItemType[] = [
-                  "section",
-                  "note",
-                  "task",
-                  "video",
-                ];
+                // Always show: folder, note, video
+                const allowedTypes: ItemType[] = ["folder", "note", "video"];
                 return allowedTypes.includes(itemType.type);
               }).map((itemType, index) => (
                 <button
                   key={itemType.type}
                   type="button"
                   onClick={() => handleTypeClick(itemType.type)}
-                  className="relative p-2.5 rounded-lg transition-all duration-200 group"
+                  className="relative ml-4 rounded-lg transition-all duration-200 group"
                   style={{
                     backgroundColor:
                       selectedType === itemType.type
@@ -171,6 +165,7 @@ export default function AddItemInline({
                   <div
                     className="block transition-transform duration-200"
                     style={{
+                      marginTop: itemType.type === "folder" ? "6px" : "0px",
                       transform:
                         selectedType === itemType.type
                           ? "scale(1.1)"
@@ -363,19 +358,15 @@ export default function AddItemInline({
             </div>
           )}
 
-          {/* Content (for task and note) */}
-          {(selectedType === "task" || selectedType === "note") && (
+          {/* Content (for note) */}
+          {selectedType === "note" && (
             <div
               className="overflow-hidden transition-all duration-300 ease-out"
               style={{
-                maxHeight:
-                  selectedType === "task" || selectedType === "note"
-                    ? "120px"
-                    : "0px",
-                opacity:
-                  selectedType === "task" || selectedType === "note" ? 1 : 0,
+                maxHeight: selectedType === "note" ? "120px" : "0px",
+                opacity: selectedType === "note" ? 1 : 0,
                 transform:
-                  selectedType === "task" || selectedType === "note"
+                  selectedType === "note"
                     ? "translateY(0)"
                     : "translateY(-5px)",
               }}

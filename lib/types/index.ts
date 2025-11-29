@@ -43,7 +43,6 @@ export interface FolderItem {
   parent_id?: string | null;
   order_index?: number;
   active?: boolean;
-  deleted_at?: string | null;
   created_at: string;
   updated_at?: string;
 }
@@ -75,5 +74,5 @@ export interface UpdateItemDto {
 // ============================================
 
 export interface TrashItem extends FolderItem {
-  deleted_at: string;
+  active: boolean;
 }

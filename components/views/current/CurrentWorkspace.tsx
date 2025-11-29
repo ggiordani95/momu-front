@@ -67,7 +67,7 @@ export default function CurrentWorkspace({
         return;
       }
 
-      if (targetItem.type === "section") {
+      if (targetItem.type === "folder") {
         setCurrentFolderId(targetItem.id);
         setSelectedItem((prev) => (prev?.id === targetItem.id ? prev : null));
       } else {
@@ -143,7 +143,7 @@ export default function CurrentWorkspace({
     // Handle item click (open page, video, etc.)
     if (item.type === "video" && item.youtube_url) {
       window.open(item.youtube_url, "_blank");
-    } else if (item.type === "note" || item.type === "task") {
+    } else if (item.type === "note") {
       // Open page for editing
       setSelectedItem(item);
       setCurrentFolderId(item.parent_id || null);
@@ -336,8 +336,7 @@ function HomeContent({
       {/* Main Content */}
       <main className="flex-1 overflow-hidden relative z-10">
         {currentView === "explorer" ? (
-          selectedItem &&
-          (selectedItem.type === "note" || selectedItem.type === "task") ? (
+          selectedItem && selectedItem.type === "note" ? (
             <PageEditor
               item={selectedItem}
               onBack={handleCloseEditor}

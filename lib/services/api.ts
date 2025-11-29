@@ -53,8 +53,8 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return {} as T;
 }
 
-// UUID do usuário de teste (do seed data)
-const TEST_USER_ID = "00000000-0000-0000-0000-000000000001";
+// ID do usuário de teste (do seed data) - usando TEXT ID ao invés de UUID
+const TEST_USER_ID = "user-001";
 
 /**
  * Get userId from localStorage (client-side only)
@@ -68,6 +68,14 @@ function getUserId(): string {
 
   try {
     const userId = localStorage.getItem("userId");
+
+    // Migração: se encontrar o UUID antigo, atualizar para o novo ID
+    if (userId === "00000000-0000-0000-0000-000000000001") {
+      console.log("[API] Migrating old UUID to new user ID:", TEST_USER_ID);
+      localStorage.setItem("userId", TEST_USER_ID);
+      return TEST_USER_ID;
+    }
+
     // Se não encontrar, usa o usuário de teste e salva no localStorage
     if (!userId || userId.trim() === "") {
       localStorage.setItem("userId", TEST_USER_ID);

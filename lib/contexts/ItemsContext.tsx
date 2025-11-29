@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  ReactNode,
-} from "react";
+import { createContext, useContext, useState, ReactNode } from "react";
 import type { HierarchicalItem } from "@/lib/types";
 
 interface ItemsContextType {
@@ -24,14 +18,6 @@ export function ItemsProvider({
   children: ReactNode;
 }) {
   const [items, setItems] = useState(initialItems);
-
-  // Log when items change
-  useEffect(() => {
-    console.log("📦 ItemsContext items updated:", {
-      count: items.length,
-      ids: items.map((i) => i.id),
-    });
-  }, [items]);
 
   return (
     <ItemsContext.Provider value={{ items, setItems }}>

@@ -73,7 +73,6 @@ export default function FileCard({
   useEffect(() => {
     if (startRenaming && !isRenaming && !hasStartedRenamingRef.current) {
       hasStartedRenamingRef.current = true;
-      // Schedule state update for next render cycle
       const timeoutId = setTimeout(() => {
         setIsRenaming(true);
         setRenameValue(file.title);
@@ -81,6 +80,12 @@ export default function FileCard({
           renameInputRef.current?.focus();
           renameInputRef.current?.select();
         }, 10);
+      }, 0);
+      return () => clearTimeout(timeoutId);
+    } else if (!startRenaming && isRenaming && hasStartedRenamingRef.current) {
+      hasStartedRenamingRef.current = false;
+      const timeoutId = setTimeout(() => {
+        setIsRenaming(false);
       }, 0);
       return () => clearTimeout(timeoutId);
     }
@@ -106,16 +111,16 @@ export default function FileCard({
     setContextMenu(null);
     // Focus input after a short delay
     setTimeout(() => {
-      renameInputRef.current?.focus();
-      renameInputRef.current?.select();
+      if (renameInputRef.current) {
+        renameInputRef.current.focus();
+        renameInputRef.current.select();
+      }
     }, 10);
   };
 
   const handleRenameSave = () => {
     const isOptimisticItem = file.id.startsWith("temp-");
     if (renameValue.trim() && onRename) {
-      // For optimistic items, always save (even if name didn't change)
-      // For regular items, only save if name changed
       if (isOptimisticItem || renameValue.trim() !== file.title) {
         onRename(file.id, "title", renameValue.trim());
       } else {
@@ -140,24 +145,6 @@ export default function FileCard({
       return () => clearTimeout(timer);
     }
   }, [file.title, isRenaming]);
-
-  // Parse checklist items for tasks to show count
-  const taskItemCount = React.useMemo(() => {
-    if (file.type === "task" && file.content) {
-      try {
-        const parsed = JSON.parse(file.content);
-        if (Array.isArray(parsed)) {
-          const completed = parsed.filter(
-            (item: { completed?: boolean }) => item.completed
-          ).length;
-          return { total: parsed.length, completed };
-        }
-      } catch {
-        // Not JSON, ignore
-      }
-    }
-    return null;
-  }, [file.type, file.content]);
 
   return (
     <div
@@ -189,7 +176,7 @@ export default function FileCard({
         onDragEnd={onDragEnd}
         onClick={onClick}
         onContextMenu={handleContextMenu}
-        className={`flex flex-col h-full justify-center items-center gap-3 p-4 rounded-3xl transition-all hover:bg-hover/50 hover:scale-105 group w-full min-h-[180px] ${
+        className={`flex flex-col h-full justify-center items-center gap-3 p-4 rounded-3xl transition-all bg-hover/50 hover:scale-105 group w-full min-h-[180px] ${
           draggedItemId === file.id ? "opacity-50" : ""
         } ${
           dragOverItemId === file.id
@@ -210,7 +197,7 @@ export default function FileCard({
               />
               {/* Title overlay at the bottom */}
               {!isRenaming && (
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/60 to-transparent p-3">
+                <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/80 via-black/60 to-transparent p-3">
                   <span className="text-sm font-medium text-white text-center block truncate w-full drop-shadow-lg">
                     {file.title}
                   </span>
@@ -234,12 +221,6 @@ export default function FileCard({
               )}
             </>
           )}
-          {/* Badge for task items showing completed/total */}
-          {taskItemCount && (
-            <span className="absolute -top-1 -right-1 bg-green-600 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center font-semibold">
-              {taskItemCount.completed}/{taskItemCount.total}
-            </span>
-          )}
         </div>
       </button>
       {isRenaming && (
@@ -247,14 +228,27 @@ export default function FileCard({
           ref={renameInputRef}
           type="text"
           value={renameValue}
-          onChange={(e) => setRenameValue(e.target.value)}
-          onBlur={handleRenameSave}
+          onChange={(e) => {
+            console.log(`⌨️ [FileCard] Input changed: "${e.target.value}"`);
+            setRenameValue(e.target.value);
+          }}
+          onBlur={() => {
+            console.log(`👋 [FileCard] Input onBlur triggered`);
+            handleRenameSave();
+          }}
           onKeyDown={(e) => {
+            console.log(`⌨️ [FileCard] Key pressed: ${e.key}`);
             if (e.key === "Enter") {
               e.preventDefault();
+              console.log(
+                `⌨️ [FileCard] Enter pressed, calling handleRenameSave`
+              );
               handleRenameSave();
             } else if (e.key === "Escape") {
               e.preventDefault();
+              console.log(
+                `⌨️ [FileCard] Escape pressed, calling handleRenameCancel`
+              );
               handleRenameCancel();
             }
           }}
@@ -284,12 +278,7 @@ export default function FileCard({
                     label: "Excluir permanentemente",
                     icon: <X size={16} />,
                     onClick: () => {
-                      if (
-                        onPermanentDelete &&
-                        confirm(
-                          `Tem certeza que deseja excluir permanentemente "${file.title}"?`
-                        )
-                      ) {
+                      if (onPermanentDelete) {
                         onPermanentDelete(file.id);
                       }
                       setContextMenu(null);
@@ -306,12 +295,7 @@ export default function FileCard({
                     label: "Excluir",
                     icon: <Trash2 size={16} />,
                     onClick: () => {
-                      if (
-                        onDelete &&
-                        confirm(
-                          `Tem certeza que deseja excluir "${file.title}"?`
-                        )
-                      ) {
+                      if (onDelete) {
                         onDelete(file.id);
                       }
                       setContextMenu(null);

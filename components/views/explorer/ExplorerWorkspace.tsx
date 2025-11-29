@@ -1,17 +1,16 @@
 "use client";
 
-import { Folder, Plus, X } from "lucide-react";
+import { Folder as FolderIcon, Plus, X } from "lucide-react";
 import { useItems } from "@/lib/contexts/ItemsContext";
 import { type ItemType } from "@/lib/itemTypes";
 import AddItemInline from "@/components/AddItemInline";
 import FolderSkeleton from "@/components/files/FolderSkeleton";
 import Breadcrumb from "@/components/Breadcrumb";
 import FileCard from "@/components/files/FileCard";
-import React, { useState, useEffect, useMemo } from "react";
-import type { HierarchicalItem, CreateItemDto } from "@/lib/types";
+import React, { useState, useMemo } from "react";
+import type { HierarchicalItem, CreateItemDto, Folder } from "@/lib/types";
 import { findItemById } from "@/lib/utils/hierarchy";
 import { useDragAndDrop } from "@/lib/hooks/useDragAndDrop";
-
 interface ExplorerWorkspaceProps {
   currentFolderId?: string | null;
   onFolderClick: (folderId: string) => void;
@@ -33,6 +32,7 @@ interface ExplorerWorkspaceProps {
   loading?: boolean;
   workspaceId?: string;
   pendingItems?: Map<string, { item: HierarchicalItem; data: CreateItemDto }>;
+  workspaces?: Folder[];
 }
 
 export function ExplorerWorkspace({
@@ -46,57 +46,85 @@ export function ExplorerWorkspace({
   loading = false,
   workspaceId,
   pendingItems,
+  workspaces = [],
 }: ExplorerWorkspaceProps) {
   const itemsContext = useItems();
-  const items = useMemo(() => itemsContext?.items || [], [itemsContext?.items]);
+
+  // Use context items
+  const items = useMemo(() => {
+    return itemsContext?.items || [];
+  }, [itemsContext?.items]);
+
+  const isLoading = loading;
   const [showAddItem, setShowAddItem] = useState(false);
 
-  // Debug: Log items and pending items
-  useEffect(() => {
-    const itemsArray = itemsContext?.items || [];
-    const currentFolder = currentFolderId
-      ? findItemById(itemsArray, currentFolderId)
-      : null;
-    const displayItems = currentFolder
-      ? currentFolder.children || []
-      : itemsArray.filter((item) => {
-          return !item.parent_id || item.id.startsWith("temp-");
-        });
-    console.log("📋 ExplorerWorkspace items:", {
-      itemsCount: itemsArray.length,
-      itemsIds: itemsArray.map((i) => i.id),
-      displayItemsCount: displayItems.length,
-      displayItemsIds: displayItems.map((i) => i.id),
-      pendingItemsCount: pendingItems?.size || 0,
-      pendingItemsIds: pendingItems ? Array.from(pendingItems.keys()) : [],
-    });
-  }, [itemsContext?.items, pendingItems, currentFolderId]);
+  // Find current folder or use root - memoize with stable reference
+  const currentFolder = useMemo(() => {
+    if (!currentFolderId) return null;
+    const folder = findItemById(items, currentFolderId);
+    // If folder not found but currentFolderId is set, it might be an empty folder
+    // Return a placeholder object to allow navigation
+    if (!folder && currentFolderId) {
+      return {
+        id: currentFolderId,
+        type: "folder" as const,
+        title: "",
+        children: [],
+        workspace_id: "",
+        created_at: "",
+        updated_at: "",
+      } as HierarchicalItem;
+    }
+    return folder;
+  }, [currentFolderId, items]);
 
-  // Find current folder or use root
-  const currentFolder = useMemo(
-    () => (currentFolderId ? findItemById(items, currentFolderId) : null),
-    [currentFolderId, items]
-  );
-
+  // Memoize displayItems to avoid recalculating on every render
   const displayItems = useMemo(() => {
     if (currentFolder) {
+      // Ensure children is always an array (even for empty folders)
       return currentFolder.children || [];
     }
-    return items.filter((item) => {
-      // Show items without parent_id, or optimistic items (temp-*) even if they have parent_id
-      // (optimistic items will be moved to correct location when parent is created)
-      return !item.parent_id || item.id.startsWith("temp-");
+    // Get all root items (items without parent_id)
+    const rootItems = items.filter((item) => !item.parent_id);
+
+    // Also get optimistic items that might have parent_id but parent is also pending
+    // Only include optimistic items that don't already exist in rootItems
+    const optimisticItems = items.filter((item) => {
+      if (!item.id.startsWith("temp-")) return false;
+      // Check if this item is already in rootItems
+      const alreadyInRoot = rootItems.some(
+        (rootItem) => rootItem.id === item.id
+      );
+      if (alreadyInRoot) return false;
+      // Include if parent_id exists but parent is also a temp item (not yet created)
+      if (item.parent_id) {
+        const parentExists = items.some(
+          (i) => i.id === item.parent_id && !i.id.startsWith("temp-")
+        );
+        return !parentExists;
+      }
+      return false;
+    });
+
+    // Combine and remove duplicates by ID
+    const allItems = [...rootItems, ...optimisticItems];
+    const seen = new Set<string>();
+    return allItems.filter((item) => {
+      if (seen.has(item.id)) {
+        return false;
+      }
+      seen.add(item.id);
+      return true;
     });
   }, [currentFolder, items]);
 
   // Sort ALL items together by order_index (folders and files mixed)
-  const sortedItems = useMemo(
-    () =>
-      [...displayItems].sort(
-        (a, b) => (a.order_index || 0) - (b.order_index || 0)
-      ),
-    [displayItems]
-  );
+  // Only recalculate if displayItems reference changes
+  const sortedItems = useMemo(() => {
+    return [...displayItems].sort(
+      (a, b) => (a.order_index || 0) - (b.order_index || 0)
+    );
+  }, [displayItems]);
 
   const {
     handleDragStart,
@@ -114,19 +142,21 @@ export function ExplorerWorkspace({
   return (
     <div className="h-full flex flex-col">
       {/* Breadcrumb Timeline */}
-      {!loading && (
-        <Breadcrumb
-          items={items}
-          currentFolderId={currentFolderId || null}
-          onNavigate={(folderId) => {
-            if (folderId) {
-              onFolderClick(folderId);
-            } else if (onBack) {
-              onBack();
-            }
-          }}
-          actionButton={
-            !showAddItem ? (
+      <Breadcrumb
+        items={items}
+        currentFolderId={currentFolderId || null}
+        onNavigate={(folderId) => {
+          if (folderId) {
+            onFolderClick(folderId);
+          } else if (onBack) {
+            onBack();
+          }
+        }}
+        workspaces={workspaces}
+        currentWorkspaceId={workspaceId}
+        actionButton={
+          <div className="flex items-center gap-3">
+            {!showAddItem ? (
               <button
                 onClick={() => setShowAddItem(true)}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:bg-hover/50"
@@ -138,25 +168,43 @@ export function ExplorerWorkspace({
                 Adicionar Item
               </button>
             ) : (
-              <button
-                onClick={() => setShowAddItem(false)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:bg-hover/50"
-                style={{
-                  color: "var(--foreground)",
-                }}
-              >
-                <X size={16} />
-                Cancelar
-              </button>
-            )
-          }
-        />
-      )}
+              <>
+                {onAddItem && (
+                  <div className="min-w-[400px]">
+                    <AddItemInline
+                      onAdd={(item) => {
+                        onAddItem({
+                          ...item,
+                          parent_id: currentFolderId || undefined,
+                        });
+                        setShowAddItem(false);
+                      }}
+                      onCancel={() => setShowAddItem(false)}
+                      parentId={currentFolderId || undefined}
+                      allowSections={true}
+                    />
+                  </div>
+                )}
+                <button
+                  onClick={() => setShowAddItem(false)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:bg-hover/50 shrink-0"
+                  style={{
+                    color: "var(--foreground)",
+                  }}
+                >
+                  <X size={16} />
+                  Cancelar
+                </button>
+              </>
+            )}
+          </div>
+        }
+      />
 
       {/* File Grid */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,2fr))] gap-6 w-full">
-          {loading ? (
+          {isLoading ? (
             <>
               {/* Loading Skeletons */}
               {[...Array(3)].map((_, i) => (
@@ -171,7 +219,7 @@ export function ExplorerWorkspace({
                   key={item.id}
                   file={item}
                   onClick={() =>
-                    item.type === "section"
+                    item.type === "folder"
                       ? onFolderClick(item.id)
                       : onItemClick(item)
                   }
@@ -190,31 +238,13 @@ export function ExplorerWorkspace({
               ))}
 
               {/* Empty State */}
-              {sortedItems.length === 0 && !showAddItem && !loading && (
+              {sortedItems.length === 0 && !showAddItem && !isLoading && (
                 <div className="text-center py-10 text-foreground/40">
-                  <Folder size={48} className="mx-auto mb-4 opacity-30" />
+                  <FolderIcon size={48} className="mx-auto mb-4 opacity-30" />
                   <p>Esta pasta está vazia</p>
                 </div>
               )}
             </>
-          )}
-
-          {/* Add Item Form */}
-          {showAddItem && onAddItem && (
-            <div className="col-span-full">
-              <AddItemInline
-                onAdd={(item) => {
-                  onAddItem({
-                    ...item,
-                    parent_id: currentFolderId || undefined,
-                  });
-                  setShowAddItem(false);
-                }}
-                onCancel={() => setShowAddItem(false)}
-                parentId={currentFolderId || undefined}
-                allowSections={true}
-              />
-            </div>
           )}
         </div>
       </div>

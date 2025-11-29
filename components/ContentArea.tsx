@@ -62,7 +62,7 @@ export default function ContentArea({
   const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
 
   // Get modules (sections) from root items
-  const modules = items.filter((item) => item.type === "section");
+  const modules = items.filter((item) => item.type === "folder");
 
   // Get selected module or default to first module
   const selectedModule = selectedModuleId
@@ -74,7 +74,7 @@ export default function ContentArea({
   // Items to display: if a module is selected, show its children, otherwise show all non-section items
   const displayItems = selectedModule
     ? selectedModule.children || []
-    : items.filter((item) => item.type !== "section");
+    : items.filter((item) => item.type !== "folder");
 
   // Helper to get icon
   const getIcon = (type: ItemType) => {
@@ -110,7 +110,7 @@ export default function ContentArea({
   useEffect(() => {
     if (selectedModuleId) {
       const updatedModule = items.find(
-        (m) => m.id === selectedModuleId && m.type === "section"
+        (m) => m.id === selectedModuleId && m.type === "folder"
       );
       if (!updatedModule && modules.length > 0) {
         // If selected module was deleted, schedule state update outside the render/effect cycle
@@ -395,7 +395,7 @@ export default function ContentArea({
 
     let newItems: TopicItem[];
 
-    if (position === "inside" && targetItem.type === "section") {
+    if (position === "inside" && targetItem.type === "folder") {
       // Move item inside section (as child)
       newItems = moveItemToParent(items, draggedItemId, targetItem.id);
     } else {
@@ -741,7 +741,7 @@ export default function ContentArea({
                   setItems(newItems as TopicItem[]);
                   if (selectedModuleId) {
                     const updatedModule = newItems.find(
-                      (m) => m.id === selectedModuleId && m.type === "section"
+                      (m) => m.id === selectedModuleId && m.type === "folder"
                     );
                     if (updatedModule) {
                       // Module still exists, no need to change

@@ -1,10 +1,18 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+  startTransition,
+} from "react";
 import { useRouter, usePathname } from "next/navigation";
 
 import { useWorkspaceItems } from "@/lib/hooks/querys/useItems";
-import type { HierarchicalItem, CreateItemDto } from "@/lib/types";
+import { useFolders } from "@/lib/hooks/querys/useFolders";
+import type { HierarchicalItem, CreateItemDto, Folder } from "@/lib/types";
 import { ItemsProvider, useItems } from "@/lib/contexts/ItemsContext";
 import SimpleSidebar from "@/components/SimpleSidebar";
 import PageEditor from "@/components/editors/PageEditor";
@@ -12,7 +20,10 @@ import { TrashWorkspace } from "@/components/views/trash/TrashWorkspace";
 import { SettingsWorkspace } from "@/components/views/settings/SettingsWorkspace";
 import { ExplorerWorkspace } from "@/components/views/explorer/ExplorerWorkspace";
 import { useOfflineSync } from "@/lib/hooks/useOfflineSync";
-import { savePendingOperation } from "@/lib/services/offlineSync";
+import {
+  savePendingOperation,
+  removePendingOperation,
+} from "@/lib/services/offlineSync";
 import { SocialWorkspace } from "@/components/views/social/SocialWorkspace";
 import { PlannerWorkspace } from "@/components/views/planner/PlannerWorkspace";
 import { GlobalSearch } from "@/components/GlobalSearch";
@@ -45,8 +56,6 @@ export default function WorkspaceView({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
-  
-
 
   const [selectedItem, setSelectedItem] = useState<HierarchicalItem | null>(
     null
@@ -62,27 +71,77 @@ export default function WorkspaceView({
 
   // React Query hooks
   // Só carrega os dados após o sync ter sido executado (pelo menos uma vez)
-  const { data: items = [], isLoading: loading } = useWorkspaceItems(
-    workspaceId,
-    {
-      enabled: hasSynced !== false, // Aguarda o sync (hasSynced pode ser true ou undefined inicialmente)
-    }
+  const {
+    data: items = [],
+    isLoading: loading,
+    error: itemsError,
+  } = useWorkspaceItems(workspaceId, {
+    enabled: hasSynced !== false, // Aguarda o sync (hasSynced pode ser true ou undefined inicialmente)
+  });
+
+  // Verificar se o workspace existe - se não houver items e não estiver carregando, pode ser que o workspace não exista
+  const foldersQuery = useFolders();
+  const workspacesItems = useMemo(
+    () => foldersQuery.data || [],
+    [foldersQuery.data]
   );
+
+  useEffect(() => {
+    // Se não estiver carregando, não houver items, e não houver erro, verificar se o workspace existe
+    if (
+      !loading &&
+      items.length === 0 &&
+      !itemsError &&
+      workspacesItems.length > 0
+    ) {
+      const workspaceExists = workspacesItems.some((f) => f.id === workspaceId);
+      if (!workspaceExists) {
+        console.warn(
+          `⚠️ Workspace ${workspaceId} não existe, redirecionando para o primeiro workspace disponível`
+        );
+        const firstWorkspaceId = workspacesItems[0]?.id;
+        if (firstWorkspaceId) {
+          router.replace(`/${firstWorkspaceId}`);
+        }
+      }
+    }
+  }, [loading, items.length, itemsError, workspaceId, workspacesItems, router]);
   // Note: Mutations are no longer used directly - operations are saved to localStorage
   // and synced on next page load via useOfflineSync
 
   const pathKey = pathSegments.join("/");
+
+  // Use refs to track previous values and avoid unnecessary state updates
+  const prevPathKeyRef = useRef<string>("");
+  const prevCurrentFolderIdRef = useRef<string | null>(null);
+  const prevSelectedItemIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!items || items.length === 0) {
       return;
     }
 
-    // Use a microtask to batch state updates and avoid flicker
-    Promise.resolve().then(() => {
+    // Skip if path hasn't actually changed
+    if (prevPathKeyRef.current === pathKey) {
+      return;
+    }
+
+    prevPathKeyRef.current = pathKey;
+
+    // Use startTransition to mark state updates as non-urgent
+    // This prevents flicker by allowing React to batch updates smoothly
+    startTransition(() => {
       if (!pathSegments || pathSegments.length === 0) {
-        setCurrentFolderId(null);
-        setSelectedItem(null);
+        // Only update if values actually changed
+        if (
+          prevCurrentFolderIdRef.current !== null ||
+          prevSelectedItemIdRef.current !== null
+        ) {
+          prevCurrentFolderIdRef.current = null;
+          prevSelectedItemIdRef.current = null;
+          setCurrentFolderId(null);
+          setSelectedItem(null);
+        }
         return;
       }
 
@@ -90,17 +149,44 @@ export default function WorkspaceView({
       const targetItem = findItemById(items, lastSegment);
 
       if (!targetItem) {
-        setCurrentFolderId(lastSegment);
-        setSelectedItem(null);
+        // Item not found in items tree - might be an empty folder or pending item
+        // Still set currentFolderId to allow navigation (the folder might exist but be empty)
+        if (prevCurrentFolderIdRef.current !== lastSegment) {
+          prevCurrentFolderIdRef.current = lastSegment;
+          prevSelectedItemIdRef.current = null;
+          setCurrentFolderId(lastSegment);
+          setSelectedItem(null);
+        }
         return;
       }
 
-      if (targetItem.type === "section") {
-        setCurrentFolderId(targetItem.id);
-        setSelectedItem((prev) => (prev?.id === targetItem.id ? prev : null));
+      if (targetItem.type === "folder") {
+        // Only update if folder ID changed
+        if (prevCurrentFolderIdRef.current !== targetItem.id) {
+          prevCurrentFolderIdRef.current = targetItem.id;
+          setCurrentFolderId(targetItem.id);
+        }
+        // Only update selectedItem if it changed
+        setSelectedItem((prev) => {
+          const newValue = prev?.id === targetItem.id ? prev : null;
+          if (prevSelectedItemIdRef.current !== (newValue?.id || null)) {
+            prevSelectedItemIdRef.current = newValue?.id || null;
+            return newValue;
+          }
+          return prev;
+        });
       } else {
-        setSelectedItem(targetItem);
-        setCurrentFolderId(targetItem.parent_id || null);
+        // Only update if item changed
+        if (prevSelectedItemIdRef.current !== targetItem.id) {
+          prevSelectedItemIdRef.current = targetItem.id;
+          setSelectedItem(targetItem);
+        }
+        // Only update folder ID if it changed
+        const newFolderId = targetItem.parent_id || null;
+        if (prevCurrentFolderIdRef.current !== newFolderId) {
+          prevCurrentFolderIdRef.current = newFolderId;
+          setCurrentFolderId(newFolderId);
+        }
       }
     });
   }, [pathKey, items, pathSegments]);
@@ -116,7 +202,8 @@ export default function WorkspaceView({
         if (item.id === targetId) {
           return [...currentPath, item.id];
         }
-        if (item.children) {
+        // Check children even if empty array (for empty folders)
+        if (item.children && item.children.length >= 0) {
           const found = buildPathToFolder(item.children, targetId, [
             ...currentPath,
             item.id,
@@ -127,15 +214,40 @@ export default function WorkspaceView({
       return null;
     };
 
+    // First try to find the folder in the items tree
     const pathToFolder = buildPathToFolder(items, folderId);
     if (pathToFolder) {
       const newPath = `/${workspaceId}/${pathToFolder.join("/")}`;
-      router.push(newPath);
+      // Use replace instead of push to avoid adding to history and reduce flicker
+      router.replace(newPath);
     } else {
-      // Fallback: just use the folder ID
-      router.push(`/${workspaceId}/${folderId}`);
+      // Fallback: check if folder exists at all (even if empty)
+      const folderExists = findItemById(items, folderId);
+      if (folderExists) {
+        // Folder exists but path building failed, try to build path from parent
+        const parentId = folderExists.parent_id;
+        if (parentId) {
+          const parentPath = buildPathToFolder(items, parentId);
+          if (parentPath) {
+            const newPath = `/${workspaceId}/${[...parentPath, folderId].join(
+              "/"
+            )}`;
+            router.replace(newPath);
+          } else {
+            // Just use parent and folder
+            router.replace(`/${workspaceId}/${parentId}/${folderId}`);
+          }
+        } else {
+          // Root level folder
+          router.replace(`/${workspaceId}/${folderId}`);
+        }
+      } else {
+        // Folder not found, but navigate anyway (might be a new folder)
+        router.replace(`/${workspaceId}/${folderId}`);
+      }
     }
-    setCurrentFolderId(folderId);
+    // Don't set currentFolderId here - let the useEffect handle it based on pathSegments
+    // This prevents double state updates and flicker
   };
 
   const getBasePathWithoutEditor = () => {
@@ -169,7 +281,7 @@ export default function WorkspaceView({
     // Handle item click (open page, video, etc.)
     if (item.type === "video" && item.youtube_url) {
       window.open(item.youtube_url, "_blank");
-    } else if (item.type === "note" || item.type === "task") {
+    } else if (item.type === "note") {
       // Open page for editing
       setSelectedItem(item);
       setCurrentFolderId(item.parent_id || null);
@@ -272,7 +384,6 @@ export default function WorkspaceView({
           },
           timestamp: Date.now(),
         });
-        console.log(`💾 Updated create operation in localStorage:`, id);
 
         // Item will be created when sync runs on next page load
       } else {
@@ -332,13 +443,17 @@ export default function WorkspaceView({
     // Save to localStorage for offline sync instead of calling backend immediately
     // Check if it's a pending item (not yet created in backend)
     if (id.startsWith("temp-")) {
-      // Just remove from pending items
+      // Remove from pending items state
       setPendingItems((prev) => {
         const newMap = new Map(prev);
         newMap.delete(id);
         return newMap;
       });
-      console.log(`🗑️ Removed pending item:`, id);
+
+      // Also remove the CREATE operation from localStorage
+      // This prevents the item from being created when syncing
+      removePendingOperation(id);
+      console.log(`🗑️ Removed pending item and CREATE operation:`, id);
       return;
     }
 
@@ -464,7 +579,7 @@ export default function WorkspaceView({
       return newMap;
     });
 
-    // Don't open editor automatically - let item appear in list for renaming
+    // Don't open editor automaticamente - deixa aparecer na lista pra renomear
     setCurrentFolderId(itemData.parent_id || null);
 
     // Save CREATE operation to localStorage for offline sync
@@ -497,11 +612,11 @@ export default function WorkspaceView({
         { item: HierarchicalItem; data: CreateItemDto }
       >
     ): HierarchicalItem[] => {
-      console.log("🔧 addOptimisticItemToContext called", {
-        itemId: optimisticItem.id,
-        parentId: optimisticItem.parent_id,
-        itemsListCount: itemsList.length,
-      });
+      // First check if item already exists (to avoid duplicates)
+      const existingItem = findItemById(itemsList, optimisticItem.id);
+      if (existingItem) {
+        return itemsList; // Item already exists, don't add again
+      }
 
       if (optimisticItem.parent_id) {
         // Find parent and add as child
@@ -510,10 +625,13 @@ export default function WorkspaceView({
         ): HierarchicalItem[] => {
           return itemsList.map((item) => {
             if (item.id === optimisticItem.parent_id) {
-              console.log("✅ Found parent, adding child", {
-                parentId: item.id,
-                currentChildrenCount: item.children?.length || 0,
-              });
+              // Check if child already exists in parent's children
+              const childExists = (item.children || []).some(
+                (child) => child.id === optimisticItem.id
+              );
+              if (childExists) {
+                return item; // Child already exists, don't add again
+              }
               return {
                 ...item,
                 children: [...(item.children || []), optimisticItem],
@@ -533,54 +651,66 @@ export default function WorkspaceView({
         // If parent not found, check if it's a pending item
         const parentFound = findItemById(result, optimisticItem.parent_id);
         if (!parentFound && allPendingItems?.has(optimisticItem.parent_id)) {
-          console.log(
-            "⚠️ Parent is also a pending item, adding to root instead"
-          );
           // Parent is also pending, add to root for now
+          // But first check if item is already in root
+          const alreadyInRoot = itemsList.some(
+            (item) => item.id === optimisticItem.id
+          );
+          if (alreadyInRoot) {
+            return itemsList;
+          }
           return [...itemsList, optimisticItem];
         }
 
         if (!parentFound) {
-          console.log("⚠️ Parent not found, adding to root instead");
           // Parent not found, add to root
+          // But first check if item is already in root
+          const alreadyInRoot = itemsList.some(
+            (item) => item.id === optimisticItem.id
+          );
+          if (alreadyInRoot) {
+            return itemsList;
+          }
           return [...itemsList, optimisticItem];
         }
 
-        console.log("🔧 After adding to parent, result count:", result.length);
         return result;
       } else {
-        // Add to root
-        console.log("✅ Adding to root level");
-        const result = [...itemsList, optimisticItem];
-        console.log("🔧 After adding to root, result count:", result.length);
-        return result;
+        // Add to root - but check if already exists
+        const alreadyInRoot = itemsList.some(
+          (item) => item.id === optimisticItem.id
+        );
+        if (alreadyInRoot) {
+          return itemsList;
+        }
+        return [...itemsList, optimisticItem];
       }
     },
     []
   );
 
   // Helper function to remove optimistic item from items list
-  const removeOptimisticItemFromContext = (
-    itemId: string,
-    itemsList: HierarchicalItem[]
-  ): HierarchicalItem[] => {
-    // Remove both pending (temp-*) and existing items
-    const removeFromList = (list: HierarchicalItem[]): HierarchicalItem[] => {
-      return list
-        .filter((item) => item.id !== itemId)
-        .map((item) => {
-          if (item.children) {
-            return {
-              ...item,
-              children: removeFromList(item.children),
-            };
-          }
-          return item;
-        });
-    };
+  const removeOptimisticItemFromContext = useCallback(
+    (itemId: string, itemsList: HierarchicalItem[]): HierarchicalItem[] => {
+      // Remove both pending (temp-*) and existing items
+      const removeFromList = (list: HierarchicalItem[]): HierarchicalItem[] => {
+        return list
+          .filter((item) => item.id !== itemId)
+          .map((item) => {
+            if (item.children) {
+              return {
+                ...item,
+                children: removeFromList(item.children),
+              };
+            }
+            return item;
+          });
+      };
 
-    return removeFromList(itemsList);
-  };
+      return removeFromList(itemsList);
+    },
+    []
+  );
 
   // Helper function to replace optimistic item with real item
   const replaceOptimisticItemInContext = useCallback(
@@ -617,9 +747,15 @@ export default function WorkspaceView({
       value: string,
       itemsList: HierarchicalItem[]
     ): HierarchicalItem[] => {
+      console.log(
+        `🔧 [updateItemInContext] Updating ${itemId} ${field} = "${value}"`
+      );
       const updateInList = (list: HierarchicalItem[]): HierarchicalItem[] => {
         return list.map((item) => {
           if (item.id === itemId) {
+            console.log(
+              `🔧 [updateItemInContext] Found item to update: ${item.id} "${item.title}" -> "${value}"`
+            );
             return { ...item, [field]: value };
           }
           if (item.children) {
@@ -631,7 +767,15 @@ export default function WorkspaceView({
           return item;
         });
       };
-      return updateInList(itemsList);
+      const result = updateInList(itemsList);
+      const updatedItem = findItemById(result, itemId);
+      console.log(
+        `🔧 [updateItemInContext] Result:`,
+        updatedItem
+          ? { id: updatedItem.id, title: updatedItem.title }
+          : "NOT FOUND"
+      );
+      return result;
     },
     []
   );
@@ -655,16 +799,18 @@ export default function WorkspaceView({
           workspaceId={workspaceId}
           loading={loading}
           pendingItems={pendingItems}
+          setPendingItems={setPendingItems}
           hasSynced={hasSynced}
           addOptimisticItem={addOptimisticItemToContext}
           removeOptimisticItem={removeOptimisticItemFromContext}
           replaceOptimisticItem={replaceOptimisticItemInContext}
           updateItemInContext={updateItemInContext}
+          workspacesItems={workspacesItems}
         />
-        <GlobalSearch 
-          isOpen={isSearchOpen} 
-          onClose={() => setIsSearchOpen(false)} 
-          workspaceId={workspaceId} 
+        <GlobalSearch
+          isOpen={isSearchOpen}
+          onClose={() => setIsSearchOpen(false)}
+          workspaceId={workspaceId}
         />
       </ItemsProvider>
     </>
@@ -687,15 +833,18 @@ function HomeContent({
   workspaceId,
   loading,
   pendingItems,
+  setPendingItems,
   hasSynced,
   addOptimisticItem,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   removeOptimisticItem, // Not used directly, but kept for consistency with parent component
   replaceOptimisticItem,
   updateItemInContext,
+  workspacesItems,
 }: {
   currentView: "explorer" | "settings" | "trash" | "social" | "planner";
-  setCurrentView: (view: "explorer" | "settings" | "trash" | "social" | "planner") => void;
+  setCurrentView: (
+    view: "explorer" | "settings" | "trash" | "social" | "planner"
+  ) => void;
   currentFolderId: string | null;
   selectedItem: HierarchicalItem | null;
   handleFolderClick: (folderId: string) => void;
@@ -713,6 +862,11 @@ function HomeContent({
   workspaceId: string;
   loading: boolean;
   pendingItems: Map<string, { item: HierarchicalItem; data: CreateItemDto }>;
+  setPendingItems: React.Dispatch<
+    React.SetStateAction<
+      Map<string, { item: HierarchicalItem; data: CreateItemDto }>
+    >
+  >;
   hasSynced?: boolean;
   addOptimisticItem: (
     item: HierarchicalItem,
@@ -737,21 +891,46 @@ function HomeContent({
     value: string,
     itemsList: HierarchicalItem[]
   ) => HierarchicalItem[];
+  workspacesItems: Folder[];
 }) {
   const itemsContext = useItems();
 
   // Wrap handleItemUpdate to add optimistic update
   const wrappedHandleItemUpdate = useCallback(
     async (id: string, field: "title" | "content", value: string) => {
+      console.log(`🔄 [RENAME] Starting rename: ${id} ${field} = "${value}"`);
+
       // Optimistically update the item in context (for both pending and existing items)
       if (itemsContext) {
+        console.log(
+          `📦 [RENAME] Context available, items count: ${itemsContext.items.length}`
+        );
+        const itemBefore = findItemById(itemsContext.items, id);
+        console.log(
+          `📦 [RENAME] Item before update:`,
+          itemBefore
+            ? { id: itemBefore.id, title: itemBefore.title }
+            : "NOT FOUND"
+        );
+
         const updatedItems = updateItemInContext(
           id,
           field,
           value,
           itemsContext.items
         );
+
+        const itemAfter = findItemById(updatedItems, id);
+        console.log(
+          `📦 [RENAME] Item after update:`,
+          itemAfter ? { id: itemAfter.id, title: itemAfter.title } : "NOT FOUND"
+        );
+
+        console.log(`📦 [RENAME] Setting updated items to context...`);
         itemsContext.setItems(updatedItems);
+        console.log(`✅ [RENAME] Context updated`);
+      } else {
+        console.log(`⚠️ [RENAME] No itemsContext available`);
       }
 
       // Call the original handleItemUpdate (saves to localStorage)
@@ -785,16 +964,67 @@ function HomeContent({
     [pendingItems.size, pendingItemsKeysString]
   );
 
+  // Create a stable key from context items to detect changes
+  const contextItemsKey = useMemo(() => {
+    if (!itemsContext?.items) return null;
+    return JSON.stringify(
+      itemsContext.items.map((i) => ({ id: i.id, title: i.title }))
+    );
+  }, [itemsContext?.items]);
+
   // Calculate merged items (backend items + optimistic items)
   const mergedItems = useMemo(() => {
-    console.log("🔄 Calculating mergedItems", {
-      itemsCount: items.length,
-      pendingItemsCount: pendingItems.size,
-      pendingItemsKeys: Array.from(pendingItems.keys()),
-    });
-
     // Start with items from backend
     let result = [...items];
+
+    // Apply optimistic updates from context if available
+    // This ensures that renames and other updates are immediately visible
+    if (itemsContext?.items) {
+      const updateItemFromContext = (
+        list: HierarchicalItem[],
+        contextItems: HierarchicalItem[]
+      ): HierarchicalItem[] => {
+        return list.map((item) => {
+          // Find matching item in context (by ID) - recursively searches all levels
+          const contextItem = findItemById(contextItems, item.id);
+          if (contextItem && contextItem.id === item.id) {
+            // Check if context has different values (optimistic update)
+            const hasUpdate =
+              contextItem.title !== item.title ||
+              contextItem.content !== item.content;
+            if (hasUpdate) {
+              console.log(
+                `🔄 [mergedItems] Applying context update for ${item.id}: "${item.title}" -> "${contextItem.title}"`
+              );
+            }
+
+            // Merge children: use context children if they exist, otherwise use backend children
+            const mergedChildren =
+              contextItem.children && contextItem.children.length > 0
+                ? updateItemFromContext(contextItem.children, contextItems)
+                : item.children
+                ? updateItemFromContext(item.children, contextItems)
+                : undefined;
+
+            // Always use context version if it exists (has optimistic updates)
+            return {
+              ...contextItem,
+              children: mergedChildren,
+            };
+          }
+          // Recursively update children even if this item wasn't found in context
+          if (item.children) {
+            return {
+              ...item,
+              children: updateItemFromContext(item.children, contextItems),
+            };
+          }
+          return item;
+        });
+      };
+
+      result = updateItemFromContext(result, itemsContext.items);
+    }
 
     // Process pending items in order: first parents, then children
     // This ensures that when we add a child, its parent already exists in the result
@@ -815,125 +1045,164 @@ function HomeContent({
       // (including updated children if this is a parent folder)
       const latestItem =
         pendingItems.get(optimisticItem.id)?.item || optimisticItem;
-      console.log(
-        "🔍 Processing optimistic item:",
-        latestItem.id,
-        latestItem.title,
-        "parent_id:",
-        latestItem.parent_id,
-        "children count:",
-        latestItem.children?.length || 0
+
+      // Check if a real item with matching parent_id and title exists in backend
+      // (since we don't know the real ID yet)
+      // Check for real items (not temp-*) that match the optimistic item
+      const realItem = items.find(
+        (item) =>
+          item.parent_id === latestItem.parent_id &&
+          item.type === latestItem.type &&
+          item.title === latestItem.title &&
+          !item.id.startsWith("temp-")
       );
 
-      // Check if a real item with matching parent_id and title exists
-      // (since we don't know the real ID yet)
-      // Only check for real items (not temp-*), and only if the optimistic item has been renamed
-      // (i.e., title is not "Novo item")
-      const isRenamed = latestItem.title !== "Novo item";
-      const realItem = isRenamed
-        ? items.find(
-            (item) =>
-              item.parent_id === latestItem.parent_id &&
-              item.type === latestItem.type &&
-              item.title === latestItem.title &&
-              !item.id.startsWith("temp-")
-          )
-        : null;
+      // Check if item exists in result (context) with same ID
+      const existingInResult = findItemById(result, latestItem.id);
 
       if (realItem) {
-        console.log("✅ Found real item, replacing:", realItem.id);
-        // Replace optimistic item with real item
-        result = replaceOptimisticItem(latestItem.id, realItem, result);
+        // Item was synchronized, replace optimistic item with real item
+        // But preserve any optimistic updates from context
+        const contextItem = itemsContext?.items
+          ? findItemById(itemsContext.items, realItem.id)
+          : null;
+        const itemToUse =
+          contextItem && contextItem.id === realItem.id
+            ? contextItem // Use context version if it exists (has optimistic updates)
+            : realItem; // Otherwise use backend version
+        result = replaceOptimisticItem(latestItem.id, itemToUse, result);
+      } else if (existingInResult && existingInResult.id === latestItem.id) {
+        // Item exists in result, use existing version (may have optimistic updates)
+        // Don't add again, it's already in result
       } else {
         // Add optimistic item if it doesn't exist yet
         const exists = findItemById(result, latestItem.id);
         if (!exists) {
-          console.log("➕ Adding optimistic item to result", {
-            itemId: latestItem.id,
-            parentId: latestItem.parent_id,
-            childrenCount: latestItem.children?.length || 0,
-            resultCountBefore: result.length,
-            resultRootIds: result.map((i) => i.id),
-          });
-          const resultBefore = JSON.stringify(result);
           // Use latestItem which has the updated children array
           result = addOptimisticItem(latestItem, result, pendingItems);
-          const resultAfter = JSON.stringify(result);
-          console.log("➕ After adding, result count:", result.length);
-          console.log("➕ Result changed:", resultBefore !== resultAfter);
-          console.log(
-            "➕ Result items IDs:",
-            result.map((i) => i.id)
-          );
-
-          // Verify parent's children if this item has a parent
-          if (latestItem.parent_id) {
-            const parent = findItemById(result, latestItem.parent_id);
-            if (parent) {
-              console.log(
-                "➕ Parent found, children count:",
-                parent.children?.length || 0
-              );
-              console.log(
-                "➕ Parent children IDs:",
-                parent.children?.map((c) => c.id) || []
-              );
-            } else {
-              console.log("⚠️ Parent not found in result!");
-            }
-          }
-        } else {
-          console.log("⚠️ Optimistic item already exists in result");
         }
       }
     });
 
-    console.log("✅ Final mergedItems count:", result.length);
     return result;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, pendingItemsKey, addOptimisticItem, replaceOptimisticItem]);
+  }, [
+    items,
+    itemsContext?.items,
+    contextItemsKey,
+    pendingItemsKey,
+    addOptimisticItem,
+    replaceOptimisticItem,
+  ]);
+
+  // Remove synchronized items from pendingItems when they appear in backend
+  useEffect(() => {
+    if (pendingItems.size === 0) return;
+
+    const itemsToRemove: string[] = [];
+
+    pendingItems.forEach(({ item: optimisticItem }, tempId) => {
+      // Check if a real item with matching parent_id and title exists in backend
+      // Use the current title from optimisticItem (which may have been renamed)
+      const currentTitle = optimisticItem.title;
+
+      // Normalize parent_id for comparison (both null and undefined should match)
+      const optimisticParentId = optimisticItem.parent_id || null;
+
+      const realItem = items.find((item) => {
+        const itemParentId = item.parent_id || null;
+        return (
+          itemParentId === optimisticParentId &&
+          item.type === optimisticItem.type &&
+          item.title === currentTitle &&
+          !item.id.startsWith("temp-")
+        );
+      });
+
+      if (realItem) {
+        // Item was synchronized, remove from pendingItems
+        itemsToRemove.push(tempId);
+        console.log(
+          `✅ Found synchronized item: ${realItem.id} matches temp ${tempId} (title: "${currentTitle}", parent: ${optimisticParentId})`
+        );
+      }
+    });
+
+    if (itemsToRemove.length > 0) {
+      setPendingItems((prev) => {
+        const newMap = new Map(prev);
+        itemsToRemove.forEach((id) => {
+          newMap.delete(id);
+        });
+        if (newMap.size !== prev.size) {
+          console.log(
+            `🧹 Removed ${itemsToRemove.length} synchronized items from pendingItems (${prev.size} -> ${newMap.size})`
+          );
+        }
+        return newMap;
+      });
+    }
+  }, [items, pendingItems, setPendingItems]);
 
   // Sync merged items with context (only when they actually change)
+  // But don't overwrite optimistic updates that are already in context
   const prevMergedItemsRef = useRef<HierarchicalItem[]>([]);
   useEffect(() => {
     if (!itemsContext) {
-      console.log("⚠️ itemsContext is not available");
       return;
     }
 
-    // Compare by IDs and children structure to detect changes
-    // This function recursively collects all IDs including children
-    const getAllIds = (items: HierarchicalItem[]): string[] => {
-      const ids: string[] = [];
-      items.forEach((item) => {
-        ids.push(item.id);
-        if (item.children && item.children.length > 0) {
-          ids.push(...getAllIds(item.children));
-        }
-      });
-      return ids;
+    // Compare by IDs, titles, and content to detect changes
+    // This function recursively collects all item data including children
+    const getAllItemData = (items: HierarchicalItem[]): string => {
+      return items
+        .map((item) => {
+          const childrenData = item.children
+            ? getAllItemData(item.children)
+            : "";
+          return `${item.id}:${item.title}:${
+            item.content || ""
+          }:${childrenData}`;
+        })
+        .join("|");
     };
 
-    const prevIds = getAllIds(prevMergedItemsRef.current).sort().join(",");
-    const currentIds = getAllIds(mergedItems).sort().join(",");
+    const prevData = getAllItemData(prevMergedItemsRef.current);
+    const currentData = getAllItemData(mergedItems);
 
-    console.log("🔄 Syncing items to context", {
-      prevCount: prevMergedItemsRef.current.length,
-      currentCount: mergedItems.length,
-      prevIdsCount: prevMergedItemsRef.current.length,
-      currentIdsCount: mergedItems.length,
-      prevAllIdsCount: getAllIds(prevMergedItemsRef.current).length,
-      currentAllIdsCount: getAllIds(mergedItems).length,
-      changed: prevIds !== currentIds,
-    });
+    // Only update context if mergedItems actually changed
+    // But check if context already has optimistic updates that we should preserve
+    if (prevData !== currentData) {
+      console.log(
+        `🔄 [SYNC] mergedItems changed, checking for optimistic updates...`
+      );
 
-    if (prevIds !== currentIds) {
-      console.log("✅ Updating context with mergedItems");
-      prevMergedItemsRef.current = mergedItems;
-      itemsContext.setItems(mergedItems);
-      console.log("✅ Context updated, items count:", mergedItems.length);
-    } else {
-      console.log("⏭️ Skipping context update (no changes)");
+      // Check if context has newer updates than mergedItems
+      const contextHasUpdates = itemsContext.items.some((contextItem) => {
+        const mergedItem = findItemById(mergedItems, contextItem.id);
+        if (!mergedItem) return false;
+        // If context item has different title/content, it has optimistic updates
+        const hasUpdate =
+          contextItem.title !== mergedItem.title ||
+          contextItem.content !== mergedItem.content;
+        if (hasUpdate) {
+          console.log(
+            `🔄 [SYNC] Context has optimistic update for ${contextItem.id}: "${mergedItem.title}" -> "${contextItem.title}"`
+          );
+        }
+        return hasUpdate;
+      });
+
+      // Only update if context doesn't have newer optimistic updates
+      if (!contextHasUpdates) {
+        console.log(
+          `✅ [SYNC] No optimistic updates, syncing mergedItems to context`
+        );
+        prevMergedItemsRef.current = mergedItems;
+        itemsContext.setItems(mergedItems);
+      } else {
+        console.log(`⏭️ [SYNC] Skipping sync - context has optimistic updates`);
+      }
     }
   }, [itemsContext, mergedItems]);
 
@@ -962,8 +1231,7 @@ function HomeContent({
       {/* Main Content */}
       <main className="flex-1 overflow-hidden relative z-10">
         {currentView === "explorer" ? (
-          selectedItem &&
-          (selectedItem.type === "note" || selectedItem.type === "task") ? (
+          selectedItem && selectedItem.type === "note" ? (
             <PageEditor
               item={selectedItem}
               onBack={handleCloseEditor}
@@ -982,6 +1250,7 @@ function HomeContent({
               loading={loading}
               workspaceId={workspaceId}
               pendingItems={pendingItems}
+              workspaces={workspacesItems ?? []}
             />
           )
         ) : currentView === "trash" ? (

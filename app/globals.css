@@ -21,9 +21,9 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0b0b0cff;
+    --background: rgb(14, 14, 15);
     --foreground: #d4d4d4;
-    --sidebar-bg: rgb(13, 13, 14);
+    --sidebar-bg: rgb(15, 15, 16);
     --border-color: #2f2f2f;
     --hover-bg: #131418ff;
   }
@@ -115,6 +115,22 @@ button {
 .ProseMirror h3 {
   font-size: 1.17em;
   font-weight: bold;
+}
+
+@keyframes card-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-card-enter {
+  animation: card-enter 0.3s ease-out;
+}
+
+.ProseMirror h3 {
   margin: 0.83em 0;
 }
 
@@ -163,7 +179,7 @@ button {
 @keyframes item-entry {
   from {
     opacity: 0;
-    transform: translateY(18px) scale(0.98);
+    transform: translateY(9px) scale(0.98);
   }
   to {
     opacity: 1;
@@ -174,11 +190,9 @@ button {
 @keyframes item-exit {
   from {
     opacity: 1;
-    transform: translateY(0) scale(1);
   }
   to {
     opacity: 0;
-    transform: translateY(-18px) scale(0.98);
   }
 }
 

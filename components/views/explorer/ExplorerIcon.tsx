@@ -6,7 +6,7 @@ import { getItemTypeIcon } from "@/lib/itemTypes";
 import React from "react";
 
 interface ExplorerIconProps {
-  type: "section" | "video" | "task" | "note";
+  type: "folder" | "video" | "note";
   title: string;
   youtubeId?: string | null;
   size?: number;
@@ -39,7 +39,7 @@ export function ExplorerIcon({
     <div
       className={`relative w-full h-full flex items-center justify-center ${className}`}
     >
-      {type === "section" ? (
+      {type === "folder" ? (
         <Image
           src="/icons/folder.png"
           alt="Folder"

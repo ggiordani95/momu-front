@@ -1,5 +1,6 @@
 import { apiRequest } from "./api";
 import type { FolderItem, CreateItemDto, UpdateItemDto } from "@/lib/types";
+import type { PendingOperation } from "../services/offlineSync";
 
 // ============================================
 // Item Service
@@ -97,12 +98,18 @@ export const itemService = {
    */
   async syncBatch(
     workspaceId: string,
-    operations: any[]
+    operations: PendingOperation[]
   ): Promise<{
     success: boolean;
     synced: number;
     failed: number;
-    results: any[];
+    results: Array<{
+      operationId: string;
+      type: string;
+      item?: FolderItem;
+      skipped?: boolean;
+      reason?: string;
+    }>;
     errors: string[];
     tempIdMap?: Record<string, string>;
   }> {
@@ -110,7 +117,13 @@ export const itemService = {
       success: boolean;
       synced: number;
       failed: number;
-      results: any[];
+      results: Array<{
+        operationId: string;
+        type: string;
+        item?: FolderItem;
+        skipped?: boolean;
+        reason?: string;
+      }>;
       errors: string[];
       tempIdMap?: Record<string, string>;
     }>(`/folders/${workspaceId}/sync`, {

@@ -1,17 +1,77 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
-import { ArrowLeft } from "lucide-react";
-import RichTextEditor from "./RichTextEditor";
-import EditableText from "./EditableText";
-import Checklist from "./Checklist";
+import { useState, useEffect, useRef } from "react";
+import {
+  ArrowLeft,
+  List,
+  Hash,
+  Quote,
+  Code2,
+  Minus,
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  Code,
+  Link,
+  Type,
+} from "lucide-react";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import UnderlineExtension from "@tiptap/extension-underline";
+import TiptapLink from "@tiptap/extension-link";
+import { TextStyle } from "@tiptap/extension-text-style";
+import { Extension } from "@tiptap/core";
 import type { HierarchicalItem } from "@/lib/types";
 
-interface ChecklistItem {
-  id: string;
-  text: string;
-  completed: boolean;
-}
+// Custom FontSize extension
+const FontSize = Extension.create({
+  name: "fontSize",
+  addOptions() {
+    return {
+      types: ["textStyle"],
+    };
+  },
+  addGlobalAttributes() {
+    return [
+      {
+        types: this.options.types,
+        attributes: {
+          fontSize: {
+            default: null,
+            parseHTML: (element) =>
+              element.style.fontSize?.replace("px", "") || null,
+            renderHTML: (attributes) => {
+              if (!attributes.fontSize) {
+                return {};
+              }
+              return {
+                style: `font-size: ${attributes.fontSize}px`,
+              };
+            },
+          },
+        },
+      },
+    ];
+  },
+  addCommands() {
+    return {
+      setFontSize:
+        (fontSize: string) =>
+        ({ chain }) => {
+          return chain().setMark("textStyle", { fontSize }).run();
+        },
+      unsetFontSize:
+        () =>
+        ({ chain }) => {
+          return chain()
+            .setMark("textStyle", { fontSize: null })
+            .removeEmptyTextStyle()
+            .run();
+        },
+    };
+  },
+});
 
 interface PageEditorProps {
   item: HierarchicalItem;
@@ -27,122 +87,636 @@ export default function PageEditor({
   isNew = false,
 }: PageEditorProps) {
   const [title, setTitle] = useState(item.title);
-  const [content, setContent] = useState(item.content || "");
-  const [editorKey, setEditorKey] = useState(0);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const [isTitleEditing, setIsTitleEditing] = useState(isNew);
+  const [showBlockMenu, setShowBlockMenu] = useState(false);
+  const [blockMenuPosition, setBlockMenuPosition] = useState({
+    top: 0,
+    left: 0,
+  });
+  const blockMenuRef = useRef<HTMLDivElement>(null);
+  const [showFontSizeMenu, setShowFontSizeMenu] = useState(false);
+  const fontSizeMenuRef = useRef<HTMLDivElement>(null);
 
-  // Reset editor key when item changes to force complete remount
-  useEffect(() => {
-    setEditorKey((prev) => prev + 1);
-  }, [item.id]);
+  // Helper function to convert \n to HTML breaks
+  const convertNewlinesToHTML = (content: string): string => {
+    if (!content) return "<p></p>";
 
-  // Parse checklist from content if it's a task
-  const parsedChecklistItems = useMemo((): ChecklistItem[] => {
-    if (item.type !== "task") return [];
-    if (item.content?.trim()) {
-      try {
-        const parsed = JSON.parse(item.content);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((todo, index) => ({
-            ...todo,
-            id: todo.id || `checklist-item-${index}`,
-            text: todo.text || String(todo),
-            completed: Boolean(todo.completed),
-          }));
+    // If already HTML without \n, return as is
+    if (
+      content.includes("<") &&
+      content.includes(">") &&
+      !content.includes("\\n") &&
+      !content.includes("\n")
+    ) {
+      return content;
+    }
+
+    // Handle both literal \n (escaped) and actual newlines
+    let processedContent = content;
+
+    // First, handle JSON-escaped newlines (\\n)
+    // Then handle literal string newlines (\n)
+    // This handles cases where \n comes as a string literal "\\n" from JSON
+    processedContent = processedContent
+      .replace(/\\n/g, "\n") // Replace \\n with actual newline
+      .replace(/\\r\\n/g, "\n") // Replace \r\n with newline
+      .replace(/\\r/g, "\n"); // Replace \r with newline
+
+    // Split by newlines and create paragraphs
+    const lines = processedContent.split("\n");
+
+    if (lines.length === 0) return "<p></p>";
+
+    // Convert each line to a paragraph, filtering out empty lines at start/end
+    const nonEmptyLines = lines
+      .map((line) => line.trim())
+      .filter((line, index, arr) => {
+        // Keep all non-empty lines
+        if (line) return true;
+        // Keep empty lines only if they're in the middle (not at start or end)
+        return index > 0 && index < arr.length - 1;
+      });
+
+    // If no content, return single empty paragraph
+    if (nonEmptyLines.length === 0) return "<p></p>";
+
+    // Convert to paragraphs
+    const paragraphs = nonEmptyLines
+      .map((line) => {
+        // Empty lines in the middle become breaks
+        if (!line) {
+          return "<p><br></p>";
         }
-      } catch {
-        // ignore parsing errors
-      }
-    }
+        return `<p>${line}</p>`;
+      })
+      .join("");
 
-    if (item.children && item.children.length > 0) {
-      return item.children.map((child, index) => ({
-        id: child.id || `child-checklist-${index}`,
-        text: child.title || "Item",
-        completed: false,
-      }));
-    }
+    return paragraphs;
+  };
 
-    if (item.content?.trim()) {
-      return [
-        {
-          id: `checklist-item-${item.id}`,
-          text: item.content,
-          completed: false,
+  // Editor for content
+  const editor = useEditor(
+    {
+      immediatelyRender: false,
+      extensions: [
+        StarterKit.configure({
+          paragraph: {
+            HTMLAttributes: {
+              class: "block-item",
+            },
+          },
+          heading: {
+            levels: [1, 2, 3],
+            HTMLAttributes: {
+              class: "block-item",
+            },
+          },
+          bulletList: {
+            HTMLAttributes: {
+              class: "block-item",
+            },
+          },
+          orderedList: {
+            HTMLAttributes: {
+              class: "block-item",
+            },
+          },
+          blockquote: {
+            HTMLAttributes: {
+              class: "block-item",
+            },
+          },
+          codeBlock: {
+            HTMLAttributes: {
+              class: "block-item",
+            },
+          },
+          horizontalRule: {
+            HTMLAttributes: {
+              class: "block-item",
+            },
+          },
+          underline: false,
+          link: false,
+        }),
+        UnderlineExtension,
+        TextStyle,
+        FontSize,
+        TiptapLink.configure({
+          openOnClick: false,
+          HTMLAttributes: {
+            class: "text-blue-600 underline cursor-pointer",
+          },
+        }),
+      ],
+      content: convertNewlinesToHTML(item.content || ""),
+      editorProps: {
+        attributes: {
+          class:
+            "prose prose-sm max-w-none focus:outline-none min-h-[200px] [&_.block-item]:my-1 [&_.block-item]:px-2 [&_.block-item]:rounded [&_.block-item:hover]:bg-hover/30 [&_.block-item]:transition-colors [&_.block-item]:cursor-text",
         },
-      ];
-    }
+        handleKeyDown: (view, event) => {
+          // Show block menu on '/' only if it's at the start of a line
+          if (
+            event.key === "/" &&
+            !event.shiftKey &&
+            !event.ctrlKey &&
+            !event.metaKey
+          ) {
+            const { from } = view.state.selection;
+            const $from = view.state.doc.resolve(from);
+            // Only show menu if '/' is at the start of a block
+            if (
+              $from.parentOffset === 0 ||
+              $from.parent.textContent.trim() === ""
+            ) {
+              const coords = view.coordsAtPos(from);
+              setBlockMenuPosition({
+                top: coords.top + window.scrollY,
+                left: coords.left + window.scrollX,
+              });
+              setShowBlockMenu(true);
+              return true;
+            }
+          }
+          return false;
+        },
+      },
+      onUpdate: ({ editor }) => {
+        const html = editor.getHTML();
+        onUpdate(item.id, "content", html);
+      },
+      onSelectionUpdate: () => {
+        // Hide block menu when selection changes
+        if (showBlockMenu) {
+          setShowBlockMenu(false);
+        }
+      },
+    },
+    [item.id, showBlockMenu]
+  );
 
-    return [];
-  }, [item.content, item.id, item.type, item.children]);
-
-  const [checklistItems, setChecklistItems] =
-    useState<ChecklistItem[]>(parsedChecklistItems);
-
-  // Sync checklist items when parsed items change
+  // Focus title input if new
   useEffect(() => {
-    setChecklistItems(parsedChecklistItems);
-  }, [parsedChecklistItems]);
+    if (isNew && titleInputRef.current) {
+      setTimeout(() => {
+        titleInputRef.current?.focus();
+        titleInputRef.current?.select();
+      }, 100);
+    }
+  }, [isNew]);
 
-  const handleTitleSave = (newTitle: string) => {
-    setTitle(newTitle);
-    onUpdate(item.id, "title", newTitle);
+  // Focus TipTap editor when note is opened (not new)
+  useEffect(() => {
+    if (!isNew && editor && !isTitleEditing) {
+      const focusTimer = setTimeout(() => {
+        editor.commands.focus();
+        const end = editor.state.doc.content.size;
+        editor.commands.setTextSelection(end);
+      }, 150);
+      return () => clearTimeout(focusTimer);
+    }
+  }, [editor, isNew, isTitleEditing]);
+
+  // Update editor content when item ID changes (not on every content change to avoid conflicts)
+  useEffect(() => {
+    if (editor && item.id) {
+      // Convert newlines to HTML before setting content
+      const originalContent = item.content || "";
+      const htmlContent = convertNewlinesToHTML(originalContent);
+
+      // Debug: log if content contains \n
+      if (originalContent.includes("\\n") || originalContent.includes("\n")) {
+        console.log("Original content:", JSON.stringify(originalContent));
+        console.log("Converted HTML:", htmlContent);
+      }
+
+      editor.commands.setContent(htmlContent);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id, editor]);
+
+  // Update title when item changes
+  useEffect(() => {
+    if (item.title !== title) {
+      setTitle(item.title);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.title]);
+
+  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setTitle(e.target.value);
   };
 
-  const handleContentSave = (newContent: string) => {
-    setContent(newContent);
-    onUpdate(item.id, "content", newContent);
+  const handleTitleBlur = () => {
+    if (title.trim() !== item.title) {
+      onUpdate(item.id, "title", title.trim() || "Sem título");
+    }
+    setIsTitleEditing(false);
   };
 
-  const handleChecklistUpdate = (items: ChecklistItem[]) => {
-    setChecklistItems(items);
-    // Save checklist as JSON string
-    const content = JSON.stringify(items);
-    onUpdate(item.id, "content", content);
+  const handleTitleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      titleInputRef.current?.blur();
+      setTimeout(() => editor?.commands.focus(), 100);
+    }
+    if (e.key === "Escape") {
+      setTitle(item.title);
+      setIsTitleEditing(false);
+    }
   };
 
-  const isTask = item.type === "task";
+  const handleTitleClick = () => {
+    setIsTitleEditing(true);
+    setTimeout(() => {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    }, 0);
+  };
+
+  const handleBlockAction = (action: () => void) => {
+    return () => {
+      action();
+      setShowBlockMenu(false);
+      setTimeout(() => editor?.commands.focus(), 50);
+    };
+  };
+
+  const blockActions = [
+    {
+      icon: <Hash size={16} />,
+      label: "Heading 1",
+      action: () => editor?.chain().focus().toggleHeading({ level: 1 }).run(),
+    },
+    {
+      icon: <Hash size={16} />,
+      label: "Heading 2",
+      action: () => editor?.chain().focus().toggleHeading({ level: 2 }).run(),
+    },
+    {
+      icon: <Hash size={16} />,
+      label: "Heading 3",
+      action: () => editor?.chain().focus().toggleHeading({ level: 3 }).run(),
+    },
+    {
+      icon: <List size={16} />,
+      label: "Bullet List",
+      action: () => editor?.chain().focus().toggleBulletList().run(),
+    },
+    {
+      icon: <List size={16} />,
+      label: "Numbered List",
+      action: () => editor?.chain().focus().toggleOrderedList().run(),
+    },
+    {
+      icon: <Quote size={16} />,
+      label: "Quote",
+      action: () => editor?.chain().focus().toggleBlockquote().run(),
+    },
+    {
+      icon: <Code2 size={16} />,
+      label: "Code Block",
+      action: () => editor?.chain().focus().toggleCodeBlock().run(),
+    },
+    {
+      icon: <Minus size={16} />,
+      label: "Divider",
+      action: () => editor?.chain().focus().setHorizontalRule().run(),
+    },
+  ];
+
+  // Close block menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        blockMenuRef.current &&
+        !blockMenuRef.current.contains(event.target as Node) &&
+        !(event.target as HTMLElement)?.closest(".ProseMirror")
+      ) {
+        setShowBlockMenu(false);
+      }
+    };
+
+    if (showBlockMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+      };
+    }
+  }, [showBlockMenu]);
+
+  // Close font size menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        fontSizeMenuRef.current &&
+        !fontSizeMenuRef.current.contains(event.target as Node)
+      ) {
+        setShowFontSizeMenu(false);
+      }
+    };
+
+    if (showFontSizeMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+      };
+    }
+  }, [showFontSizeMenu]);
+
+  if (!editor) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <p className="text-foreground/60">Carregando editor...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col bg-background">
       {/* Header */}
       <div
-        className="p-4 border-b flex items-center gap-4"
+        className="px-6 py-4 border-b flex items-center gap-4 shrink-0"
         style={{ borderColor: "var(--border-color)" }}
       >
         <button
           onClick={onBack}
-          className="p-2 rounded-md hover:bg-hover transition-colors"
+          className="p-2 rounded-md hover:bg-hover transition-colors shrink-0"
           title="Voltar"
         >
           <ArrowLeft size={20} />
         </button>
-        <div className="flex-1">
-          <EditableText
-            value={title}
-            onSave={handleTitleSave}
-            className="text-2xl font-semibold"
-            placeholder="Sem título..."
-            startEditing={isNew}
-          />
-        </div>
-      </div>
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-8">
-        <div className="max-w-4xl mx-auto">
-          {isTask ? (
-            <Checklist
-              items={checklistItems}
-              onUpdate={handleChecklistUpdate}
+        <div className="flex-1 min-w-0">
+          {isTitleEditing ? (
+            <input
+              ref={titleInputRef}
+              type="text"
+              value={title}
+              onChange={handleTitleChange}
+              onBlur={handleTitleBlur}
+              onKeyDown={handleTitleKeyDown}
+              className="w-full text-2xl font-semibold bg-transparent border-none outline-none focus:outline-none"
+              placeholder="Sem título..."
+              autoFocus
             />
           ) : (
-            <RichTextEditor
-              key={`${item.id}-${editorKey}`}
-              content={content}
-              onSave={handleContentSave}
-              placeholder="Comece a escrever..."
-              autoFocus={item.type === "note"}
-            />
+            <h1
+              onClick={handleTitleClick}
+              className="text-2xl font-semibold cursor-text hover:opacity-80 transition-opacity truncate"
+              title="Clique para editar"
+            >
+              {title || "Sem título..."}
+            </h1>
           )}
+        </div>
+      </div>
+
+      {/* Fixed Toolbar - Text Formatting */}
+      {editor && (
+        <div
+          className="relative z-50 flex items-center gap-0.5 px-1.5 py-1.5 rounded-lg shadow-lg"
+          style={{
+            backgroundColor: "var(--sidebar-bg)",
+            backdropFilter: "blur(12px) saturate(180%)",
+            WebkitBackdropFilter: "blur(12px) saturate(180%)",
+            color: "var(--foreground)",
+          }}
+        >
+          {/* Bold */}
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (editor) {
+                // Ensure editor is focused first
+                if (!editor.isFocused) {
+                  editor.commands.focus();
+                }
+                setTimeout(() => {
+                  editor.chain().focus().toggleBold().run();
+                }, 0);
+              }
+            }}
+            className={`p-1.5 rounded transition-colors ${
+              editor?.isActive("bold") ? "bg-hover" : "hover:bg-hover/50"
+            }`}
+            title="Negrito (Cmd+B)"
+          >
+            <Bold size={14} />
+          </button>
+
+          {/* Italic */}
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (editor) {
+                if (!editor.isFocused) {
+                  editor.commands.focus();
+                }
+                setTimeout(() => {
+                  editor.chain().focus().toggleItalic().run();
+                }, 0);
+              }
+            }}
+            className={`p-1.5 rounded transition-colors ${
+              editor?.isActive("italic") ? "bg-hover" : "hover:bg-hover/50"
+            }`}
+            title="Itálico (Cmd+I)"
+          >
+            <Italic size={14} />
+          </button>
+
+          {/* Underline */}
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (editor) {
+                if (!editor.isFocused) {
+                  editor.commands.focus();
+                }
+                setTimeout(() => {
+                  editor.chain().focus().toggleUnderline().run();
+                }, 0);
+              }
+            }}
+            className={`p-1.5 rounded transition-colors ${
+              editor?.isActive("underline") ? "bg-hover" : "hover:bg-hover/50"
+            }`}
+            title="Sublinhado (Cmd+U)"
+          >
+            <Underline size={14} />
+          </button>
+
+          {/* Strikethrough */}
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (editor) {
+                if (!editor.isFocused) {
+                  editor.commands.focus();
+                }
+                setTimeout(() => {
+                  editor.chain().focus().toggleStrike().run();
+                }, 0);
+              }
+            }}
+            className={`p-1.5 rounded transition-colors ${
+              editor?.isActive("strike") ? "bg-hover" : "hover:bg-hover/50"
+            }`}
+            title="Tachado (Cmd+Shift+S)"
+          >
+            <Strikethrough size={14} />
+          </button>
+
+          <div
+            className="w-px h-4 mx-0.5"
+            style={{ backgroundColor: "var(--border-color)" }}
+          />
+
+          {/* Code */}
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (editor) {
+                if (!editor.isFocused) {
+                  editor.commands.focus();
+                }
+                setTimeout(() => {
+                  editor.chain().focus().toggleCode().run();
+                }, 0);
+              }
+            }}
+            className={`p-1.5 rounded transition-colors ${
+              editor?.isActive("code") ? "bg-hover" : "hover:bg-hover/50"
+            }`}
+            title="Código (Cmd+E)"
+          >
+            <Code size={14} />
+          </button>
+
+          {/* Link */}
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (editor) {
+                if (!editor.isFocused) {
+                  editor.commands.focus();
+                }
+                const url = window.prompt("Digite a URL:");
+                if (url) {
+                  setTimeout(() => {
+                    editor.chain().focus().setLink({ href: url }).run();
+                  }, 0);
+                }
+              }
+            }}
+            className={`p-1.5 rounded transition-colors ${
+              editor?.isActive("link") ? "bg-hover" : "hover:bg-hover/50"
+            }`}
+            title="Link (Cmd+K)"
+          >
+            <Link size={14} />
+          </button>
+
+          <div
+            className="w-px h-4 mx-0.5"
+            style={{ backgroundColor: "var(--border-color)" }}
+          />
+
+          {/* Font Size */}
+          <div className="relative" ref={fontSizeMenuRef}>
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowFontSizeMenu(!showFontSizeMenu);
+              }}
+              className={`p-1.5 rounded transition-colors flex items-center gap-1 ${
+                showFontSizeMenu ? "bg-hover" : "hover:bg-hover/50"
+              }`}
+              title="Tamanho do Texto"
+            >
+              <Type size={14} />
+              <span className="text-xs">
+                {editor.getAttributes("textStyle").fontSize || "14"}px
+              </span>
+            </button>
+            {/* Size dropdown */}
+            {showFontSizeMenu && (
+              <div className="absolute top-full left-0 mt-1 bg-background border rounded-lg shadow-lg py-1 min-w-[100px] z-50">
+                {["12", "14", "16", "18", "24", "32"].map((size) => (
+                  <button
+                    key={size}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (editor) {
+                        if (!editor.isFocused) {
+                          editor.commands.focus();
+                        }
+                        setTimeout(() => {
+                          editor.chain().focus().setFontSize(size).run();
+                          setShowFontSizeMenu(false);
+                        }, 0);
+                      }
+                    }}
+                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-hover/50 transition-colors"
+                    style={{ fontSize: `${size}px` }}
+                  >
+                    {size}px
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Block Menu */}
+      {showBlockMenu && (
+        <div
+          ref={blockMenuRef}
+          className="fixed z-50 bg-background border rounded-lg shadow-lg py-1 min-w-[200px]"
+          style={{
+            top: `${blockMenuPosition.top}px`,
+            left: `${blockMenuPosition.left}px`,
+            borderColor: "var(--border-color)",
+            backgroundColor: "var(--background)",
+          }}
+        >
+          {blockActions.map((block, index) => (
+            <button
+              key={index}
+              onClick={handleBlockAction(block.action)}
+              className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-hover/50 transition-colors"
+            >
+              {block.icon}
+              {block.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Content Editor */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-6 py-8">
+          <div
+            className="min-h-[400px] focus-within:outline-none"
+            onClick={() => {
+              if (!editor.isFocused) {
+                editor.commands.focus();
+              }
+            }}
+          >
+            <EditorContent editor={editor} />
+          </div>
         </div>
       </div>
     </div>
