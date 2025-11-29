@@ -13,6 +13,9 @@ import { SettingsWorkspace } from "@/components/views/settings/SettingsWorkspace
 import { ExplorerWorkspace } from "@/components/views/explorer/ExplorerWorkspace";
 import { useOfflineSync } from "@/lib/hooks/useOfflineSync";
 import { savePendingOperation } from "@/lib/services/offlineSync";
+import { SocialWorkspace } from "@/components/views/social/SocialWorkspace";
+import { PlannerWorkspace } from "@/components/views/planner/PlannerWorkspace";
+import { GlobalSearch } from "@/components/GlobalSearch";
 
 interface WorkspaceViewProps {
   workspaceId: string;
@@ -26,9 +29,25 @@ export default function WorkspaceView({
   const router = useRouter();
   const pathname = usePathname();
   const [currentView, setCurrentView] = useState<
-    "explorer" | "settings" | "trash"
+    "explorer" | "settings" | "trash" | "social" | "planner"
   >("explorer");
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setIsSearchOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+  
+
+
   const [selectedItem, setSelectedItem] = useState<HierarchicalItem | null>(
     null
   );
@@ -642,6 +661,11 @@ export default function WorkspaceView({
           replaceOptimisticItem={replaceOptimisticItemInContext}
           updateItemInContext={updateItemInContext}
         />
+        <GlobalSearch 
+          isOpen={isSearchOpen} 
+          onClose={() => setIsSearchOpen(false)} 
+          workspaceId={workspaceId} 
+        />
       </ItemsProvider>
     </>
   );
@@ -670,8 +694,8 @@ function HomeContent({
   replaceOptimisticItem,
   updateItemInContext,
 }: {
-  currentView: "explorer" | "settings" | "trash";
-  setCurrentView: (view: "explorer" | "settings" | "trash") => void;
+  currentView: "explorer" | "settings" | "trash" | "social" | "planner";
+  setCurrentView: (view: "explorer" | "settings" | "trash" | "social" | "planner") => void;
   currentFolderId: string | null;
   selectedItem: HierarchicalItem | null;
   handleFolderClick: (folderId: string) => void;
@@ -948,7 +972,7 @@ function HomeContent({
             />
           ) : (
             <ExplorerWorkspace
-              currentFolderId={currentFolderId}
+              currentFolderId={currentFolderId || undefined}
               onFolderClick={handleFolderClick}
               onItemClick={handleItemClick}
               onBack={currentFolderId ? handleBack : undefined}
@@ -971,6 +995,10 @@ function HomeContent({
               // React Query will automatically refetch
             }}
           />
+        ) : currentView === "social" ? (
+          <SocialWorkspace />
+        ) : currentView === "planner" ? (
+          <PlannerWorkspace workspaceId={workspaceId} />
         ) : (
           <SettingsWorkspace />
         )}

@@ -324,7 +324,11 @@ function HomeContent({
 
       {/* Sidebar */}
       <SimpleSidebar
-        onNavigate={setCurrentView}
+        onNavigate={
+          setCurrentView as (
+            view: "explorer" | "settings" | "trash" | "social" | "planner"
+          ) => void
+        }
         currentView={currentView}
         workspaceId={workspaceId}
       />

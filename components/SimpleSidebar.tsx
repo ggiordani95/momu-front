@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { FolderTree, Settings, Trash2 } from "lucide-react";
+import { FolderTree, Settings, Trash2, Share2, Calendar } from "lucide-react";
 import Image from "next/image";
 import ContextMenu from "./editors/ContextMenu";
 import { useTrashItems } from "@/lib/hooks/querys/useTrash";
 import { usePermanentDeleteItem } from "@/lib/hooks/querys/useItems";
 
 interface SimpleSidebarProps {
-  onNavigate: (view: "explorer" | "settings" | "trash") => void;
-  currentView: "explorer" | "settings" | "trash";
+  onNavigate: (view: "explorer" | "settings" | "trash" | "social" | "planner") => void;
+  currentView: "explorer" | "settings" | "trash" | "social" | "planner";
   workspaceId: string;
   hasSynced?: boolean;
 }
@@ -51,7 +51,7 @@ export default function SimpleSidebar({
   };
   return (
     <aside
-      className="w-64 bg-[#0b0b0b] shrink-0 border-r flex flex-col relative z-10"
+      className="w-64 bg-sidebar-bg shrink-0 border-r flex flex-col relative z-10"
       style={{
         borderColor: "var(--border-color)",
       }}
@@ -84,6 +84,30 @@ export default function SimpleSidebar({
           >
             <FolderTree size={18} />
             Meu explorador
+          </button>
+
+          <button
+            onClick={() => onNavigate("social")}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors ${
+              currentView === "social"
+                ? "bg-hover text-foreground"
+                : "hover:bg-hover/50 text-foreground/70"
+            }`}
+          >
+            <Share2 size={18} />
+            Redes Sociais
+          </button>
+
+          <button
+            onClick={() => onNavigate("planner")}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors ${
+              currentView === "planner"
+                ? "bg-hover text-foreground"
+                : "hover:bg-hover/50 text-foreground/70"
+            }`}
+          >
+            <Calendar size={18} />
+            Planejador
           </button>
 
           <button
