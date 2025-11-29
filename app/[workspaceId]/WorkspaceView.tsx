@@ -356,16 +356,35 @@ export default function WorkspaceView({
 
     // Calculate the next order_index for this parent_id
     // Find all items with the same parent_id (or root items if parent_id is null)
+    // This function needs to check both backend items and pending items
     const getItemsForParent = (
       parentId: string | null | undefined
     ): HierarchicalItem[] => {
       if (parentId === null || parentId === undefined) {
-        // Root items
-        return items.filter((item) => !item.parent_id);
+        // Root items - include both backend items and pending items
+        const rootBackendItems = items.filter((item) => !item.parent_id);
+        const rootPendingItems = Array.from(pendingItems.values())
+          .map(({ item }) => item)
+          .filter((item) => !item.parent_id);
+        return [...rootBackendItems, ...rootPendingItems];
       }
-      // Items inside a folder
+
+      // Items inside a folder - check both backend items and pending items
+      // First check backend items
       const parent = findItemById(items, parentId);
-      return parent?.children || [];
+      if (parent) {
+        return parent.children || [];
+      }
+
+      // If not found in backend, check pending items
+      const pendingParent = pendingItems.get(parentId);
+      if (pendingParent) {
+        return pendingParent.item.children || [];
+      }
+
+      // If parent is not found at all, return empty array
+      // This can happen if parent is a temporary item that hasn't been added to pendingItems yet
+      return [];
     };
 
     const siblingItems = getItemsForParent(itemData.parent_id);
@@ -406,6 +425,27 @@ export default function WorkspaceView({
     setPendingItems((prev) => {
       const newMap = new Map(prev);
       newMap.set(tempId, { item: optimisticItem, data: itemData });
+
+      // If this item has a parent_id, update the parent's children array
+      if (itemData.parent_id) {
+        const parentPending = newMap.get(itemData.parent_id);
+        if (parentPending) {
+          // Parent is also a pending item, update its children
+          const updatedParent = {
+            ...parentPending.item,
+            children: [...(parentPending.item.children || []), optimisticItem],
+          };
+          newMap.set(itemData.parent_id, {
+            ...parentPending,
+            item: updatedParent,
+          });
+          console.log(
+            `✅ Updated parent ${itemData.parent_id} children:`,
+            updatedParent.children.length
+          );
+        }
+      }
+
       return newMap;
     });
 
@@ -703,28 +743,46 @@ function HomeContent({
     // Start with items from backend
     let result = [...items];
 
+    // Process pending items in order: first parents, then children
+    // This ensures that when we add a child, its parent already exists in the result
+    const pendingItemsArray = Array.from(pendingItems.values());
+
+    // Sort by depth: items without parent_id first, then items with parent_id
+    const sortedPendingItems = pendingItemsArray.sort((a, b) => {
+      const aHasParent = a.item.parent_id ? 1 : 0;
+      const bHasParent = b.item.parent_id ? 1 : 0;
+      return aHasParent - bHasParent;
+    });
+
     // Replace optimistic items with real items if they exist in backend
     // (This happens when React Query refetches after creating an item)
-    pendingItems.forEach(({ item: optimisticItem }) => {
+    // Use the item from pendingItems to get the latest version with updated children
+    sortedPendingItems.forEach(({ item: optimisticItem }) => {
+      // Use the item from pendingItems to ensure we have the latest version
+      // (including updated children if this is a parent folder)
+      const latestItem =
+        pendingItems.get(optimisticItem.id)?.item || optimisticItem;
       console.log(
         "🔍 Processing optimistic item:",
-        optimisticItem.id,
-        optimisticItem.title,
+        latestItem.id,
+        latestItem.title,
         "parent_id:",
-        optimisticItem.parent_id
+        latestItem.parent_id,
+        "children count:",
+        latestItem.children?.length || 0
       );
 
       // Check if a real item with matching parent_id and title exists
       // (since we don't know the real ID yet)
       // Only check for real items (not temp-*), and only if the optimistic item has been renamed
       // (i.e., title is not "Novo item")
-      const isRenamed = optimisticItem.title !== "Novo item";
+      const isRenamed = latestItem.title !== "Novo item";
       const realItem = isRenamed
         ? items.find(
             (item) =>
-              item.parent_id === optimisticItem.parent_id &&
-              item.type === optimisticItem.type &&
-              item.title === optimisticItem.title &&
+              item.parent_id === latestItem.parent_id &&
+              item.type === latestItem.type &&
+              item.title === latestItem.title &&
               !item.id.startsWith("temp-")
           )
         : null;
@@ -732,19 +790,21 @@ function HomeContent({
       if (realItem) {
         console.log("✅ Found real item, replacing:", realItem.id);
         // Replace optimistic item with real item
-        result = replaceOptimisticItem(optimisticItem.id, realItem, result);
+        result = replaceOptimisticItem(latestItem.id, realItem, result);
       } else {
         // Add optimistic item if it doesn't exist yet
-        const exists = findItemById(result, optimisticItem.id);
+        const exists = findItemById(result, latestItem.id);
         if (!exists) {
           console.log("➕ Adding optimistic item to result", {
-            itemId: optimisticItem.id,
-            parentId: optimisticItem.parent_id,
+            itemId: latestItem.id,
+            parentId: latestItem.parent_id,
+            childrenCount: latestItem.children?.length || 0,
             resultCountBefore: result.length,
             resultRootIds: result.map((i) => i.id),
           });
           const resultBefore = JSON.stringify(result);
-          result = addOptimisticItem(optimisticItem, result, pendingItems);
+          // Use latestItem which has the updated children array
+          result = addOptimisticItem(latestItem, result, pendingItems);
           const resultAfter = JSON.stringify(result);
           console.log("➕ After adding, result count:", result.length);
           console.log("➕ Result changed:", resultBefore !== resultAfter);
@@ -753,9 +813,9 @@ function HomeContent({
             result.map((i) => i.id)
           );
 
-          // If parent_id exists, check if it was added to children
-          if (optimisticItem.parent_id) {
-            const parent = findItemById(result, optimisticItem.parent_id);
+          // Verify parent's children if this item has a parent
+          if (latestItem.parent_id) {
+            const parent = findItemById(result, latestItem.parent_id);
             if (parent) {
               console.log(
                 "➕ Parent found, children count:",
@@ -788,21 +848,29 @@ function HomeContent({
       return;
     }
 
-    // Compare by IDs to avoid unnecessary updates
-    const prevIds = prevMergedItemsRef.current
-      .map((i) => i.id)
-      .sort()
-      .join(",");
-    const currentIds = mergedItems
-      .map((i) => i.id)
-      .sort()
-      .join(",");
+    // Compare by IDs and children structure to detect changes
+    // This function recursively collects all IDs including children
+    const getAllIds = (items: HierarchicalItem[]): string[] => {
+      const ids: string[] = [];
+      items.forEach((item) => {
+        ids.push(item.id);
+        if (item.children && item.children.length > 0) {
+          ids.push(...getAllIds(item.children));
+        }
+      });
+      return ids;
+    };
+
+    const prevIds = getAllIds(prevMergedItemsRef.current).sort().join(",");
+    const currentIds = getAllIds(mergedItems).sort().join(",");
 
     console.log("🔄 Syncing items to context", {
       prevCount: prevMergedItemsRef.current.length,
       currentCount: mergedItems.length,
-      prevIds: prevIds.substring(0, 100), // Truncate for readability
-      currentIds: currentIds.substring(0, 100), // Truncate for readability
+      prevIdsCount: prevMergedItemsRef.current.length,
+      currentIdsCount: mergedItems.length,
+      prevAllIdsCount: getAllIds(prevMergedItemsRef.current).length,
+      currentAllIdsCount: getAllIds(mergedItems).length,
       changed: prevIds !== currentIds,
     });
 
