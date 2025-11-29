@@ -2,7 +2,7 @@
 
 import { Settings } from "lucide-react";
 
-export default function SettingsView() {
+export function SettingsWorkspace() {
   return (
     <div className="h-full flex items-center justify-center">
       <div className="text-center">
@@ -15,4 +15,3 @@ export default function SettingsView() {
     </div>
   );
 }
-

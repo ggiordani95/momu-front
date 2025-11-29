@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import SidebarItem from "./SidebarItem";
-import { useItems } from "./ItemsContext";
+import SidebarItem from "@/components/SidebarItem";
+import { useItems } from "@/lib/contexts/ItemsContext";
 import { type ItemType } from "@/lib/itemTypes";
 import { HierarchicalItem } from "@/lib/types";
-import { useUpdateItem } from "@/lib/hooks/useItems";
+import { useUpdateItem } from "@/lib/hooks/querys/useItems";
 
 interface TopicItem {
   id: string;

@@ -17,15 +17,23 @@ interface PageEditorProps {
   item: HierarchicalItem;
   onBack: () => void;
   onUpdate: (id: string, field: "title" | "content", value: string) => void;
+  isNew?: boolean;
 }
 
 export default function PageEditor({
   item,
   onUpdate,
   onBack,
+  isNew = false,
 }: PageEditorProps) {
   const [title, setTitle] = useState(item.title);
   const [content, setContent] = useState(item.content || "");
+  const [editorKey, setEditorKey] = useState(0);
+
+  // Reset editor key when item changes to force complete remount
+  useEffect(() => {
+    setEditorKey((prev) => prev + 1);
+  }, [item.id]);
 
   // Parse checklist from content if it's a task
   const parsedChecklistItems = useMemo((): ChecklistItem[] => {
@@ -114,10 +122,10 @@ export default function PageEditor({
             onSave={handleTitleSave}
             className="text-2xl font-semibold"
             placeholder="Sem título..."
+            startEditing={isNew}
           />
         </div>
       </div>
-
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-8">
         <div className="max-w-4xl mx-auto">
@@ -128,6 +136,7 @@ export default function PageEditor({
             />
           ) : (
             <RichTextEditor
+              key={`${item.id}-${editorKey}`}
               content={content}
               onSave={handleContentSave}
               placeholder="Comece a escrever..."

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import { TextStyle } from "@tiptap/extension-text-style";
@@ -17,7 +17,7 @@ import {
   Palette,
   MoreHorizontal,
 } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 
 interface RichTextEditorProps {
   content: string;
@@ -44,11 +44,14 @@ export default function RichTextEditor({
   const floatingToolbarRef = useRef<HTMLDivElement>(null);
   const hasAutoFocusedRef = useRef(false);
 
-  const editor = useEditor({
-    immediatelyRender: false,
-    extensions: [
+  // Create extensions with useMemo to ensure stable reference
+  // Disable link in StarterKit to avoid autolink plugin conflicts
+  // Each editor instance gets its own extension instances to avoid plugin key conflicts
+  const extensions = useMemo(
+    () => [
       StarterKit.configure({
         underline: false,
+        link: false, // Disable link (which includes autolink) to use TiptapLink instead
       }),
       Underline,
       TextStyle,
@@ -63,15 +66,24 @@ export default function RichTextEditor({
         },
       }),
     ],
-    content,
-    editorProps: {
+    [] // Empty deps - extensions are created once per component instance
+  );
+
+  // Memoize editorProps to prevent editor recreation
+  const editorProps = useMemo(
+    () => ({
       attributes: {
         class:
           "prose prose-sm max-w-none focus:outline-none min-h-[100px] p-3 [&_p]:my-0 [&_p:last-child]:mb-0 [&_*:last-child]:mb-0",
         style: "margin-bottom: 0; padding-bottom: 0; white-space: pre-wrap;",
       },
-    },
-    onUpdate: ({ editor }) => {
+    }),
+    []
+  );
+
+  // Memoize callbacks to prevent editor recreation
+  const handleUpdate = useCallback(
+    ({ editor }: { editor: Editor }) => {
       // Update content in real-time while editing with debounce
       const html = editor.getHTML();
 
@@ -88,7 +100,11 @@ export default function RichTextEditor({
         }
       }, 300); // 300ms debounce
     },
-    onBlur: ({ editor, event }) => {
+    [onSave]
+  );
+
+  const handleBlur = useCallback(
+    ({ editor, event }: { editor: Editor; event: FocusEvent }) => {
       // Don't close editor if focus moved to an element within the editor container
       const relatedTarget = event.relatedTarget as HTMLElement | null;
       if (
@@ -116,7 +132,29 @@ export default function RichTextEditor({
         setIsEditing(false);
       }
     },
+    [onSave, autoFocus]
+  );
+
+  const editor = useEditor({
+    immediatelyRender: false,
+    extensions,
+    content,
+    editorProps,
+    onUpdate: handleUpdate,
+    onBlur: handleBlur,
   });
+
+  // Cleanup editor on unmount
+  useEffect(() => {
+    return () => {
+      if (editor) {
+        // Small delay to ensure editor is fully unmounted
+        setTimeout(() => {
+          editor.destroy();
+        }, 0);
+      }
+    };
+  }, [editor]);
 
   // Ensure editor is in editing mode when autoFocus is true
   useEffect(() => {

@@ -30,3 +30,17 @@ export function buildHierarchy(items: FolderItem[]): HierarchicalItem[] {
 
   return rootItems;
 }
+
+export function findItemById(
+  items: HierarchicalItem[],
+  id: string
+): HierarchicalItem | null {
+  for (const item of items) {
+    if (item.id === id) return item;
+    if (item.children) {
+      const found = findItemById(item.children, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}

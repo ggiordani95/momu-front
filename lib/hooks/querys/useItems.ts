@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { itemService } from "@/lib/services/itemService";
 import { buildHierarchy } from "@/lib/utils/hierarchy";
 import type { CreateItemDto, UpdateItemDto } from "@/lib/types";
+import { trashKeys } from "./useTrash";
 
 // Query keys
 export const itemKeys = {
@@ -88,6 +89,10 @@ export function useDeleteItem(workspaceId: string) {
       queryClient.invalidateQueries({
         queryKey: itemKeys.workspace(workspaceId),
       });
+      // Invalidate trash items query to update trash UI
+      queryClient.invalidateQueries({
+        queryKey: trashKeys.workspace(workspaceId),
+      });
     },
   });
 }
@@ -105,6 +110,10 @@ export function useRestoreItem(workspaceId: string) {
       queryClient.invalidateQueries({
         queryKey: itemKeys.workspace(workspaceId),
       });
+      // Invalidate trash items query to update trash UI
+      queryClient.invalidateQueries({
+        queryKey: trashKeys.workspace(workspaceId),
+      });
     },
   });
 }
@@ -121,6 +130,10 @@ export function usePermanentDeleteItem(workspaceId: string) {
       // Invalidate workspace items query
       queryClient.invalidateQueries({
         queryKey: itemKeys.workspace(workspaceId),
+      });
+      // Invalidate trash items query to update trash UI
+      queryClient.invalidateQueries({
+        queryKey: trashKeys.workspace(workspaceId),
       });
     },
   });

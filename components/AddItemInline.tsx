@@ -28,9 +28,12 @@ export default function AddItemInline({
   const [content, setContent] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    // Trigger mount animation
+    setTimeout(() => setIsMounted(true), 10);
     // Auto-expand after mount for animation
     const timer = setTimeout(() => setIsExpanded(true), 10);
     return () => clearTimeout(timer);
@@ -94,7 +97,9 @@ export default function AddItemInline({
 
   return (
     <div
-      className="overflow-hidden transition-all duration-300 ease-out rounded-3xl"
+      className={`overflow-hidden transition-all duration-300 ease-out rounded-3xl ${
+        isMounted ? "animate-item-entry" : ""
+      }`}
       style={{
         maxHeight: isExpanded ? "1000px" : "0px",
         opacity: isExpanded ? 1 : 0,

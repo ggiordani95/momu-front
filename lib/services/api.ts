@@ -59,16 +59,26 @@ const TEST_USER_ID = "00000000-0000-0000-0000-000000000001";
 /**
  * Get userId from localStorage (client-side only)
  * Falls back to TEST_USER_ID if not found
+ * Always returns a valid string, never null
  */
-function getUserId(): string | null {
-  if (typeof window === "undefined") return TEST_USER_ID;
-  const userId = localStorage.getItem("userId");
-  // Se não encontrar, usa o usuário de teste e salva no localStorage
-  if (!userId) {
-    localStorage.setItem("userId", TEST_USER_ID);
+function getUserId(): string {
+  if (typeof window === "undefined") {
     return TEST_USER_ID;
   }
-  return userId;
+
+  try {
+    const userId = localStorage.getItem("userId");
+    // Se não encontrar, usa o usuário de teste e salva no localStorage
+    if (!userId || userId.trim() === "") {
+      localStorage.setItem("userId", TEST_USER_ID);
+      return TEST_USER_ID;
+    }
+    return userId;
+  } catch (error) {
+    // Se houver erro ao acessar localStorage, retorna o usuário de teste
+    console.warn("[API] Error accessing localStorage, using test user:", error);
+    return TEST_USER_ID;
+  }
 }
 
 export async function apiRequest<T>(
@@ -77,20 +87,67 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
   const userId = getUserId();
+  const finalUserId = userId || TEST_USER_ID;
+
+  // Debug: log the userId being sent
+  if (typeof window !== "undefined") {
+    console.log(`[API Request] ${options?.method || "GET"} ${endpoint}`, {
+      userId: finalUserId,
+      hasLocalStorage: !!localStorage.getItem("userId"),
+    });
+  }
+
+  // Build headers object, ensuring X-User-Id is always set and not overwritten
+  const headers = new Headers();
+  headers.set("Content-Type", "application/json");
+  headers.set("X-User-Id", finalUserId);
+
+  // Add any additional headers from options
+  if (options?.headers) {
+    if (options.headers instanceof Headers) {
+      options.headers.forEach((value, key) => {
+        // Don't overwrite X-User-Id
+        if (key.toLowerCase() !== "x-user-id") {
+          headers.set(key, value);
+        }
+      });
+    } else if (Array.isArray(options.headers)) {
+      options.headers.forEach(([key, value]) => {
+        // Don't overwrite X-User-Id
+        if (key.toLowerCase() !== "x-user-id") {
+          headers.set(key, value);
+        }
+      });
+    } else {
+      // Plain object
+      Object.entries(options.headers).forEach(([key, value]) => {
+        // Don't overwrite X-User-Id
+        if (key.toLowerCase() !== "x-user-id" && value) {
+          headers.set(key, String(value));
+        }
+      });
+    }
+  }
 
   const config: RequestInit = {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      "X-User-Id": userId || TEST_USER_ID, // Sempre envia o header
-      ...options?.headers,
-    },
+    headers: headers,
   };
 
+  // Add timeout to prevent hanging requests
+  const timeout = 10000; // 30 seconds
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
   try {
-    const response = await fetch(url, config);
+    const response = await fetch(url, {
+      ...config,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
     return handleResponse<T>(response);
   } catch (error) {
+    clearTimeout(timeoutId);
     if (error instanceof ApiError) {
       throw error;
     }
@@ -98,13 +155,38 @@ export async function apiRequest<T>(
     // Mensagem de erro mais detalhada
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
-    const detailedMessage = `Network error: ${errorMessage}. 
+
+    // Check if it's a network error (backend not running) or timeout
+    const isAbortError = error instanceof Error && error.name === "AbortError";
+    const isNetworkError =
+      isAbortError ||
+      errorMessage.includes("Failed to fetch") ||
+      errorMessage.includes("NetworkError") ||
+      errorMessage.includes("ERR_CONNECTION_REFUSED") ||
+      errorMessage.includes("ERR_INTERNET_DISCONNECTED") ||
+      errorMessage.includes("timeout");
+
+    const detailedMessage = isAbortError
+      ? `Timeout: O backend não respondeu em ${
+          timeout / 1000
+        } segundos. Verifique se o servidor está rodando em ${API_BASE_URL} e se o banco de dados está acessível.`
+      : isNetworkError
+      ? `Backend não está respondendo. Verifique se o servidor está rodando em ${API_BASE_URL}`
+      : `Network error: ${errorMessage}. 
       URL: ${url}
       Method: ${options?.method || "GET"}
       Backend URL: ${API_BASE_URL}
       Make sure the backend is running on port 3001.`;
 
-    console.error("[API Error]", detailedMessage);
+    console.error("[API Error]", {
+      message: detailedMessage,
+      error: errorMessage,
+      url,
+      method: options?.method || "GET",
+      backendUrl: API_BASE_URL,
+      headers: Object.fromEntries(headers.entries()),
+    });
+
     throw new ApiError(detailedMessage);
   }
 }

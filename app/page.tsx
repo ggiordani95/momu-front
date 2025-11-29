@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useFolders } from "@/lib/hooks/useFolders";
+import { useFolders } from "@/lib/hooks/querys/useFolders";
 
 export default function Home() {
   const router = useRouter();

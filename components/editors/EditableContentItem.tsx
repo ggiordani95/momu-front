@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useMemo } from "react";
-import VideoPlayer from "./VideoPlayer";
+import VideoPlayer from "../VideoPlayer";
 import EditableText from "./EditableText";
 import RichTextEditor from "./RichTextEditor";
 import { GripVertical, Check } from "lucide-react";

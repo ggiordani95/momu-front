@@ -10,7 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import React from "react";
-import ContextMenu from "./ContextMenu";
+import ContextMenu from "./editors/ContextMenu";
 import {
   getItemTypeEmoji,
   getItemTypeIcon,
@@ -146,8 +146,6 @@ export default function SidebarItem({
 
       {contextMenu && (
         <ContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
           options={contextMenuOptions.filter(
             (option) => option.label !== undefined
           )}

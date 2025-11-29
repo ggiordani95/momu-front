@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { CreateFolderDto, UpdateFolderDto } from "@/lib/types";
-import { folderService } from "../services/folderService";
+import { folderService } from "../../services/folderService";
 
 // Query keys
 export const folderKeys = {

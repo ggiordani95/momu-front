@@ -1,18 +1,18 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import EditableContentItem from "./EditableContentItem";
+import EditableContentItem from "./editors/EditableContentItem";
 import AddItemInline from "./AddItemInline";
 import AddItemButton from "./AddItemButton";
-import RichTextEditor from "./RichTextEditor";
-import { useItems } from "./ItemsContext";
+import RichTextEditor from "./editors/RichTextEditor";
+import { useItems } from "../lib/contexts/ItemsContext";
 import { type ItemType, getItemTypeIcon } from "@/lib/itemTypes";
 import { HierarchicalItem } from "@/lib/types";
 import {
   useCreateItem,
   useUpdateItem,
   useUpdateItemOrder,
-} from "@/lib/hooks/useItems";
+} from "@/lib/hooks/querys/useItems";
 import { toast } from "sonner";
 
 interface TopicItem {

@@ -1,17 +1,50 @@
 "use client";
 
+import { useState } from "react";
 import { FolderTree, Settings, Trash2 } from "lucide-react";
 import Image from "next/image";
+import ContextMenu from "./editors/ContextMenu";
+import { useTrashItems } from "@/lib/hooks/querys/useTrash";
+import { usePermanentDeleteItem } from "@/lib/hooks/querys/useItems";
 
 interface SimpleSidebarProps {
   onNavigate: (view: "explorer" | "settings" | "trash") => void;
   currentView: "explorer" | "settings" | "trash";
+  workspaceId: string;
 }
 
 export default function SimpleSidebar({
   onNavigate,
   currentView,
+  workspaceId,
 }: SimpleSidebarProps) {
+  const [trashContextMenu, setTrashContextMenu] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+
+  // React Query hooks
+  const { data: trashItems = [] } = useTrashItems(workspaceId);
+  const permanentDeleteMutation = usePermanentDeleteItem(workspaceId);
+
+  const handleTrashContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setTrashContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleDeleteAll = async () => {
+    if (trashItems.length === 0) return;
+
+    try {
+      // Excluir todos os itens sem confirmação
+      await Promise.all(
+        trashItems.map((item) => permanentDeleteMutation.mutateAsync(item.id))
+      );
+    } catch (error) {
+      console.error("Error deleting all items:", error);
+    }
+  };
   return (
     <aside
       className="w-64 bg-[#0b0b0b] shrink-0 border-r flex flex-col relative z-10"
@@ -51,6 +84,7 @@ export default function SimpleSidebar({
 
           <button
             onClick={() => onNavigate("trash")}
+            onContextMenu={handleTrashContextMenu}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors ${
               currentView === "trash"
                 ? "bg-hover text-foreground"
@@ -74,6 +108,32 @@ export default function SimpleSidebar({
           </button>
         </div>
       </nav>
+
+      {/* Context Menu for Trash */}
+      {trashContextMenu && (
+        <ContextMenu
+          anchorRect={{
+            top: trashContextMenu.y,
+            right: trashContextMenu.x + 1,
+            bottom: trashContextMenu.y + 1,
+            left: trashContextMenu.x,
+            width: 1,
+            height: 1,
+          }}
+          options={[
+            {
+              label: "Excluir tudo",
+              icon: <Trash2 size={16} />,
+              onClick: () => {
+                handleDeleteAll();
+                setTrashContextMenu(null);
+              },
+              disabled: trashItems.length === 0,
+            },
+          ]}
+          onClose={() => setTrashContextMenu(null)}
+        />
+      )}
     </aside>
   );
 }

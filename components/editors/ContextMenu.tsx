@@ -20,16 +20,12 @@ export interface ContextMenuAnchorRect {
 }
 
 interface ContextMenuProps {
-  x: number;
-  y: number;
   options: ContextMenuOption[];
   onClose: () => void;
   anchorRect?: ContextMenuAnchorRect;
 }
 
 export default function ContextMenu({
-  x,
-  y,
   options,
   onClose,
   anchorRect,
@@ -62,23 +58,15 @@ export default function ContextMenu({
     };
   }, [onClose]);
 
-  const [adjustedPosition, setAdjustedPosition] = useState<{
+  const [adjustedPosition] = useState<{
     x: number;
     y: number;
-  }>(() => ({ x: 140, y: 80 }));
-
-  useEffect(() => {
-    const raf = requestAnimationFrame(() => {
-      setAdjustedPosition({ x: 140, y: 80 });
-    });
-
-    return () => cancelAnimationFrame(raf);
-  }, [x, y, anchorRect]);
+  }>(() => ({ x: 66, y: 90 }));
 
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 shadow-2xl min-w-[200px]"
+      className="fixed z-50 shadow-2xl w-[200px]"
       style={{
         left: `${adjustedPosition.x}px`,
         top: `${adjustedPosition.y}px`,

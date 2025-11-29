@@ -8,26 +8,15 @@ interface IconProps {
 }
 
 // Folder icon (Section) - Using Lucide React with blue dot
-export const FolderIcon: React.FC<IconProps> = ({
-  size = 20,
-  className = "",
-}) => (
+export const FolderIcon: React.FC<IconProps> = ({ size = 20 }) => (
   <div className="relative inline-block" style={{ width: size, height: size }}>
-    <Folder
-      size={size}
-      className={className}
-      style={{ color: "var(--foreground)", opacity: 0.8 }}
-    />
-    <div
-      className="absolute rounded-full"
-      style={{
-        width: size * 0.3,
-        height: size * 0.3,
-        backgroundColor: "#3b82f6",
-        bottom: 0,
-        right: 0,
-        transform: "translate(25%, 25%)",
-      }}
+    <Image
+      src="/icons/folder.png"
+      alt="Tarefa"
+      width={size}
+      height={size}
+      style={{ objectFit: "contain", opacity: 0.9 }}
+      priority
     />
   </div>
 );
@@ -67,7 +56,7 @@ export const TaskIcon: React.FC<IconProps> = ({
     style={{ width: size, height: size }}
   >
     <Image
-      src="/check.png"
+      src="/icons/check.png"
       alt="Tarefa"
       width={size}
       height={size}
@@ -87,11 +76,11 @@ export const NoteIcon: React.FC<IconProps> = ({
     style={{ width: size, height: size }}
   >
     <Image
-      src="/note.png"
+      src="/icons/note.png"
       alt="Bloco de notas"
       width={size}
       height={size}
-      style={{ objectFit: "contain", opacity: 0.9 }}
+      style={{ objectFit: "contain", opacity: 1, marginTop: 2 }}
       priority
     />
   </div>
