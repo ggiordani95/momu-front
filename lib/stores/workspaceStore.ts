@@ -31,6 +31,7 @@ interface WorkspaceState {
   syncFiles: () => Promise<void>;
   markFileAsDeleted: (fileId: string) => void;
   markFileAsRestored: (fileId: string) => void;
+  removeFilePermanently: (fileId: string) => void;
   updateFileInStore: (fileId: string, updates: Partial<File>) => void;
   clearError: () => void;
   reset: () => void;
@@ -144,6 +145,16 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         );
         set({ files: updatedFiles });
         console.log(`♻️ [Zustand] Marked file as restored: ${fileId}`);
+      },
+
+      // Remove file permanently from store
+      removeFilePermanently: (fileId: string) => {
+        const state = get();
+        const updatedFiles = state.files.filter((file) => file.id !== fileId);
+        set({ files: updatedFiles });
+        console.log(`🗑️ [Zustand] Permanently removed file: ${fileId}`, {
+          totalFiles: updatedFiles.length,
+        });
       },
 
       // Update file in store (optimistic update)

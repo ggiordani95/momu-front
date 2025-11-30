@@ -15,6 +15,7 @@ import {
   Code,
   Link,
   Type,
+  Image as ImageIcon,
 } from "lucide-react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -22,6 +23,7 @@ import UnderlineExtension from "@tiptap/extension-underline";
 import TiptapLink from "@tiptap/extension-link";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { Extension } from "@tiptap/core";
+import Image from "@tiptap/extension-image";
 import type { HierarchicalFile } from "@/lib/types";
 
 // Custom FontSize extension
@@ -203,6 +205,13 @@ export default function PageEditor({
         UnderlineExtension,
         TextStyle,
         FontSize,
+        Image.configure({
+          inline: false,
+          allowBase64: true,
+          HTMLAttributes: {
+            class: "max-w-full rounded-lg my-4",
+          },
+        }),
         TiptapLink.configure({
           openOnClick: false,
           HTMLAttributes: {
@@ -216,7 +225,91 @@ export default function PageEditor({
           class:
             "prose prose-sm max-w-none focus:outline-none min-h-[200px] [&_.block-item]:my-1 [&_.block-item]:px-2 [&_.block-item]:rounded [&_.block-item:hover]:bg-hover/30 [&_.block-item]:transition-colors [&_.block-item]:cursor-text",
         },
+        handlePaste: (view, event) => {
+          const items = Array.from(event.clipboardData?.items || []);
+
+          for (const item of items) {
+            if (item.type.indexOf("image") !== -1) {
+              event.preventDefault();
+              const file = item.getAsFile();
+
+              if (file) {
+                const reader = new FileReader();
+                reader.onload = (readerEvent) => {
+                  const base64 = readerEvent.target?.result as string;
+                  if (base64) {
+                    editor?.chain().focus().setImage({ src: base64 }).run();
+                  }
+                };
+                reader.readAsDataURL(file);
+                return true;
+              }
+            }
+          }
+          return false;
+        },
+        handleDrop: (view, event) => {
+          const files = Array.from(event.dataTransfer?.files || []);
+
+          for (const file of files) {
+            if (file.type.indexOf("image") !== -1) {
+              event.preventDefault();
+              const reader = new FileReader();
+              reader.onload = (readerEvent) => {
+                const base64 = readerEvent.target?.result as string;
+                if (base64) {
+                  // Get drop position
+                  const coordinates = view.posAtCoords({
+                    left: event.clientX,
+                    top: event.clientY,
+                  });
+                  if (coordinates) {
+                    editor
+                      ?.chain()
+                      .focus()
+                      .setTextSelection(coordinates.pos)
+                      .setImage({ src: base64 })
+                      .run();
+                  } else {
+                    editor?.chain().focus().setImage({ src: base64 }).run();
+                  }
+                }
+              };
+              reader.readAsDataURL(file);
+              return true;
+            }
+          }
+          return false;
+        },
         handleKeyDown: (view, event) => {
+          // Handle Escape key to close menu and remove '/'
+          if (event.key === "Escape" && showBlockMenu) {
+            event.preventDefault();
+            const { from } = view.state.selection;
+            const $from = view.state.doc.resolve(from);
+            const parent = $from.parent;
+
+            if (!parent) {
+              setShowBlockMenu(false);
+              return true;
+            }
+
+            const blockText = parent.textContent || "";
+
+            // Remove '/' if present
+            if (blockText.trim().startsWith("/") && $from.parentOffset <= 1) {
+              editor
+                ?.chain()
+                .focus()
+                .setTextSelection({ from: from - 1, to: from })
+                .deleteSelection()
+                .run();
+            }
+
+            setShowBlockMenu(false);
+            return true;
+          }
+
           // Show block menu on '/' only if it's at the start of a line
           if (
             event.key === "/" &&
@@ -226,35 +319,131 @@ export default function PageEditor({
           ) {
             const { from } = view.state.selection;
             const $from = view.state.doc.resolve(from);
+            const parent = $from.parent;
+
             // Only show menu if '/' is at the start of a block
             if (
+              !parent ||
               $from.parentOffset === 0 ||
-              $from.parent.textContent.trim() === ""
+              (parent.textContent || "").trim() === ""
             ) {
-              const coords = view.coordsAtPos(from);
-              setBlockMenuPosition({
-                top: coords.top + window.scrollY,
-                left: coords.left + window.scrollX,
-              });
-              setShowBlockMenu(true);
-              return true;
+              // Don't prevent default - let the '/' be inserted
+              // Then check after a short delay if the content starts with '/'
+              // Use a slightly longer delay to ensure the '/' is inserted first
+              setTimeout(() => {
+                // Use editor from closure, but verify it's still valid
+                if (!editor || !editor.view) return;
+
+                try {
+                  const { from: newFrom } = editor.state.selection;
+                  const $newFrom = editor.state.doc.resolve(newFrom);
+                  const parent = $newFrom.parent;
+
+                  // Check if parent exists before accessing textContent
+                  if (!parent) return;
+
+                  const blockText = parent.textContent || "";
+
+                  // Check if the block starts with '/' and show menu
+                  if (blockText.trim().startsWith("/")) {
+                    const coords = editor.view.coordsAtPos(newFrom);
+                    if (coords) {
+                      setBlockMenuPosition({
+                        top: coords.top + (window.scrollY || 0),
+                        left: coords.left + (window.scrollX || 0),
+                      });
+                      setShowBlockMenu(true);
+                    }
+                  }
+                } catch (error) {
+                  console.warn(
+                    "Error getting coordinates for block menu:",
+                    error
+                  );
+                }
+              }, 10); // Small delay to ensure '/' is inserted
             }
           }
-          return false;
+          return false; // Always allow default behavior
         },
       },
       onUpdate: ({ editor }) => {
         const html = editor.getHTML();
         onUpdate(file.id, "content", html);
+
+        // Check if we should show block menu based on content
+        if (!editor || !editor.view) return;
+
+        try {
+          const { from } = editor.state.selection;
+          const $from = editor.state.doc.resolve(from);
+          const parent = $from.parent;
+
+          // Check if parent exists before accessing textContent
+          if (!parent) return;
+
+          const blockText = parent.textContent || "";
+
+          // Show menu if block starts with '/' and we're at the start or after '/'
+          if (
+            blockText.trim().startsWith("/") &&
+            ($from.parentOffset === 0 || $from.parentOffset === 1) &&
+            !showBlockMenu
+          ) {
+            const coords = editor.view.coordsAtPos(from);
+            if (coords) {
+              setBlockMenuPosition({
+                top: coords.top + window.scrollY,
+                left: coords.left + window.scrollX,
+              });
+              setShowBlockMenu(true);
+            }
+          }
+        } catch (error) {
+          console.warn("Error checking block menu in onUpdate:", error);
+        }
       },
-      onSelectionUpdate: () => {
-        // Hide block menu when selection changes
-        if (showBlockMenu) {
-          setShowBlockMenu(false);
+      onSelectionUpdate: ({ editor }) => {
+        // Don't close menu on selection update - let it stay open
+        // The menu will close when:
+        // 1. User selects an option (handleBlockAction)
+        // 2. User presses Escape (handleKeyDown)
+        // 3. User clicks outside (useEffect with handleClickOutside)
+        // 4. Block no longer starts with '/' (checked in onUpdate)
+        if (showBlockMenu && editor && editor.view) {
+          try {
+            const { from } = editor.state.selection;
+            const $from = editor.state.doc.resolve(from);
+            const parent = $from.parent;
+
+            // Check if parent exists before accessing textContent
+            if (!parent) {
+              return; // Don't close menu, just return
+            }
+
+            const blockText = parent.textContent || "";
+
+            // Only close menu if block no longer starts with '/'
+            if (!blockText.trim().startsWith("/")) {
+              setShowBlockMenu(false);
+            } else {
+              // Update menu position if still open and block starts with '/'
+              const coords = editor.view.coordsAtPos(from);
+              if (coords) {
+                setBlockMenuPosition({
+                  top: coords.top + (window.scrollY || 0),
+                  left: coords.left + (window.scrollX || 0),
+                });
+              }
+            }
+          } catch (error) {
+            console.warn("Error updating block menu position:", error);
+            // Don't close menu on error, just log it
+          }
         }
       },
     },
-    [file.id, showBlockMenu]
+    [file.id] // Remove showBlockMenu from dependencies to prevent editor recreation
   );
 
   // Focus title input if new
@@ -338,9 +527,53 @@ export default function PageEditor({
 
   const handleBlockAction = (action: () => void) => {
     return () => {
-      action();
+      if (!editor) return;
+
       setShowBlockMenu(false);
-      setTimeout(() => editor?.commands.focus(), 50);
+
+      // Remove the '/' character if present at the start of the block
+      const { from } = editor.state.selection;
+      const $from = editor.state.doc.resolve(from);
+      const parent = $from.parent;
+
+      if (!parent) {
+        // Execute action immediately if no parent
+        setTimeout(() => {
+          action();
+          editor?.commands.focus();
+        }, 10);
+        return;
+      }
+
+      const blockText = parent.textContent || "";
+
+      if (blockText.trim().startsWith("/") && $from.parentOffset <= 1) {
+        // Delete the '/' character first, then execute action
+        // Use a longer delay to ensure deletion completes
+        editor
+          .chain()
+          .focus()
+          .setTextSelection({ from: from - 1, to: from })
+          .deleteSelection()
+          .run();
+
+        // Wait for deletion to complete before executing action
+        setTimeout(() => {
+          // Ensure editor is still focused and execute action
+          if (editor && !editor.isDestroyed) {
+            editor.chain().focus().run();
+            // Small delay to ensure focus is set
+            setTimeout(() => {
+              action();
+            }, 20);
+          }
+        }, 50);
+      } else {
+        // No '/' to remove, just execute action
+        setTimeout(() => {
+          action();
+        }, 10);
+      }
     };
   };
 
@@ -363,27 +596,69 @@ export default function PageEditor({
     {
       icon: <List size={16} />,
       label: "Bullet List",
-      action: () => editor?.chain().focus().toggleBulletList().run(),
+      action: () => {
+        if (!editor) return;
+        editor.chain().focus().toggleBulletList().run();
+      },
     },
     {
       icon: <List size={16} />,
       label: "Numbered List",
-      action: () => editor?.chain().focus().toggleOrderedList().run(),
+      action: () => {
+        if (!editor) return;
+        editor.chain().focus().toggleOrderedList().run();
+      },
     },
     {
       icon: <Quote size={16} />,
       label: "Quote",
-      action: () => editor?.chain().focus().toggleBlockquote().run(),
+      action: () => {
+        if (!editor) return;
+        editor.chain().focus().toggleBlockquote().run();
+      },
     },
     {
       icon: <Code2 size={16} />,
       label: "Code Block",
-      action: () => editor?.chain().focus().toggleCodeBlock().run(),
+      action: () => {
+        if (!editor) return;
+        editor.chain().focus().toggleCodeBlock().run();
+      },
     },
     {
       icon: <Minus size={16} />,
       label: "Divider",
       action: () => editor?.chain().focus().setHorizontalRule().run(),
+    },
+    {
+      icon: <ImageIcon size={16} />,
+      label: "Image",
+      action: () => {
+        // Create file input for image selection
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "image/*";
+        input.onchange = (event) => {
+          const file = (event.target as HTMLInputElement).files?.[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (readerEvent) => {
+              const base64 = readerEvent.target?.result as string;
+              if (base64) {
+                editor?.chain().focus().setImage({ src: base64 }).run();
+              }
+            };
+            reader.readAsDataURL(file);
+          } else {
+            // Fallback to URL input if no file selected
+            const url = window.prompt("Cole a URL da imagem:");
+            if (url && url.trim()) {
+              editor?.chain().focus().setImage({ src: url.trim() }).run();
+            }
+          }
+        };
+        input.click();
+      },
     },
   ];
 
@@ -395,7 +670,28 @@ export default function PageEditor({
         !blockMenuRef.current.contains(event.target as Node) &&
         !(event.target as HTMLElement)?.closest(".ProseMirror")
       ) {
-        setShowBlockMenu(false);
+        // Also check if the block still starts with '/' before closing
+        if (editor) {
+          try {
+            const { from } = editor.state.selection;
+            const $from = editor.state.doc.resolve(from);
+            const parent = $from.parent;
+
+            if (parent) {
+              const blockText = parent.textContent || "";
+              // Only close if block doesn't start with '/'
+              if (!blockText.trim().startsWith("/")) {
+                setShowBlockMenu(false);
+              }
+            } else {
+              setShowBlockMenu(false);
+            }
+          } catch {
+            setShowBlockMenu(false);
+          }
+        } else {
+          setShowBlockMenu(false);
+        }
       }
     };
 
@@ -405,7 +701,7 @@ export default function PageEditor({
         document.removeEventListener("mousedown", handleClickOutside);
       };
     }
-  }, [showBlockMenu]);
+  }, [showBlockMenu, editor]);
 
   // Close font size menu when clicking outside
   useEffect(() => {
@@ -623,6 +919,59 @@ export default function PageEditor({
             title="Link (Cmd+K)"
           >
             <Link size={14} />
+          </button>
+
+          {/* Image */}
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (editor) {
+                if (!editor.isFocused) {
+                  editor.commands.focus();
+                }
+                // Create file input for image selection
+                const input = document.createElement("input");
+                input.type = "file";
+                input.accept = "image/*";
+                input.onchange = (event) => {
+                  const file = (event.target as HTMLInputElement).files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (readerEvent) => {
+                      const base64 = readerEvent.target?.result as string;
+                      if (base64) {
+                        setTimeout(() => {
+                          editor
+                            .chain()
+                            .focus()
+                            .setImage({ src: base64 })
+                            .run();
+                        }, 0);
+                      }
+                    };
+                    reader.readAsDataURL(file);
+                  } else {
+                    // Fallback to URL input if no file selected
+                    const url = window.prompt("Cole a URL da imagem:");
+                    if (url && url.trim()) {
+                      setTimeout(() => {
+                        editor
+                          .chain()
+                          .focus()
+                          .setImage({ src: url.trim() })
+                          .run();
+                      }, 0);
+                    }
+                  }
+                };
+                input.click();
+              }
+            }}
+            className="p-1.5 rounded transition-colors hover:bg-hover/50"
+            title="Inserir Imagem (arquivo, URL ou base64)"
+          >
+            <ImageIcon size={14} />
           </button>
 
           <div

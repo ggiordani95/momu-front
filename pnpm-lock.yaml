@@ -26,6 +26,9 @@ importers:
       '@tiptap/extension-font-family':
         specifier: 3.11.1
         version: 3.11.1(@tiptap/extension-text-style@3.11.1(@tiptap/core@3.11.1(@tiptap/pm@3.11.1)))
+      '@tiptap/extension-image':
+        specifier: ^3.11.1
+        version: 3.11.1(@tiptap/core@3.11.1(@tiptap/pm@3.11.1))
       '@tiptap/extension-text-align':
         specifier: 3.11.1
         version: 3.11.1(@tiptap/core@3.11.1(@tiptap/pm@3.11.1))
@@ -676,6 +679,11 @@ packages:
     peerDependencies:
       '@tiptap/core': ^3.11.1
       '@tiptap/pm': ^3.11.1
+
+  '@tiptap/extension-image@3.11.1':
+    resolution: {integrity: sha512-lI+FyyHavUXHmDKxvSAdqGAvaYtVesAxHckeA60ZjZu9fBkUnVWHD8uR0TStX7EdOIRBWpzYrG7dDT4EkFVjTA==}
+    peerDependencies:
+      '@tiptap/core': ^3.11.1
 
   '@tiptap/extension-italic@3.11.1':
     resolution: {integrity: sha512-SrjsU+gvhjoPKelc4YSeC2AQ0lhwLiDWMO7fW83CVitCF8iWXpBSeVCI5SxtPeZNKTZ1ZCc3lIQCeEHOC/gP0g==}
@@ -2857,6 +2865,10 @@ snapshots:
     dependencies:
       '@tiptap/core': 3.11.1(@tiptap/pm@3.11.1)
       '@tiptap/pm': 3.11.1
+
+  '@tiptap/extension-image@3.11.1(@tiptap/core@3.11.1(@tiptap/pm@3.11.1))':
+    dependencies:
+      '@tiptap/core': 3.11.1(@tiptap/pm@3.11.1)
 
   '@tiptap/extension-italic@3.11.1(@tiptap/core@3.11.1(@tiptap/pm@3.11.1))':
     dependencies:

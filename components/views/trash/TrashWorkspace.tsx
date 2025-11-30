@@ -92,12 +92,19 @@ export function TrashWorkspace({
 
   const handlePermanentDelete = async (id: string) => {
     try {
+      // Optimistically remove file from Zustand store immediately
+      const { removeFilePermanently } = useWorkspaceStore.getState();
+      removeFilePermanently(id);
+
       await permanentDeleteMutation.mutateAsync(id);
       if (onPermanentDelete) {
         onPermanentDelete(id);
       }
     } catch (error) {
       console.error("Error permanently deleting item:", error);
+      // On error, re-sync to get correct state
+      const { syncFiles } = useWorkspaceStore.getState();
+      syncFiles();
     }
   };
 
