@@ -342,10 +342,15 @@ export default function WorkspaceView({
   ) => {
     // Check if this is a pending item (not yet created in backend)
     const pendingItem = pendingItems.get(id);
+    const isTemporaryItem = id.startsWith("temp-");
 
-    if (pendingItem) {
+    if (pendingItem || isTemporaryItem) {
+      // Update Zustand store optimistically (so UI updates immediately)
+      const { updateFileInStore } = useWorkspaceStore.getState();
+      updateFileInStore(id, { [field]: value });
+
       // If updating title of a pending item, update the operation in localStorage
-      if (field === "title") {
+      if (field === "title" && pendingItem) {
         // If parent_id is a temporary ID, check if parent was already created
         // If not, create item without parent_id (at root level)
         let parentId: string | undefined = pendingItem.data.parent_id;
@@ -395,8 +400,97 @@ export default function WorkspaceView({
           timestamp: Date.now(),
         });
 
-        // Item will be created when sync runs on next page load
-      } else {
+        // Trigger sync immediately if online (don't wait for next page load)
+        const isOnline = typeof navigator !== "undefined" && navigator.onLine;
+        if (isOnline) {
+          // Use dynamic imports to avoid circular dependencies
+          Promise.all([
+            import("@/lib/services/fileService"),
+            import("@/lib/services/offlineSync"),
+            import("@/lib/stores/workspaceStore"),
+          ]).then(
+            ([
+              { fileService },
+              { getPendingOperations, clearPendingOperations },
+              { useWorkspaceStore },
+            ]) => {
+              // Get pending operations and sync them
+              const operations = getPendingOperations();
+              if (operations.length > 0) {
+                fileService
+                  .syncBatch(operations)
+                  .then((result) => {
+                    if (result.success && result.failed === 0) {
+                      const storeState = useWorkspaceStore.getState();
+
+                      // Update temporary IDs in Zustand store with real IDs
+                      if (
+                        result.tempIdMap &&
+                        Object.keys(result.tempIdMap).length > 0
+                      ) {
+                        const updatedFiles = storeState.files.map((file) => {
+                          const realId = result.tempIdMap?.[file.id];
+                          if (realId) {
+                            console.log(
+                              `🔄 [UPDATE] Updating temp ID ${file.id} -> ${realId} in store`
+                            );
+                            return { ...file, id: realId };
+                          }
+                          return file;
+                        });
+                        // Update files in store with real IDs
+                        storeState.setFiles(updatedFiles);
+
+                        // Also update pendingItems to use real IDs
+                        setPendingItems((prev) => {
+                          const newMap = new Map();
+                          prev.forEach((value, key) => {
+                            const realId = result.tempIdMap?.[key];
+                            if (realId) {
+                              newMap.set(realId, {
+                                ...value,
+                                item: { ...value.item, id: realId },
+                              });
+                            } else {
+                              newMap.set(key, value);
+                            }
+                          });
+                          return newMap;
+                        });
+                      }
+
+                      clearPendingOperations();
+
+                      // Trigger sync-files to refresh all data (this will get the real IDs from backend)
+                      if (!storeState.isSyncing) {
+                        storeState.syncFiles().then(() => {
+                          console.log(
+                            `✅ [UPDATE] File synced successfully: ${id} -> ${
+                              result.tempIdMap?.[id] || "unknown"
+                            }`
+                          );
+                        });
+                      } else {
+                        console.log(
+                          `✅ [UPDATE] File synced successfully: ${id} -> ${
+                            result.tempIdMap?.[id] || "unknown"
+                          }`
+                        );
+                      }
+                    } else {
+                      console.warn(
+                        `⚠️ [UPDATE] Some operations failed: ${result.failed} failed, ${result.synced} synced`
+                      );
+                    }
+                  })
+                  .catch((error) => {
+                    console.error(`❌ [UPDATE] Failed to sync file:`, error);
+                  });
+              }
+            }
+          );
+        }
+      } else if (pendingItem) {
         // For content updates on pending items, just update the pending data
         setPendingItems((prev) => {
           const newMap = new Map(prev);
@@ -409,6 +503,27 @@ export default function WorkspaceView({
             });
           }
           return newMap;
+        });
+
+        // Also save UPDATE operation for content changes
+        savePendingOperation({
+          type: "UPDATE",
+          id,
+          workspaceId,
+          field,
+          value,
+          timestamp: Date.now(),
+        });
+      } else if (isTemporaryItem) {
+        // Item is temporary but not in pendingItems (shouldn't happen, but handle it)
+        // Just save UPDATE operation
+        savePendingOperation({
+          type: "UPDATE",
+          id,
+          workspaceId,
+          field,
+          value,
+          timestamp: Date.now(),
         });
       }
       return;
@@ -641,6 +756,27 @@ export default function WorkspaceView({
       children: [],
     };
 
+    // Add optimistically to Zustand store
+    // HierarchicalFile extends File, so we can pass it directly
+    // The store will only use the File properties (children is ignored)
+    const { addOptimisticFile } = useWorkspaceStore.getState();
+    // Extract only File properties (exclude children)
+    const fileForStore: import("@/lib/types").File = {
+      id: optimisticItem.id,
+      workspace_id: optimisticItem.workspace_id,
+      type: optimisticItem.type,
+      title: optimisticItem.title,
+      content: optimisticItem.content,
+      youtube_id: optimisticItem.youtube_id,
+      youtube_url: optimisticItem.youtube_url,
+      parent_id: optimisticItem.parent_id,
+      order_index: optimisticItem.order_index,
+      active: optimisticItem.active,
+      created_at: optimisticItem.created_at,
+      updated_at: optimisticItem.updated_at,
+    };
+    addOptimisticFile(fileForStore);
+
     // Add to pending items
     setPendingItems((prev) => {
       const newMap = new Map(prev);
@@ -687,6 +823,97 @@ export default function WorkspaceView({
     console.log(`💾 Saved create operation to localStorage:`, tempId);
 
     console.log(`📝 Created optimistic item:`, optimisticItem);
+
+    // Trigger sync immediately if online (don't wait for next page load)
+    const isOnline = typeof navigator !== "undefined" && navigator.onLine;
+    if (isOnline) {
+      // Use dynamic imports to avoid circular dependencies
+      Promise.all([
+        import("@/lib/services/fileService"),
+        import("@/lib/services/offlineSync"),
+        import("@/lib/stores/workspaceStore"),
+      ]).then(
+        ([
+          { fileService },
+          { getPendingOperations, clearPendingOperations },
+          { useWorkspaceStore },
+        ]) => {
+          // Get pending operations and sync them
+          const operations = getPendingOperations();
+          if (operations.length > 0) {
+            fileService
+              .syncBatch(operations)
+              .then((result) => {
+                if (result.success && result.failed === 0) {
+                  const storeState = useWorkspaceStore.getState();
+
+                  // Update temporary IDs in Zustand store with real IDs
+                  if (
+                    result.tempIdMap &&
+                    Object.keys(result.tempIdMap).length > 0
+                  ) {
+                    const updatedFiles = storeState.files.map((file) => {
+                      const realId = result.tempIdMap?.[file.id];
+                      if (realId) {
+                        console.log(
+                          `🔄 [CREATE] Updating temp ID ${file.id} -> ${realId} in store`
+                        );
+                        return { ...file, id: realId };
+                      }
+                      return file;
+                    });
+                    // Update files in store with real IDs
+                    storeState.setFiles(updatedFiles);
+
+                    // Also update pendingItems to use real IDs
+                    setPendingItems((prev) => {
+                      const newMap = new Map();
+                      prev.forEach((value, key) => {
+                        const realId = result.tempIdMap?.[key];
+                        if (realId) {
+                          newMap.set(realId, {
+                            ...value,
+                            item: { ...value.item, id: realId },
+                          });
+                        } else {
+                          newMap.set(key, value);
+                        }
+                      });
+                      return newMap;
+                    });
+                  }
+
+                  clearPendingOperations();
+
+                  // Trigger sync-files to refresh all data (this will get the real IDs from backend)
+                  if (!storeState.isSyncing) {
+                    storeState.syncFiles().then(() => {
+                      console.log(
+                        `✅ [CREATE] File synced successfully: ${tempId} -> ${
+                          result.tempIdMap?.[tempId] || "unknown"
+                        }`
+                      );
+                    });
+                  } else {
+                    console.log(
+                      `✅ [CREATE] File synced successfully: ${tempId} -> ${
+                        result.tempIdMap?.[tempId] || "unknown"
+                      }`
+                    );
+                  }
+                } else {
+                  console.warn(
+                    `⚠️ [CREATE] Some operations failed: ${result.failed} failed, ${result.synced} synced`
+                  );
+                }
+              })
+              .catch((error) => {
+                console.error(`❌ [CREATE] Failed to sync file:`, error);
+              });
+          }
+        }
+      );
+    }
 
     // Note: The item will be added to context in HomeContent via useEffect
     // The item will appear in the list and can be renamed inline

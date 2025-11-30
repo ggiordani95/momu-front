@@ -40,12 +40,33 @@ export default function SimpleSidebar({
     if (trashItems.length === 0) return;
 
     try {
-      // Excluir todos os itens sem confirmação
+      const { removeFilePermanently, syncFiles } = useWorkspaceStore.getState();
+
+      // Optimistically remove all files from Zustand store immediately
+      trashItems.forEach((file) => {
+        removeFilePermanently(file.id);
+      });
+
+      // Excluir todos os itens permanentemente no backend
       await Promise.all(
         trashItems.map((file) => permanentDeleteMutation.mutateAsync(file.id))
       );
+
+      // Sync files to refresh state from backend
+      if (!useWorkspaceStore.getState().isSyncing) {
+        syncFiles();
+      }
+
+      console.log(
+        `✅ [DELETE ALL] Permanently deleted ${trashItems.length} item(s) from trash`
+      );
     } catch (error) {
       console.error("Error deleting all items:", error);
+      // On error, re-sync to get correct state
+      const { syncFiles } = useWorkspaceStore.getState();
+      if (!useWorkspaceStore.getState().isSyncing) {
+        syncFiles();
+      }
     }
   };
   return (

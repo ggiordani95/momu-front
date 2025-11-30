@@ -29,6 +29,7 @@ interface WorkspaceState {
   setFiles: (files: File[]) => void;
   setSyncData: (data: SyncFilesResponse) => void;
   syncFiles: () => Promise<void>;
+  addOptimisticFile: (file: File) => void;
   markFileAsDeleted: (fileId: string) => void;
   markFileAsRestored: (fileId: string) => void;
   removeFilePermanently: (fileId: string) => void;
@@ -112,6 +113,26 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             error: (error as Error)?.message || "Failed to sync files",
           });
         }
+      },
+
+      // Add optimistic file (for CREATE operations)
+      addOptimisticFile: (file: File) => {
+        const state = get();
+        // Check if file already exists
+        const existingFile = state.files.find((f) => f.id === file.id);
+        if (existingFile) {
+          console.warn(
+            `⚠️ [Zustand] File ${file.id} already exists in store, skipping add`
+          );
+          return;
+        }
+        const updatedFiles = [...state.files, file];
+        set({ files: updatedFiles });
+        console.log(`➕ [Zustand] Added optimistic file: ${file.id}`, {
+          type: file.type,
+          title: file.title,
+          totalFiles: updatedFiles.length,
+        });
       },
 
       // Mark file as deleted (optimistic update)
