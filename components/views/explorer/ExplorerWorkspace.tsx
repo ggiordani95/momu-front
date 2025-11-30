@@ -6,10 +6,11 @@ import AddItemInline from "@/components/AddItemInline";
 import FolderSkeleton from "@/components/files/FolderSkeleton";
 import Breadcrumb from "@/components/Breadcrumb";
 import FileCard from "@/components/files/FileCard";
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import type { HierarchicalFile, CreateFileDto, Workspace } from "@/lib/types";
 import { findItemById } from "@/lib/utils/hierarchy";
 import { useDragAndDrop } from "@/lib/hooks/useDragAndDrop";
+import { useMultiSelect } from "@/lib/hooks/useMultiSelect";
 interface ExplorerWorkspaceProps {
   currentFolderId?: string | null;
   onFolderClick: (folderId: string) => void;
@@ -97,6 +98,50 @@ export function ExplorerWorkspace({
     currentFolderId: currentFolderId ?? null,
   });
 
+  // Multi-select functionality
+  const {
+    selectedIds,
+    isSelecting,
+    selectionBox,
+    containerRef,
+    handleMouseDown,
+    handleMouseMove,
+    handleMouseUp,
+    handleFileClick,
+    clearSelection,
+  } = useMultiSelect();
+
+  // Handle Delete key to delete selected files
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle Delete if there are selected files and not typing in an input
+      if (
+        (e.key === "Delete" || e.key === "Backspace") &&
+        selectedIds.size > 0 &&
+        document.activeElement?.tagName !== "INPUT" &&
+        document.activeElement?.tagName !== "TEXTAREA"
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Delete all selected files
+        selectedIds.forEach((fileId) => {
+          if (onItemDelete) {
+            onItemDelete(fileId);
+          }
+        });
+
+        // Clear selection after deleting
+        clearSelection();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [selectedIds, onItemDelete, clearSelection]);
+
   return (
     <div className="h-full flex flex-col">
       {/* Breadcrumb Timeline */}
@@ -160,7 +205,26 @@ export function ExplorerWorkspace({
       />
 
       {/* File Grid */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-y-auto p-6 relative"
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+      >
+        {/* Selection Box */}
+        {isSelecting && selectionBox && (
+          <div
+            className="absolute border-2 border-blue-500 bg-blue-500/10 pointer-events-none z-50"
+            style={{
+              left: Math.min(selectionBox.startX, selectionBox.endX),
+              top: Math.min(selectionBox.startY, selectionBox.endY),
+              width: Math.abs(selectionBox.endX - selectionBox.startX),
+              height: Math.abs(selectionBox.endY - selectionBox.startY),
+            }}
+          />
+        )}
         <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,2fr))] gap-6 w-full">
           {isLoading ? (
             <>
@@ -176,11 +240,23 @@ export function ExplorerWorkspace({
                 <FileCard
                   key={item.id}
                   file={item}
-                  onClick={() =>
-                    item.type === "folder"
-                      ? onFolderClick(item.id)
-                      : onItemClick(item)
-                  }
+                  onClick={(e) => {
+                    // Handle multi-select
+                    handleFileClick(item.id, e);
+                    // Also trigger normal click if not selecting
+                    if (
+                      !isSelecting &&
+                      !e.ctrlKey &&
+                      !e.metaKey &&
+                      !e.shiftKey
+                    ) {
+                      if (item.type === "folder") {
+                        onFolderClick(item.id);
+                      } else {
+                        onItemClick(item);
+                      }
+                    }
+                  }}
                   onRename={onItemUpdate}
                   onDelete={onItemDelete}
                   appearanceOrder={index}
@@ -192,6 +268,7 @@ export function ExplorerWorkspace({
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                   onDragEnd={handleDragEnd}
+                  isSelected={selectedIds.has(item.id)}
                 />
               ))}
 

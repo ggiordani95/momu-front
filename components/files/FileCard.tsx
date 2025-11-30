@@ -8,7 +8,7 @@ import ContextMenu, {
 } from "../editors/ContextMenu";
 import { ExplorerIcon } from "@/components/views/explorer/ExplorerIcon";
 import React from "react";
-import type { HierarchicalItem } from "@/lib/types";
+import type { HierarchicalFile } from "@/lib/types";
 
 const getAnchorRect = (element: HTMLElement): ContextMenuAnchorRect => {
   const rect = element.getBoundingClientRect();
@@ -23,8 +23,8 @@ const getAnchorRect = (element: HTMLElement): ContextMenuAnchorRect => {
 };
 
 interface FileCardProps {
-  file: HierarchicalItem;
-  onClick: () => void;
+  file: HierarchicalFile;
+  onClick: (e: React.MouseEvent) => void;
   onRename?: (id: string, field: "title" | "content", value: string) => void;
   onDelete?: (id: string) => void;
   appearanceOrder?: number;
@@ -39,6 +39,7 @@ interface FileCardProps {
   onRestore?: (id: string) => void;
   onPermanentDelete?: (id: string) => void;
   startRenaming?: boolean; // If true, start in renaming mode
+  isSelected?: boolean; // If true, file is selected in multi-select mode
 }
 
 export default function FileCard({
@@ -58,6 +59,7 @@ export default function FileCard({
   onRestore,
   onPermanentDelete,
   startRenaming = false,
+  isSelected = false,
 }: FileCardProps) {
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -148,6 +150,7 @@ export default function FileCard({
 
   return (
     <div
+      data-file-id={file.id}
       className="flex flex-col items-center gap-2 animate-item-entry w-full"
       style={{
         animationDelay: `${appearanceOrder * 50}ms`,
@@ -181,6 +184,10 @@ export default function FileCard({
         } ${
           dragOverItemId === file.id
             ? "ring-2 ring-blue-500 border-2 border-blue-500"
+            : ""
+        } ${
+          isSelected
+            ? "ring-2 ring-blue-500 border-2 border-blue-500 bg-blue-500/20"
             : ""
         } ${isTrashView ? "opacity-75" : ""}`}
       >
