@@ -775,8 +775,8 @@ export default function PageEditor({
           className="relative z-50 flex items-center gap-0.5 px-1.5 py-1.5 rounded-lg shadow-lg"
           style={{
             backgroundColor: "var(--sidebar-bg)",
-            backdropFilter: "blur(12px) saturate(180%)",
-            WebkitBackdropFilter: "blur(12px) saturate(180%)",
+            backdropFilter: "blur(12px) saturate(120%)",
+            WebkitBackdropFilter: "blur(12px) saturate(120%)",
             color: "var(--foreground)",
           }}
         >
@@ -800,7 +800,7 @@ export default function PageEditor({
             }`}
             title="Negrito (Cmd+B)"
           >
-            <Bold size={14} />
+            <Bold size={21} />
           </button>
 
           {/* Italic */}
@@ -822,7 +822,7 @@ export default function PageEditor({
             }`}
             title="Itálico (Cmd+I)"
           >
-            <Italic size={14} />
+            <Italic size={21} />
           </button>
 
           {/* Underline */}
@@ -844,7 +844,7 @@ export default function PageEditor({
             }`}
             title="Sublinhado (Cmd+U)"
           >
-            <Underline size={14} />
+            <Underline size={21} />
           </button>
 
           {/* Strikethrough */}
@@ -866,7 +866,7 @@ export default function PageEditor({
             }`}
             title="Tachado (Cmd+Shift+S)"
           >
-            <Strikethrough size={14} />
+            <Strikethrough size={21} />
           </button>
 
           <div
@@ -893,7 +893,7 @@ export default function PageEditor({
             }`}
             title="Código (Cmd+E)"
           >
-            <Code size={14} />
+            <Code size={18} />
           </button>
 
           {/* Link */}
@@ -918,7 +918,7 @@ export default function PageEditor({
             }`}
             title="Link (Cmd+K)"
           >
-            <Link size={14} />
+            <Link size={21} />
           </button>
 
           {/* Image */}
@@ -971,7 +971,7 @@ export default function PageEditor({
             className="p-1.5 rounded transition-colors hover:bg-hover/50"
             title="Inserir Imagem (arquivo, URL ou base64)"
           >
-            <ImageIcon size={14} />
+            <ImageIcon size={21} />
           </button>
 
           <div
@@ -992,9 +992,9 @@ export default function PageEditor({
               }`}
               title="Tamanho do Texto"
             >
-              <Type size={14} />
+              <Type size={21} />
               <span className="text-xs">
-                {editor.getAttributes("textStyle").fontSize || "14"}px
+                {editor.getAttributes("textStyle").fontSize || "18"}px
               </span>
             </button>
             {/* Size dropdown */}
