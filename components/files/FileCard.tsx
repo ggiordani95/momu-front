@@ -70,6 +70,7 @@ export default function FileCard({
   const [renameValue, setRenameValue] = useState(file.title);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const hasStartedRenamingRef = useRef(false);
+  const contextMenuJustOpenedRef = useRef(false);
 
   // If startRenaming prop changes to true, start renaming
   useEffect(() => {
@@ -99,6 +100,12 @@ export default function FileCard({
 
     const target = e.currentTarget as HTMLElement;
     const anchorRect = getAnchorRect(target);
+
+    // Mark that context menu just opened to prevent onClick from interfering
+    contextMenuJustOpenedRef.current = true;
+    setTimeout(() => {
+      contextMenuJustOpenedRef.current = false;
+    }, 100);
 
     setContextMenu({
       x: anchorRect.right + 8,
@@ -302,8 +309,22 @@ export default function FileCard({
                     label: "Excluir",
                     icon: <Trash2 size={16} />,
                     onClick: () => {
+                      console.log(
+                        "🗑️ [FileCard] Delete clicked for file:",
+                        file.id
+                      );
+                      console.log(
+                        "🗑️ [FileCard] onDelete function exists:",
+                        !!onDelete
+                      );
                       if (onDelete) {
+                        console.log(
+                          "🗑️ [FileCard] Calling onDelete with id:",
+                          file.id
+                        );
                         onDelete(file.id);
+                      } else {
+                        console.warn("⚠️ [FileCard] onDelete is not defined!");
                       }
                       setContextMenu(null);
                     },

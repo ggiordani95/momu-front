@@ -241,21 +241,31 @@ export function ExplorerWorkspace({
                   key={item.id}
                   file={item}
                   onClick={(e) => {
-                    // Handle multi-select
+                    // Don't handle click if it's part of a drag selection
+                    if (isSelecting) {
+                      return;
+                    }
+
+                    // Handle multi-select modifiers (Ctrl/Cmd/Shift)
+                    if (e.ctrlKey || e.metaKey || e.shiftKey) {
+                      handleFileClick(item.id, e);
+                      e.stopPropagation();
+                      return;
+                    }
+
+                    // For single click without modifiers:
+                    // First, select this item (clears other selections)
                     handleFileClick(item.id, e);
-                    // Also trigger normal click if not selecting
-                    if (
-                      !isSelecting &&
-                      !e.ctrlKey &&
-                      !e.metaKey &&
-                      !e.shiftKey
-                    ) {
+
+                    // Then trigger normal click action
+                    // Use requestAnimationFrame to ensure selection happens first
+                    requestAnimationFrame(() => {
                       if (item.type === "folder") {
                         onFolderClick(item.id);
                       } else {
                         onItemClick(item);
                       }
-                    }
+                    });
                   }}
                   onRename={onItemUpdate}
                   onDelete={onItemDelete}

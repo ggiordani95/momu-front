@@ -155,6 +155,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         console.log(`🗑️ [Zustand] Marked file as deleted: ${fileId}`, {
           totalFiles: updatedFiles.length,
           deletedFiles: updatedFiles.filter((f) => f.active === false).length,
+          deletedFileIds: updatedFiles
+            .filter((f) => f.active === false)
+            .map((f) => f.id),
         });
       },
 

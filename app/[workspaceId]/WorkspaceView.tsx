@@ -607,28 +607,39 @@ export default function WorkspaceView({
   };
 
   const handleItemDelete = async (id: string) => {
-    // Prevent deleting the same item twice
-    // 1. Check if there's already a DELETE operation pending
+    console.log("🗑️ [WorkspaceView] handleItemDelete called with id:", id);
+
+    // First, check if the item is already marked as deleted in the store
+    // This is the source of truth for UI state
+    const { files, markFileAsDeleted } = useWorkspaceStore.getState();
+    const file = files.find(
+      (f) => f.id === id && f.workspace_id === workspaceId
+    );
+
+    if (file && file.active === false) {
+      console.warn(
+        `⚠️ Item ${id} is already deleted (active = false), skipping duplicate delete`
+      );
+      return;
+    }
+
+    // If item exists and is still active, mark it as deleted in the store first
+    // This ensures the UI updates immediately
+    if (file && file.active !== false) {
+      markFileAsDeleted(id);
+      console.log(`✅ [Delete] Updated Zustand store for file: ${id}`);
+    }
+
+    // Then check if there's already a DELETE operation pending in localStorage
+    // If not, save it. If yes, we still want to update the UI (already done above)
     const pendingOps = getPendingOperations();
     const alreadyDeleted = pendingOps.some(
       (op) => op.type === "DELETE" && op.id === id
     );
 
     if (alreadyDeleted) {
-      console.warn(
-        `⚠️ Item ${id} is already being deleted, skipping duplicate delete`
-      );
-      return;
-    }
-
-    // 2. Check if the item is already marked as deleted in the store
-    const { files } = useWorkspaceStore.getState();
-    const file = files.find(
-      (f) => f.id === id && f.workspace_id === workspaceId
-    );
-    if (file && file.active === false) {
-      console.warn(
-        `⚠️ Item ${id} is already deleted (active = false), skipping duplicate delete`
+      console.log(
+        `ℹ️ Item ${id} already has DELETE operation in localStorage, UI updated`
       );
       return;
     }
@@ -649,25 +660,8 @@ export default function WorkspaceView({
       return;
     }
 
-    // For existing items, optimistically update Zustand store first
-    // This will immediately remove the file from workspace and show it in trash
-    const { markFileAsDeleted, files: currentFiles } =
-      useWorkspaceStore.getState();
-
-    // Verify file exists in store before marking as deleted
-    const fileExists = currentFiles.some(
-      (f) => f.id === id && f.workspace_id === workspaceId
-    );
-    if (fileExists) {
-      markFileAsDeleted(id);
-      console.log(`✅ [Delete] Updated Zustand store for file: ${id}`);
-    } else {
-      console.warn(
-        `⚠️ [Delete] File ${id} not found in Zustand store, will be synced from backend`
-      );
-    }
-
-    // Then save delete operation to localStorage for backend sync
+    // Save delete operation to localStorage for backend sync
+    // (markFileAsDeleted was already called above if the file exists)
     savePendingOperation({
       type: "DELETE",
       id,

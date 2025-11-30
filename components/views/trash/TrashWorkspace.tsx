@@ -1,7 +1,7 @@
 "use client";
 
 import { Folder } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useEffect, useCallback } from "react";
 import FileCard from "../../files/FileCard";
 import FolderSkeleton from "../../files/FolderSkeleton";
 import {
@@ -14,6 +14,7 @@ import {
 } from "@/lib/services/offlineSync";
 import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
 import type { HierarchicalFile } from "@/lib/types";
+import { useMultiSelect } from "@/lib/hooks/useMultiSelect";
 
 interface TrashWorkspaceProps {
   topicId: string;
@@ -28,18 +29,89 @@ export function TrashWorkspace({
 }: TrashWorkspaceProps) {
   // Use Zustand store - filter directly from global JSON
   // Get all files from the store and filter by workspace and active === false
-  const { files: allFiles } = useWorkspaceStore();
+  // Using selector to ensure re-render when files change
+  const allFiles = useWorkspaceStore((state) => state.files);
   const deletedFiles = useMemo(() => {
     // Filter from global JSON: workspace current + active === false
-    return allFiles.filter(
+    const filtered = allFiles.filter(
       (file) => file.workspace_id === topicId && file.active === false
     );
+    console.log(`🗑️ [TrashWorkspace] Filtered deleted files:`, {
+      topicId,
+      totalFiles: allFiles.length,
+      deletedFilesCount: filtered.length,
+      deletedFileIds: filtered.map((f) => f.id),
+    });
+    return filtered;
   }, [allFiles, topicId]);
 
   const { isSyncing } = useWorkspaceStore();
   const loading = isSyncing;
   const restoreItemMutation = useRestoreItem(topicId);
   const permanentDeleteMutation = usePermanentDeleteItem(topicId);
+
+  const handlePermanentDelete = useCallback(
+    async (id: string) => {
+      try {
+        // Optimistically remove file from Zustand store immediately
+        const { removeFilePermanently } = useWorkspaceStore.getState();
+        removeFilePermanently(id);
+
+        await permanentDeleteMutation.mutateAsync(id);
+        if (onPermanentDelete) {
+          onPermanentDelete(id);
+        }
+      } catch (error) {
+        console.error("Error permanently deleting item:", error);
+        // On error, re-sync to get correct state
+        const { syncFiles } = useWorkspaceStore.getState();
+        syncFiles();
+      }
+    },
+    [permanentDeleteMutation, onPermanentDelete]
+  );
+
+  // Multi-select functionality
+  const {
+    selectedIds,
+    isSelecting,
+    selectionBox,
+    containerRef,
+    handleMouseDown,
+    handleMouseMove,
+    handleMouseUp,
+    handleFileClick,
+    clearSelection,
+  } = useMultiSelect();
+
+  // Handle Delete key to permanently delete selected files
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle Delete if there are selected files and not typing in an input
+      if (
+        (e.key === "Delete" || e.key === "Backspace") &&
+        selectedIds.size > 0 &&
+        document.activeElement?.tagName !== "INPUT" &&
+        document.activeElement?.tagName !== "TEXTAREA"
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Permanently delete all selected files
+        selectedIds.forEach((fileId: string) => {
+          handlePermanentDelete(fileId);
+        });
+
+        // Clear selection after deleting
+        clearSelection();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [selectedIds, clearSelection, handlePermanentDelete]);
 
   // Get DELETE operations from localStorage that haven't been synced yet
   // These are items that were deleted but the Zustand store hasn't been updated yet
@@ -90,24 +162,6 @@ export function TrashWorkspace({
     }
   };
 
-  const handlePermanentDelete = async (id: string) => {
-    try {
-      // Optimistically remove file from Zustand store immediately
-      const { removeFilePermanently } = useWorkspaceStore.getState();
-      removeFilePermanently(id);
-
-      await permanentDeleteMutation.mutateAsync(id);
-      if (onPermanentDelete) {
-        onPermanentDelete(id);
-      }
-    } catch (error) {
-      console.error("Error permanently deleting item:", error);
-      // On error, re-sync to get correct state
-      const { syncFiles } = useWorkspaceStore.getState();
-      syncFiles();
-    }
-  };
-
   // Merge Zustand deleted files (from global JSON) and locally deleted items
   // Remove duplicates using a Map to ensure unique IDs
   const allTrashItems = useMemo(() => {
@@ -130,7 +184,14 @@ export function TrashWorkspace({
       }
     });
 
-    return Array.from(itemsMap.values());
+    const result = Array.from(itemsMap.values());
+    console.log(`🗑️ [TrashWorkspace] allTrashItems calculated:`, {
+      deletedFilesCount: deletedFiles.length,
+      pendingDeletesCount: pendingDeletes.length,
+      totalTrashItems: result.length,
+      trashItemIds: result.map((f) => f.id),
+    });
+    return result;
   }, [deletedFiles, pendingDeletes]);
 
   // Sort items by order_index (same as FileExplorer)
@@ -141,7 +202,26 @@ export function TrashWorkspace({
   return (
     <div className="h-full flex flex-col">
       {/* File Grid - same layout as FileExplorer */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-y-auto p-6 relative"
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+      >
+        {/* Selection Box */}
+        {isSelecting && selectionBox && (
+          <div
+            className="absolute border-2 border-blue-500 bg-blue-500/10 pointer-events-none z-50"
+            style={{
+              left: Math.min(selectionBox.startX, selectionBox.endX),
+              top: Math.min(selectionBox.startY, selectionBox.endY),
+              width: Math.abs(selectionBox.endX - selectionBox.startX),
+              height: Math.abs(selectionBox.endY - selectionBox.startY),
+            }}
+          />
+        )}
         <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,2fr))] gap-6 w-full">
           {loading ? (
             <>
@@ -157,11 +237,15 @@ export function TrashWorkspace({
                 <FileCard
                   key={item.id}
                   file={item as HierarchicalFile}
-                  onClick={() => {}} // Items in trash are not clickable
+                  onClick={(e) => {
+                    // Handle multi-select
+                    handleFileClick(item.id, e);
+                  }}
                   appearanceOrder={index}
                   isTrashView={true}
                   onRestore={() => handleRestore(item.id)}
                   onPermanentDelete={() => handlePermanentDelete(item.id)}
+                  isSelected={selectedIds.has(item.id)}
                 />
               ))}
 
