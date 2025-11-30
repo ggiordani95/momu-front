@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from "react";
 import SidebarItem from "@/components/SidebarItem";
-import { useItems } from "@/lib/contexts/ItemsContext";
+import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
+import { buildHierarchy } from "@/lib/utils/hierarchy";
 import { type ItemType } from "@/lib/itemTypes";
-import { HierarchicalItem } from "@/lib/types";
-import { useUpdateItem } from "@/lib/hooks/querys/useItems";
+import { HierarchicalFile } from "@/lib/types";
+import { useMemo } from "react";
+import { useUpdateFile } from "@/lib/hooks/querys/useFiles";
 
 interface TopicItem {
   id: string;
@@ -25,18 +27,25 @@ export default function SidebarNavigation({
   workspaceId,
 }: SidebarNavigationProps) {
   const [activeId, setActiveId] = useState("");
-  const itemsContext = useItems();
+
+  // Get files from Zustand store if workspaceId is provided
+  const { getFilesByWorkspace } = useWorkspaceStore();
+  const workspaceFiles = workspaceId ? getFilesByWorkspace(workspaceId) : [];
+  const zustandItems = useMemo(
+    () => buildHierarchy(workspaceFiles),
+    [workspaceFiles]
+  );
 
   const derivedWorkspaceId =
     workspaceId ||
-    (itemsContext?.items && itemsContext.items[0]?.workspace_id) ||
-    (initialItems[0] as HierarchicalItem | undefined)?.workspace_id ||
+    (zustandItems[0] as HierarchicalFile | undefined)?.workspace_id ||
+    (initialItems[0] as HierarchicalFile | undefined)?.workspace_id ||
     null;
 
-  const updateItemMutation = useUpdateItem(derivedWorkspaceId || "");
+  const updateItemMutation = useUpdateFile(derivedWorkspaceId || "");
 
-  // Use items from context if available, otherwise use initialItems
-  const items = itemsContext?.items || initialItems;
+  // Use items from Zustand if available, otherwise use initialItems
+  const items = zustandItems.length > 0 ? zustandItems : initialItems;
 
   useEffect(() => {
     // Set initial activeId from URL hash after mount (only on client)
@@ -101,9 +110,7 @@ export default function SidebarNavigation({
     };
 
     const updatedItems = updateItemRecursive(items as TopicItem[]);
-    if (itemsContext) {
-      itemsContext.setItems(updatedItems as HierarchicalItem[]);
-    }
+    // Zustand handles state updates automatically via mutations
 
     if (!derivedWorkspaceId) {
       console.error(
@@ -113,13 +120,11 @@ export default function SidebarNavigation({
     }
 
     updateItemMutation.mutate(
-      { itemId: id, data: { [field]: value } },
+      { fileId: id, data: { [field]: value } },
       {
         onError: (error) => {
           console.error("Error updating item:", error);
-          if (itemsContext) {
-            itemsContext.setItems(previousItems as HierarchicalItem[]);
-          }
+          // Zustand will handle rollback via React Query
         },
       }
     );
@@ -138,9 +143,7 @@ export default function SidebarNavigation({
     };
 
     const updatedItems = deleteItemRecursive(items as TopicItem[]);
-    if (itemsContext) {
-      itemsContext.setItems(updatedItems as HierarchicalItem[]);
-    }
+    // Zustand handles state updates automatically via mutations
 
     if (!derivedWorkspaceId) {
       console.error(
@@ -150,7 +153,7 @@ export default function SidebarNavigation({
     }
 
     updateItemMutation.mutate({
-      itemId: id,
+      fileId: id,
       data: { active: false },
     });
   };

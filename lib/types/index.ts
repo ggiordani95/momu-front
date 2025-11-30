@@ -4,7 +4,7 @@ import { type ItemType } from "@/lib/itemTypes";
 // Folder Types
 // ============================================
 
-export interface Folder {
+export interface Workspace {
   id: string;
   user_id: string;
   title: string;
@@ -15,13 +15,13 @@ export interface Folder {
   updated_at?: string;
 }
 
-export interface CreateFolderDto {
+export interface CreateWorkspaceDto {
   title: string;
   description?: string;
   user_id?: string;
 }
 
-export interface UpdateFolderDto {
+export interface UpdateWorkspaceDto {
   title?: string;
   description?: string;
   is_public?: boolean;
@@ -32,7 +32,7 @@ export interface UpdateFolderDto {
 // Item Types
 // ============================================
 
-export interface FolderItem {
+export interface File {
   id: string;
   workspace_id: string;
   type: ItemType;
@@ -47,11 +47,11 @@ export interface FolderItem {
   updated_at?: string;
 }
 
-export interface HierarchicalItem extends FolderItem {
-  children?: HierarchicalItem[];
+export interface HierarchicalFile extends File {
+  children?: HierarchicalFile[];
 }
 
-export interface CreateItemDto {
+export interface CreateFileDto {
   type: ItemType;
   title: string;
   content?: string;
@@ -60,7 +60,7 @@ export interface CreateItemDto {
   active?: boolean;
 }
 
-export interface UpdateItemDto {
+export interface UpdateFileDto {
   title?: string;
   content?: string;
   youtube_url?: string;
@@ -73,6 +73,6 @@ export interface UpdateItemDto {
 // Trash Types
 // ============================================
 
-export interface TrashItem extends FolderItem {
+export interface TrashFile extends File {
   active: boolean;
 }

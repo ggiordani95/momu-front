@@ -12,7 +12,7 @@ import {
   useCreateItem,
   useUpdateItem,
   useUpdateItemOrder,
-} from "@/lib/hooks/querys/useItems";
+} from "@/lib/hooks/querys/useFiles";
 import { toast } from "sonner";
 
 interface TopicItem {

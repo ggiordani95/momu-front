@@ -2,19 +2,19 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useFolders } from "@/lib/hooks/querys/useFolders";
+import { useWorkspaceData } from "@/lib/hooks/useSyncFiles";
 
 export default function Home() {
   const router = useRouter();
-  const { data: folders = [] } = useFolders();
+  const { workspaces } = useWorkspaceData();
 
   useEffect(() => {
-    if (folders.length > 0) {
+    if (workspaces.length > 0) {
       // Redirect to first workspace
-      const firstWorkspaceId = folders[0].id;
+      const firstWorkspaceId = workspaces[0].id;
       router.push(`/${firstWorkspaceId}`);
     }
-  }, [folders, router]);
+  }, [workspaces, router]);
 
   return (
     <div className="flex h-screen items-center justify-center">

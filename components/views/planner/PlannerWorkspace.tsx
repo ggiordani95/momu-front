@@ -2,11 +2,13 @@
 
 import React, { useState, useRef } from "react";
 import { CheckCircle2, Clock, Circle, Search } from "lucide-react";
-import { HierarchicalItem } from "@/lib/types";
+import { HierarchicalFile } from "@/lib/types";
 import { ItemPicker } from "@/components/ItemPicker";
 import { useRouter } from "next/navigation";
 import { TaskDetailView } from "./TaskDetailView";
-import { useItems } from "@/lib/contexts/ItemsContext";
+import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
+import { buildHierarchy } from "@/lib/utils/hierarchy";
+import { useMemo } from "react";
 
 interface PlannerCard {
   id: string;
@@ -22,8 +24,10 @@ interface PlannerCard {
 
 export function PlannerWorkspace({ workspaceId }: { workspaceId: string }) {
   const router = useRouter();
-  const itemsContext = useItems();
-  const items = itemsContext?.items || [];
+  // Get files from Zustand store
+  const { getFilesByWorkspace } = useWorkspaceStore();
+  const workspaceFiles = getFilesByWorkspace(workspaceId);
+  const items = useMemo(() => buildHierarchy(workspaceFiles), [workspaceFiles]);
   const [draggedCard, setDraggedCard] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
@@ -130,7 +134,7 @@ export function PlannerWorkspace({ workspaceId }: { workspaceId: string }) {
     setCards(cards.filter((c) => c.id !== id));
   };
 
-  const handleLinkItem = (cardId: string, item: HierarchicalItem) => {
+  const handleLinkItem = (cardId: string, item: HierarchicalFile) => {
     setCards(
       cards.map((c) => (c.id === cardId ? { ...c, linkedItemId: item.id } : c))
     );
@@ -169,9 +173,9 @@ export function PlannerWorkspace({ workspaceId }: { workspaceId: string }) {
   };
 
   const findItem = (
-    items: HierarchicalItem[],
+    items: HierarchicalFile[],
     id: string
-  ): HierarchicalItem | null => {
+  ): HierarchicalFile | null => {
     for (const item of items) {
       if (item.id === id) return item;
       if (item.children) {
@@ -221,6 +225,7 @@ export function PlannerWorkspace({ workspaceId }: { workspaceId: string }) {
           }
         }}
         onNavigateToItem={navigateToItem}
+        workspaceId={workspaceId}
       />
     );
   }
@@ -379,6 +384,7 @@ export function PlannerWorkspace({ workspaceId }: { workspaceId: string }) {
 
       {showItemPicker && (
         <ItemPicker
+          workspaceId={workspaceId}
           onSelect={(item) => {
             if (showItemPicker) {
               handleLinkItem(showItemPicker, item);

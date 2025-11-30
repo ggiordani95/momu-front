@@ -1,17 +1,17 @@
 "use client";
 
 import { ChevronRight, ChevronDown } from "lucide-react";
-import type { HierarchicalItem, Folder } from "@/lib/types";
+import type { HierarchicalFile, Workspace } from "@/lib/types";
 import { ReactNode, useState, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 
 interface BreadcrumbProps {
-  items: HierarchicalItem[];
+  items: HierarchicalFile[];
   currentFolderId: string | null;
   onNavigate: (folderId: string | null) => void;
   actionButton?: ReactNode;
-  workspaces?: Folder[];
+  workspaces?: Workspace[];
   currentWorkspaceId?: string;
 }
 
@@ -64,10 +64,10 @@ export default function Breadcrumb({
 
   // Build path to current folder
   const buildPath = (
-    items: HierarchicalItem[],
+    items: HierarchicalFile[],
     targetId: string | null,
-    currentPath: HierarchicalItem[] = []
-  ): HierarchicalItem[] | null => {
+    currentPath: HierarchicalFile[] = []
+  ): HierarchicalFile[] | null => {
     if (targetId === null) {
       return currentPath;
     }

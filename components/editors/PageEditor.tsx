@@ -22,7 +22,7 @@ import UnderlineExtension from "@tiptap/extension-underline";
 import TiptapLink from "@tiptap/extension-link";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { Extension } from "@tiptap/core";
-import type { HierarchicalItem } from "@/lib/types";
+import type { HierarchicalFile } from "@/lib/types";
 
 // Custom FontSize extension
 const FontSize = Extension.create({
@@ -74,19 +74,19 @@ const FontSize = Extension.create({
 });
 
 interface PageEditorProps {
-  item: HierarchicalItem;
+  file: HierarchicalFile;
   onBack: () => void;
   onUpdate: (id: string, field: "title" | "content", value: string) => void;
   isNew?: boolean;
 }
 
 export default function PageEditor({
-  item,
+  file,
   onUpdate,
   onBack,
   isNew = false,
 }: PageEditorProps) {
-  const [title, setTitle] = useState(item.title);
+  const [title, setTitle] = useState(file.title);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const [isTitleEditing, setIsTitleEditing] = useState(isNew);
   const [showBlockMenu, setShowBlockMenu] = useState(false);
@@ -210,7 +210,7 @@ export default function PageEditor({
           },
         }),
       ],
-      content: convertNewlinesToHTML(item.content || ""),
+      content: convertNewlinesToHTML(file.content || ""),
       editorProps: {
         attributes: {
           class:
@@ -245,7 +245,7 @@ export default function PageEditor({
       },
       onUpdate: ({ editor }) => {
         const html = editor.getHTML();
-        onUpdate(item.id, "content", html);
+        onUpdate(file.id, "content", html);
       },
       onSelectionUpdate: () => {
         // Hide block menu when selection changes
@@ -254,7 +254,7 @@ export default function PageEditor({
         }
       },
     },
-    [item.id, showBlockMenu]
+    [file.id, showBlockMenu]
   );
 
   // Focus title input if new
@@ -281,9 +281,9 @@ export default function PageEditor({
 
   // Update editor content when item ID changes (not on every content change to avoid conflicts)
   useEffect(() => {
-    if (editor && item.id) {
+    if (editor && file.id) {
       // Convert newlines to HTML before setting content
-      const originalContent = item.content || "";
+      const originalContent = file.content || "";
       const htmlContent = convertNewlinesToHTML(originalContent);
 
       // Debug: log if content contains \n
@@ -295,23 +295,23 @@ export default function PageEditor({
       editor.commands.setContent(htmlContent);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item.id, editor]);
+  }, [file.id, editor]);
 
   // Update title when item changes
   useEffect(() => {
-    if (item.title !== title) {
-      setTitle(item.title);
+    if (file.title !== title) {
+      setTimeout(() => setTitle(file.title), 0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item.title]);
+  }, [file.title]);
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setTitle(e.target.value);
   };
 
   const handleTitleBlur = () => {
-    if (title.trim() !== item.title) {
-      onUpdate(item.id, "title", title.trim() || "Sem título");
+    if (title.trim() !== file.title) {
+      onUpdate(file.id, "title", title.trim() || "Sem título");
     }
     setIsTitleEditing(false);
   };
@@ -323,7 +323,7 @@ export default function PageEditor({
       setTimeout(() => editor?.commands.focus(), 100);
     }
     if (e.key === "Escape") {
-      setTitle(item.title);
+      setTitle(file.title);
       setIsTitleEditing(false);
     }
   };

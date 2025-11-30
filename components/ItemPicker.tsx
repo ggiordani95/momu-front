@@ -8,18 +8,28 @@ import {
   ChevronDown,
   Check,
 } from "lucide-react";
-import { HierarchicalItem } from "@/lib/types";
-import { useItems } from "@/lib/contexts/ItemsContext";
+import { HierarchicalFile } from "@/lib/types";
+import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
+import { buildHierarchy } from "@/lib/utils/hierarchy";
+import { useMemo } from "react";
 
 interface ItemPickerProps {
-  onSelect: (item: HierarchicalItem) => void;
+  onSelect: (item: HierarchicalFile) => void;
   onCancel: () => void;
   excludeId?: string;
+  workspaceId: string;
 }
 
-export function ItemPicker({ onSelect, onCancel, excludeId }: ItemPickerProps) {
-  const itemsContext = useItems();
-  const items = itemsContext?.items || [];
+export function ItemPicker({
+  onSelect,
+  onCancel,
+  excludeId,
+  workspaceId,
+}: ItemPickerProps) {
+  // Get files from Zustand store
+  const { getFilesByWorkspace } = useWorkspaceStore();
+  const workspaceFiles = getFilesByWorkspace(workspaceId);
+  const items = useMemo(() => buildHierarchy(workspaceFiles), [workspaceFiles]);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
     new Set()
   );
@@ -34,7 +44,7 @@ export function ItemPicker({ onSelect, onCancel, excludeId }: ItemPickerProps) {
     });
   };
 
-  const renderItem = (item: HierarchicalItem, depth: number = 0) => {
+  const renderItem = (item: HierarchicalFile, depth: number = 0) => {
     if (item.id === excludeId) return null;
 
     const isExpanded = expandedFolders.has(item.id);

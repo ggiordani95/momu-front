@@ -8,7 +8,7 @@ import {
   useCreateItem,
   useUpdateItem,
   useDeleteItem,
-} from "@/lib/hooks/querys/useItems";
+} from "@/lib/hooks/querys/useFiles";
 import type { HierarchicalItem, CreateItemDto } from "@/lib/types";
 import { ItemsProvider, useItems } from "@/lib/contexts/ItemsContext";
 import SimpleSidebar from "@/components/SimpleSidebar";

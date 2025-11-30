@@ -1,12 +1,12 @@
-import type { HierarchicalItem } from "@/lib/types";
 import type { UseMutationResult } from "@tanstack/react-query";
 import { useDragState } from "./useDragState";
 import { useDragHandlers } from "./useDragHandlers";
 import { useItemReorder } from "./useItemReorder";
 import { applyOptimisticUpdate } from "./useOptimisticUpdate";
 import { persistReorder } from "./usePersistReorder";
-import { useUpdateItemOrder } from "./querys/useItems";
-import { useItems } from "@/lib/contexts/ItemsContext";
+import { useUpdateItemOrder } from "./querys/useFiles";
+import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
+import { buildHierarchy } from "@/lib/utils/hierarchy";
 import { findItemById } from "@/lib/utils/hierarchy";
 
 interface UseDragAndDropProps {
@@ -22,9 +22,10 @@ export function useDragAndDrop({
   workspaceId,
   currentFolderId = null,
 }: UseDragAndDropProps) {
-  // Obter items do contexto
-  const itemsContext = useItems();
-  const items = itemsContext?.items || [];
+  // Obter files do Zustand store
+  const { getFilesByWorkspace } = useWorkspaceStore();
+  const workspaceFiles = getFilesByWorkspace(workspaceId);
+  const items = buildHierarchy(workspaceFiles);
 
   // Criar mutation dentro do hook
   const updateItemOrderMutation = useUpdateItemOrder(workspaceId || "");
@@ -78,7 +79,7 @@ export function useDragAndDrop({
     // Atualização otimista
     applyOptimisticUpdate({
       items,
-      itemsContext: itemsContext || null,
+      itemsContext: null, // Zustand handles state updates
       currentFolderId: currentFolderId || null,
       reorderedItems,
     });

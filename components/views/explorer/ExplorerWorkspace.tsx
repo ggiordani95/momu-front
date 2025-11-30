@@ -1,20 +1,19 @@
 "use client";
 
 import { Folder as FolderIcon, Plus, X } from "lucide-react";
-import { useItems } from "@/lib/contexts/ItemsContext";
 import { type ItemType } from "@/lib/itemTypes";
 import AddItemInline from "@/components/AddItemInline";
 import FolderSkeleton from "@/components/files/FolderSkeleton";
 import Breadcrumb from "@/components/Breadcrumb";
 import FileCard from "@/components/files/FileCard";
 import React, { useState, useMemo } from "react";
-import type { HierarchicalItem, CreateItemDto, Folder } from "@/lib/types";
+import type { HierarchicalFile, CreateFileDto, Workspace } from "@/lib/types";
 import { findItemById } from "@/lib/utils/hierarchy";
 import { useDragAndDrop } from "@/lib/hooks/useDragAndDrop";
 interface ExplorerWorkspaceProps {
   currentFolderId?: string | null;
   onFolderClick: (folderId: string) => void;
-  onItemClick: (item: HierarchicalItem) => void;
+  onItemClick: (item: HierarchicalFile) => void;
   onBack?: () => void;
   onAddItem?: (item: {
     type: ItemType;
@@ -31,8 +30,9 @@ interface ExplorerWorkspaceProps {
   onItemDelete?: (id: string) => void;
   loading?: boolean;
   workspaceId?: string;
-  pendingItems?: Map<string, { item: HierarchicalItem; data: CreateItemDto }>;
-  workspaces?: Folder[];
+  pendingItems?: Map<string, { item: HierarchicalFile; data: CreateFileDto }>;
+  workspaces?: Workspace[];
+  files: HierarchicalFile[]; // Files from Zustand store
 }
 
 export function ExplorerWorkspace({
@@ -47,21 +47,15 @@ export function ExplorerWorkspace({
   workspaceId,
   pendingItems,
   workspaces = [],
+  files, // Files from Zustand store (passed as prop)
 }: ExplorerWorkspaceProps) {
-  const itemsContext = useItems();
-
-  // Use context items
-  const items = useMemo(() => {
-    return itemsContext?.items || [];
-  }, [itemsContext?.items]);
-
   const isLoading = loading;
   const [showAddItem, setShowAddItem] = useState(false);
 
   // Find current folder or use root - memoize with stable reference
   const currentFolder = useMemo(() => {
     if (!currentFolderId) return null;
-    const folder = findItemById(items, currentFolderId);
+    const folder = findItemById(files, currentFolderId);
     // If folder not found but currentFolderId is set, it might be an empty folder
     // Return a placeholder object to allow navigation
     if (!folder && currentFolderId) {
@@ -73,58 +67,22 @@ export function ExplorerWorkspace({
         workspace_id: "",
         created_at: "",
         updated_at: "",
-      } as HierarchicalItem;
+      } as HierarchicalFile;
     }
     return folder;
-  }, [currentFolderId, items]);
+  }, [currentFolderId, files]);
 
-  // Memoize displayItems to avoid recalculating on every render
-  const displayItems = useMemo(() => {
-    if (currentFolder) {
-      // Ensure children is always an array (even for empty folders)
-      return currentFolder.children || [];
-    }
-    // Get all root items (items without parent_id)
-    const rootItems = items.filter((item) => !item.parent_id);
-
-    // Also get optimistic items that might have parent_id but parent is also pending
-    // Only include optimistic items that don't already exist in rootItems
-    const optimisticItems = items.filter((item) => {
-      if (!item.id.startsWith("temp-")) return false;
-      // Check if this item is already in rootItems
-      const alreadyInRoot = rootItems.some(
-        (rootItem) => rootItem.id === item.id
-      );
-      if (alreadyInRoot) return false;
-      // Include if parent_id exists but parent is also a temp item (not yet created)
-      if (item.parent_id) {
-        const parentExists = items.some(
-          (i) => i.id === item.parent_id && !i.id.startsWith("temp-")
-        );
-        return !parentExists;
-      }
-      return false;
-    });
-
-    // Combine and remove duplicates by ID
-    const allItems = [...rootItems, ...optimisticItems];
-    const seen = new Set<string>();
-    return allItems.filter((item) => {
-      if (seen.has(item.id)) {
-        return false;
-      }
-      seen.add(item.id);
-      return true;
-    });
-  }, [currentFolder, items]);
-
-  // Sort ALL items together by order_index (folders and files mixed)
-  // Only recalculate if displayItems reference changes
+  // Filter and sort files for current folder
   const sortedItems = useMemo(() => {
-    return [...displayItems].sort(
+    const folderFiles = currentFolderId
+      ? currentFolder?.children || []
+      : files.filter((file) => !file.parent_id);
+
+    // Sort by order_index
+    return [...folderFiles].sort(
       (a, b) => (a.order_index || 0) - (b.order_index || 0)
     );
-  }, [displayItems]);
+  }, [currentFolderId, currentFolder, files]);
 
   const {
     handleDragStart,
@@ -143,7 +101,7 @@ export function ExplorerWorkspace({
     <div className="h-full flex flex-col">
       {/* Breadcrumb Timeline */}
       <Breadcrumb
-        items={items}
+        items={files}
         currentFolderId={currentFolderId || null}
         onNavigate={(folderId) => {
           if (folderId) {

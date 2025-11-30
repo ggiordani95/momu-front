@@ -4,8 +4,8 @@ import { useState } from "react";
 import { FolderTree, Settings, Trash2, Share2, Calendar } from "lucide-react";
 import Image from "next/image";
 import ContextMenu from "./editors/ContextMenu";
-import { useTrashItems } from "@/lib/hooks/querys/useTrash";
-import { usePermanentDeleteItem } from "@/lib/hooks/querys/useItems";
+import { usePermanentDeleteItem } from "@/lib/hooks/querys/useFiles";
+import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
 
 interface SimpleSidebarProps {
   onNavigate: (
@@ -13,24 +13,21 @@ interface SimpleSidebarProps {
   ) => void;
   currentView: "explorer" | "settings" | "trash" | "social" | "planner";
   workspaceId: string;
-  hasSynced?: boolean;
 }
 
 export default function SimpleSidebar({
   onNavigate,
   currentView,
   workspaceId,
-  hasSynced,
 }: SimpleSidebarProps) {
   const [trashContextMenu, setTrashContextMenu] = useState<{
     x: number;
     y: number;
   } | null>(null);
 
-  // React Query hooks
-  const { data: trashItems = [] } = useTrashItems(workspaceId, {
-    enabled: hasSynced !== false,
-  });
+  // Get trash items from Zustand store (files with active === false)
+  const { getDeletedFilesByWorkspace } = useWorkspaceStore();
+  const trashItems = workspaceId ? getDeletedFilesByWorkspace(workspaceId) : [];
   const permanentDeleteMutation = usePermanentDeleteItem(workspaceId);
 
   const handleTrashContextMenu = (e: React.MouseEvent) => {
@@ -45,7 +42,7 @@ export default function SimpleSidebar({
     try {
       // Excluir todos os itens sem confirmação
       await Promise.all(
-        trashItems.map((item) => permanentDeleteMutation.mutateAsync(item.id))
+        trashItems.map((file) => permanentDeleteMutation.mutateAsync(file.id))
       );
     } catch (error) {
       console.error("Error deleting all items:", error);

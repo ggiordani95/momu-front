@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/contexts/AuthContext";
 import { QueryProvider } from "@/lib/providers/QueryProvider";
+import { SyncProvider } from "@/components/SyncProvider";
+import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { Toaster } from "sonner";
 
 const geistSans = Geist({
@@ -32,8 +34,11 @@ export default function RootLayout({
       >
         <QueryProvider>
           <AuthProvider>
-            {children}
-            <Toaster position="top-right" richColors />
+            <SyncProvider>
+              {children}
+              <OfflineIndicator />
+              <Toaster position="top-right" richColors />
+            </SyncProvider>
           </AuthProvider>
         </QueryProvider>
       </body>

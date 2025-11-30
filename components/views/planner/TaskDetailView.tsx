@@ -24,7 +24,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { HierarchicalItem } from "@/lib/types";
+import { HierarchicalFile } from "@/lib/types";
 import { ItemPicker } from "@/components/ItemPicker";
 
 interface PlannerCard {
@@ -41,12 +41,13 @@ interface PlannerCard {
 
 interface TaskDetailViewProps {
   card: PlannerCard;
-  linkedItem: HierarchicalItem | null;
+  linkedItem: HierarchicalFile | null;
   onBack: () => void;
   onUpdate: (updatedCard: PlannerCard) => void;
   onDelete: (cardId: string) => void;
-  onLinkItem: (item: HierarchicalItem) => void;
+  onLinkItem: (item: HierarchicalFile) => void;
   onNavigateToItem: (itemId: string) => void;
+  workspaceId: string;
 }
 
 export function TaskDetailView({
@@ -57,6 +58,7 @@ export function TaskDetailView({
   onDelete,
   onLinkItem,
   onNavigateToItem,
+  workspaceId,
 }: TaskDetailViewProps) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
@@ -591,6 +593,7 @@ export function TaskDetailView({
 
       {showItemPicker && (
         <ItemPicker
+          workspaceId={workspaceId}
           onSelect={(item) => {
             onLinkItem(item);
             setShowItemPicker(false);

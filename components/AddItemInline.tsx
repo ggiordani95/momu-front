@@ -227,28 +227,6 @@ export default function AddItemInline({
                   <Check size={16} strokeWidth={2.5} />
                 </button>
               )}
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="p-2 rounded-lg transition-all duration-200"
-                style={{
-                  color: "var(--foreground)",
-                  opacity: 0.6,
-                }}
-                title="Cancelar (Esc)"
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "rgba(0, 0, 0, 0.05)";
-                  e.currentTarget.style.opacity = "1";
-                  e.currentTarget.style.transform = "scale(1.05)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "transparent";
-                  e.currentTarget.style.opacity = "0.6";
-                  e.currentTarget.style.transform = "scale(1)";
-                }}
-              >
-                <X size={16} strokeWidth={2.5} />
-              </button>
             </div>
           </div>
 
