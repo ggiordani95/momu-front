@@ -81,6 +81,24 @@ export const fileService = {
   },
 
   /**
+   * Soft delete multiple files (move to trash) - batch operation
+   */
+  async deleteBatch(ids: string[]): Promise<{
+    success: boolean;
+    deleted: number;
+    ids: string[];
+  }> {
+    return apiRequest<{
+      success: boolean;
+      deleted: number;
+      ids: string[];
+    }>(`/files/batch-delete`, {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    });
+  },
+
+  /**
    * Restore a file from trash
    */
   async restore(fileId: string): Promise<HierarchicalFile> {
@@ -90,15 +108,34 @@ export const fileService = {
   },
 
   /**
-   * Permanently delete a file
+   * Permanently delete a file (remove from database)
    */
   async permanentDelete(
     fileId: string
   ): Promise<{ success: boolean; id: string }> {
-    // Note: This endpoint might need to be implemented in the backend
-    // For now, we'll use the delete endpoint
-    return apiRequest<{ success: boolean; id: string }>(`/files/${fileId}`, {
-      method: "DELETE",
+    return apiRequest<{ success: boolean; id: string }>(
+      `/files/${fileId}/permanent`,
+      {
+        method: "DELETE",
+      }
+    );
+  },
+
+  /**
+   * Permanently delete multiple files (remove from database) - batch operation
+   */
+  async permanentDeleteBatch(ids: string[]): Promise<{
+    success: boolean;
+    deleted: number;
+    ids: string[];
+  }> {
+    return apiRequest<{
+      success: boolean;
+      deleted: number;
+      ids: string[];
+    }>(`/files/batch-permanent-delete`, {
+      method: "POST",
+      body: JSON.stringify({ ids }),
     });
   },
 

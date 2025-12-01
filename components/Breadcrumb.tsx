@@ -13,6 +13,7 @@ interface BreadcrumbProps {
   actionButton?: ReactNode;
   workspaces?: Workspace[];
   currentWorkspaceId?: string;
+  currentView?: "explorer" | "settings" | "trash" | "social" | "planner" | "ai";
 }
 
 export default function Breadcrumb({
@@ -22,6 +23,7 @@ export default function Breadcrumb({
   actionButton,
   workspaces = [],
   currentWorkspaceId,
+  currentView,
 }: BreadcrumbProps) {
   const router = useRouter();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -92,7 +94,12 @@ export default function Breadcrumb({
   const handleWorkspaceSelect = (workspaceId: string) => {
     setIsDropdownOpen(false);
     if (workspaceId !== currentWorkspaceId) {
-      router.push(`/${workspaceId}`);
+      // If we're in a specific view (like trash), maintain that view when switching workspaces
+      if (currentView && currentView !== "explorer") {
+        router.push(`/${workspaceId}?view=${currentView}`);
+      } else {
+        router.push(`/${workspaceId}`);
+      }
     }
   };
 
@@ -132,7 +139,7 @@ export default function Breadcrumb({
 
   return (
     <div
-      className="px-6 py-3 border-b flex items-center gap-3 overflow-x-auto"
+      className="px-6 h-16 border-b flex items-center gap-3 overflow-x-auto"
       style={{ borderColor: "var(--border-color)" }}
     >
       <div className="flex items-center gap-3 flex-1 min-w-0">

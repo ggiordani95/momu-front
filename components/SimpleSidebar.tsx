@@ -1,7 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { FolderTree, Settings, Trash2, Share2, Calendar } from "lucide-react";
+import {
+  FolderTree,
+  Settings,
+  Trash2,
+  Share2,
+  Calendar,
+  Sparkles,
+  Airplay,
+} from "lucide-react";
 import Image from "next/image";
 import ContextMenu from "./editors/ContextMenu";
 import { usePermanentDeleteItem } from "@/lib/hooks/querys/useFiles";
@@ -9,9 +17,9 @@ import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
 
 interface SimpleSidebarProps {
   onNavigate: (
-    view: "explorer" | "settings" | "trash" | "social" | "planner"
+    view: "explorer" | "settings" | "trash" | "social" | "planner" | "ai"
   ) => void;
-  currentView: "explorer" | "settings" | "trash" | "social" | "planner";
+  currentView: "explorer" | "settings" | "trash" | "social" | "planner" | "ai";
   workspaceId: string;
 }
 
@@ -80,13 +88,13 @@ export default function SimpleSidebar({
         className="flex items-center"
         style={{ borderColor: "var(--border-color)" }}
       >
-        <div className="flex items-center justify-center">
+        <div className="flex items-center justify-center p-4">
           <Image
             src="/momu.png"
             alt="MOMU"
-            width={70}
-            height={60}
-            className="h-18 object-contain"
+            width={32}
+            height={32}
+            className="h-9  object-contain"
             priority
           />
         </div>
@@ -96,19 +104,19 @@ export default function SimpleSidebar({
         <div className="space-y-1">
           <button
             onClick={() => onNavigate("explorer")}
-            className={`w-full flex items-center gap-2 p-2 rounded-md text-sm font-medium transition-colors ${
+            className={`w-full flex items-center gap-2 p-2 rounded-md text-md font-medium transition-colors ${
               currentView === "explorer"
                 ? "bg-hover text-foreground"
                 : "hover:bg-hover/50 text-foreground/70"
             }`}
           >
-            <FolderTree size={16} />
+            <FolderTree size={21} />
             Meu explorador
           </button>
 
-          <button
+          {/* <button
             onClick={() => onNavigate("social")}
-            className={`w-full flex items-center gap-2 p-2 rounded-md text-sm font-medium transition-colors ${
+            className={`w-full flex items-center gap-2 p-2 rounded-md text-md font-medium transition-colors ${
               currentView === "social"
                 ? "bg-hover text-foreground"
                 : "hover:bg-hover/50 text-foreground/70"
@@ -116,11 +124,11 @@ export default function SimpleSidebar({
           >
             <Share2 size={16} />
             Redes Sociais
-          </button>
+          </button> */}
 
-          <button
+          {/* <button
             onClick={() => onNavigate("planner")}
-            className={`w-full flex items-center gap-2 p-2 rounded-md text-sm font-medium transition-colors ${
+            className={`w-full flex items-center gap-2 p-2 rounded-md text-md font-medium transition-colors ${
               currentView === "planner"
                 ? "bg-hover text-foreground"
                 : "hover:bg-hover/50 text-foreground/70"
@@ -128,31 +136,41 @@ export default function SimpleSidebar({
           >
             <Calendar size={16} />
             Planejador
-          </button>
+          </button> */}
 
           <button
             onClick={() => onNavigate("trash")}
             onContextMenu={handleTrashContextMenu}
-            className={`w-full flex items-center gap-2 p-2 rounded-md text-sm font-medium transition-colors ${
+            className={`w-full flex items-center gap-2 p-2 rounded-md text-md font-medium transition-colors ${
               currentView === "trash"
                 ? "bg-hover text-foreground"
                 : "hover:bg-hover/50 text-foreground/70"
             }`}
           >
-            <Trash2 size={16} />
+            <Trash2 size={21} />
             Lixeira
           </button>
 
           <button
             onClick={() => onNavigate("settings")}
-            className={`w-full flex items-center gap-2 p-2 rounded-md text-sm font-medium transition-colors ${
+            className={`w-full flex items-center gap-2 p-2 rounded-md text-md font-medium transition-colors ${
               currentView === "settings"
                 ? "bg-hover text-foreground"
                 : "hover:bg-hover/50 text-foreground/70"
             }`}
           >
-            <Settings size={16} />
+            <Settings size={21} />
             Configurações
+          </button>
+
+          <div className="border-t border-[var(--border-color)] my-2" />
+
+          <button
+            onClick={() => onNavigate("ai")}
+            className={`w-full flex items-center gap-2 p-2 rounded-md text-md font-medium transition-colors`}
+          >
+            <Airplay size={21} className="text-purple-300" />
+            Assistente de IA
           </button>
         </div>
       </nav>

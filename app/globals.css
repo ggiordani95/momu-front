@@ -168,6 +168,14 @@ button {
 .ProseMirror {
   white-space: pre-wrap;
   word-wrap: break-word;
+  /* Ensure emojis render correctly */
+  font-family: system-ui, -apple-system, "Segoe UI", "Roboto", "Helvetica",
+    "Arial", sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol" !important;
+}
+
+.ProseMirror * {
+  font-variant-emoji: emoji;
 }
 
 .ProseMirror p {

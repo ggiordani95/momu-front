@@ -1,360 +1,386 @@
 "use client";
 
-import { useState } from "react";
-import { X, FolderOpen, Video, CheckSquare, StickyNote } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { X } from "lucide-react";
+import { ITEM_TYPES, type ItemType } from "@/lib/itemTypes";
 
 interface AddItemModalProps {
-  isOpen: boolean;
-  onClose: () => void;
   onAdd: (item: {
-    type: "section" | "video" | "task" | "note";
+    type: ItemType;
     title: string;
     content?: string;
     youtube_url?: string;
     parent_id?: string;
   }) => void;
+  onCancel: () => void;
   parentId?: string;
+  allowSections?: boolean;
 }
 
 export default function AddItemModal({
-  isOpen,
-  onClose,
   onAdd,
+  onCancel,
   parentId,
 }: AddItemModalProps) {
-  const [selectedType, setSelectedType] = useState<
-    "section" | "video" | "task" | "note"
-  >("section");
+  const [selectedType, setSelectedType] = useState<ItemType | null>(null);
   const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [isMounted, setIsMounted] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    // Trigger mount animation
+    setTimeout(() => setIsMounted(true), 10);
+  }, []);
 
-  const itemTypes = [
-    {
-      type: "section" as const,
-      label: "Seção",
-      icon: <FolderOpen size={20} />,
-      description: "Organize conteúdo em seções",
-    },
-    {
-      type: "video" as const,
-      label: "Vídeo",
-      icon: <Video size={20} />,
-      description: "Adicione um vídeo do YouTube",
-    },
-    {
-      type: "task" as const,
-      label: "Tarefa",
-      icon: <CheckSquare size={20} />,
-      description: "Crie uma tarefa para completar",
-    },
-    {
-      type: "note" as const,
-      label: "Nota",
-      icon: <StickyNote size={20} />,
-      description: "Adicione uma nota ou observação",
-    },
-  ];
+  const handleCancel = useCallback(() => {
+    setIsMounted(false);
+    setTimeout(() => {
+      onCancel();
+    }, 200);
+  }, [onCancel]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return;
+  useEffect(() => {
+    if (selectedType === "video" && inputRef.current) {
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+    }
+  }, [selectedType]);
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        handleCancel();
+      }
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [handleCancel]);
+
+  // Close on backdrop click
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      handleCancel();
+    }
+  };
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!selectedType) return;
+
+    // For video, require title
+    if (selectedType === "video" && !title.trim()) return;
 
     onAdd({
       type: selectedType,
-      title: title.trim(),
-      content: content.trim() || undefined,
+      title: title.trim() || "Novo item",
+      content: undefined,
       youtube_url: youtubeUrl.trim() || undefined,
       parent_id: parentId,
     });
 
     // Reset form
     setTitle("");
-    setContent("");
     setYoutubeUrl("");
-    setSelectedType("section");
-    onClose();
+    setSelectedType(null);
+    handleCancel();
   };
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0, 0, 0, 0.4)" }}
-      onClick={onClose}
-    >
-      <div
-        className="rounded-lg shadow-2xl w-full max-w-lg mx-4"
-        style={{
-          backgroundColor: "var(--background)",
-          borderColor: "var(--border-color)",
-          borderWidth: "1px",
-          borderStyle: "solid",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div
-          className="flex items-center justify-between px-6 py-4"
-          style={{
-            borderBottomWidth: "1px",
-            borderBottomStyle: "solid",
-            borderBottomColor: "var(--border-color)",
-          }}
-        >
-          <h2
-            className="text-xl font-semibold"
-            style={{ color: "var(--foreground)" }}
-          >
-            Adicionar Novo Item
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-md transition-colors"
-            style={{
-              color: "var(--foreground)",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = "var(--hover-bg)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "transparent";
-            }}
-          >
-            <X size={18} />
-          </button>
-        </div>
+  const handleTypeClick = (type: ItemType) => {
+    // If clicking on video, select it and show form
+    if (type === "video") {
+      setSelectedType(type);
+      return;
+    }
 
-        {/* Content */}
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-5">
-          {/* Type Selection */}
-          <div>
-            <label
-              className="block text-sm font-medium mb-3"
-              style={{ color: "var(--foreground)" }}
-            >
-              Tipo de Item
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              {itemTypes.map((itemType) => (
+    // For other types, create immediately
+    onAdd({
+      type,
+      title: "Novo item",
+      content: undefined,
+      youtube_url: undefined,
+      parent_id: parentId,
+    });
+    handleCancel();
+  };
+
+  const availableTypes = ITEM_TYPES.filter((itemType) => {
+    const allowedTypes: ItemType[] = ["folder", "note", "video"];
+    return allowedTypes.includes(itemType.type);
+  });
+
+  if (typeof window === "undefined") return null;
+
+  const modalContent = (
+    <div
+      className="fixed inset-0 z-[9999] flex flex-col items-center justify-center"
+      onClick={handleBackdropClick}
+      style={{
+        backgroundColor: "rgba(0, 0, 0, 0.25)",
+        backdropFilter: "blur(30px) saturate(200%)",
+        WebkitBackdropFilter: "blur(30px) saturate(200%)",
+        opacity: isMounted ? 1 : 0,
+        transition: "opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
+      }}
+    >
+      {/* Close Button - macOS style dark */}
+      <button
+        onClick={handleCancel}
+        className="absolute top-8 right-8 p-2 rounded-full transition-all hover:bg-white/5 backdrop-blur-xl z-10"
+        style={{
+          color: "rgba(255, 255, 255, 0.7)",
+          boxShadow: "0 2px 8px rgba(0, 0, 0, 0.3)",
+        }}
+        aria-label="Fechar"
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+          e.currentTarget.style.transform = "scale(1.1)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = "rgba(0, 0, 0, 0.3)";
+          e.currentTarget.style.transform = "scale(1)";
+        }}
+      >
+        <X size={18} />
+      </button>
+
+      <div
+        ref={modalRef}
+        onClick={(e) => e.stopPropagation()}
+        className="relative flex flex-col items-center"
+        style={{
+          transform: isMounted ? "scale(1)" : "scale(0.9)",
+          opacity: isMounted ? 1 : 0,
+          transition: "all 0.3s ease-out",
+        }}
+      >
+        {/* Icon Grid - macOS Dock style */}
+        {!selectedType && (
+          <div className="flex items-center justify-center gap-6">
+            {availableTypes.map((itemType, index) => {
+              const IconComponent = itemType.icon;
+              return (
                 <button
                   key={itemType.type}
                   type="button"
-                  onClick={() => setSelectedType(itemType.type)}
-                  className="flex flex-col items-center gap-2.5 p-4 rounded-lg transition-all"
+                  onClick={() => handleTypeClick(itemType.type)}
+                  className="flex flex-col items-center justify-center transition-all duration-300"
                   style={{
-                    borderWidth: "1px",
-                    borderStyle: "solid",
-                    borderColor:
-                      selectedType === itemType.type
-                        ? "#3b82f6"
-                        : "var(--border-color)",
-                    backgroundColor:
-                      selectedType === itemType.type
-                        ? "rgba(59, 130, 246, 0.1)"
-                        : "transparent",
+                    opacity: isMounted ? 1 : 0,
+                    transform: isMounted
+                      ? "translateY(0) scale(1)"
+                      : "translateY(40px) scale(0.7)",
+                    transition: `all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) ${
+                      0.1 + index * 0.1
+                    }s`,
+                    backgroundColor: "transparent",
                   }}
                   onMouseEnter={(e) => {
-                    if (selectedType !== itemType.type) {
-                      e.currentTarget.style.backgroundColor = "var(--hover-bg)";
-                    }
+                    e.currentTarget.style.transform =
+                      "translateY(-12px) scale(1.15)";
                   }}
                   onMouseLeave={(e) => {
-                    if (selectedType !== itemType.type) {
-                      e.currentTarget.style.backgroundColor = "transparent";
-                    }
+                    e.currentTarget.style.transform = "translateY(0) scale(1)";
                   }}
                 >
-                  <span
+                  <div
+                    className="mb-2 p-6 rounded-3xl transition-all duration-300"
                     style={{
+                      backgroundColor: "transparent",
                       color:
-                        selectedType === itemType.type
-                          ? "#3b82f6"
-                          : "var(--foreground)",
-                      opacity: 0.8,
+                        itemType.type === "folder"
+                          ? "#a78bfa"
+                          : itemType.type === "note"
+                          ? "#60a5fa"
+                          : "#f87171",
                     }}
                   >
-                    {itemType.icon}
-                  </span>
+                    <IconComponent size={96} />
+                  </div>
                   <span
-                    className="text-sm font-medium"
+                    className="text-lg font-medium"
                     style={{
-                      color:
-                        selectedType === itemType.type
-                          ? "#3b82f6"
-                          : "var(--foreground)",
+                      color: "rgba(255, 255, 255, 0.9)",
+                      textShadow: "0 1px 2px rgba(0, 0, 0, 0.5)",
                     }}
                   >
                     {itemType.label}
                   </span>
-                  <span
-                    className="text-xs text-center leading-tight"
-                    style={{
-                      color: "var(--foreground)",
-                      opacity: 0.6,
-                    }}
-                  >
-                    {itemType.description}
-                  </span>
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
+        )}
 
-          {/* Title */}
-          <div>
-            <label
-              className="block text-sm font-medium mb-2"
-              style={{ color: "var(--foreground)" }}
-            >
-              Título <span style={{ opacity: 0.6 }}>*</span>
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Digite o título..."
-              className="w-full px-3 py-2.5 rounded-md focus:outline-none transition-all"
-              style={{
-                backgroundColor: "var(--background)",
-                borderColor: "var(--border-color)",
-                borderWidth: "1px",
-                borderStyle: "solid",
-                color: "var(--foreground)",
-              }}
-              onFocus={(e) => {
-                e.currentTarget.style.borderColor = "#3b82f6";
-                e.currentTarget.style.boxShadow =
-                  "0 0 0 2px rgba(59, 130, 246, 0.1)";
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = "var(--border-color)";
-                e.currentTarget.style.boxShadow = "none";
-              }}
-              autoFocus
-              required
-            />
-          </div>
-
-          {/* YouTube URL (only for video type) */}
-          {selectedType === "video" && (
-            <div>
-              <label
-                className="block text-sm font-medium mb-2"
-                style={{ color: "var(--foreground)" }}
-              >
-                URL do YouTube
-              </label>
-              <input
-                type="url"
-                value={youtubeUrl}
-                onChange={(e) => setYoutubeUrl(e.target.value)}
-                placeholder="https://www.youtube.com/watch?v=..."
-                className="w-full px-3 py-2.5 rounded-md focus:outline-none transition-all"
-                style={{
-                  backgroundColor: "var(--background)",
-                  borderColor: "var(--border-color)",
-                  borderWidth: "1px",
-                  borderStyle: "solid",
-                  color: "var(--foreground)",
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = "#3b82f6";
-                  e.currentTarget.style.boxShadow =
-                    "0 0 0 2px rgba(59, 130, 246, 0.1)";
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = "var(--border-color)";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              />
-            </div>
-          )}
-
-          {/* Content (for task and note) */}
-          {(selectedType === "task" || selectedType === "note") && (
-            <div>
-              <label
-                className="block text-sm font-medium mb-2"
-                style={{ color: "var(--foreground)" }}
-              >
-                Descrição
-              </label>
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="Digite a descrição..."
-                rows={3}
-                className="w-full px-3 py-2.5 rounded-md focus:outline-none resize-none transition-all"
-                style={{
-                  backgroundColor: "var(--background)",
-                  borderColor: "var(--border-color)",
-                  borderWidth: "1px",
-                  borderStyle: "solid",
-                  color: "var(--foreground)",
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = "#3b82f6";
-                  e.currentTarget.style.boxShadow =
-                    "0 0 0 2px rgba(59, 130, 246, 0.1)";
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = "var(--border-color)";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              />
-            </div>
-          )}
-
-          {/* Actions */}
-          <div
-            className="flex gap-3 pt-3"
+        {/* Video Form - Floating */}
+        {selectedType === "video" && (
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-6 w-full max-w-md"
             style={{
-              borderTopWidth: "1px",
-              borderTopStyle: "solid",
-              borderTopColor: "var(--border-color)",
-              paddingTop: "1rem",
+              opacity: isMounted ? 1 : 0,
+              transform: isMounted ? "translateY(0)" : "translateY(20px)",
+              transition: "all 0.4s ease-out",
             }}
           >
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2.5 rounded-md font-medium transition-colors"
+            <div
+              className="p-10 rounded-3xl"
               style={{
                 backgroundColor: "transparent",
-                borderColor: "var(--border-color)",
-                borderWidth: "1px",
-                borderStyle: "solid",
-                color: "var(--foreground)",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--hover-bg)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "transparent";
               }}
             >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="flex-1 px-4 py-2.5 rounded-md font-medium text-white transition-colors"
-              style={{
-                backgroundColor: "#3b82f6",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "#2563eb";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "#3b82f6";
-              }}
-            >
-              Adicionar
-            </button>
-          </div>
-        </form>
+              <div>
+                <label
+                  className="block text-sm font-medium mb-3"
+                  style={{ color: "rgba(255, 255, 255, 0.9)" }}
+                >
+                  Título do Vídeo
+                </label>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Digite o título..."
+                  className="w-full px-5 py-4 rounded-2xl text-base focus:outline-none transition-all"
+                  style={{
+                    backgroundColor: "transparent",
+                    color: "rgba(255, 255, 255, 0.95)",
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleSubmit();
+                    } else if (e.key === "Escape") {
+                      handleCancel();
+                    }
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor =
+                      "rgba(96, 165, 250, 0.5)";
+                    e.currentTarget.style.boxShadow =
+                      "0 0 0 4px rgba(96, 165, 250, 0.15)";
+                    e.currentTarget.style.backgroundColor = "transparent";
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor =
+                      "rgba(255, 255, 255, 0.1)";
+                    e.currentTarget.style.boxShadow = "none";
+                    e.currentTarget.style.backgroundColor = "transparent";
+                  }}
+                  required
+                />
+              </div>
+
+              <div className="mt-4">
+                <label
+                  className="block text-sm font-medium mb-1"
+                  style={{ color: "rgba(255, 255, 255, 0.9)" }}
+                >
+                  URL do YouTube (opcional)
+                </label>
+                <input
+                  type="url"
+                  value={youtubeUrl}
+                  onChange={(e) => setYoutubeUrl(e.target.value)}
+                  placeholder="https://youtube.com/watch?v=..."
+                  className="w-full px-5 py-4 rounded-2xl text-sm focus:outline-none transition-all"
+                  style={{
+                    backgroundColor: "transparent",
+                    backdropFilter: "blur(20px)",
+                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                    color: "rgba(255, 255, 255, 0.95)",
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleSubmit();
+                    } else if (e.key === "Escape") {
+                      handleCancel();
+                    }
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor =
+                      "rgba(96, 165, 250, 0.5)";
+                    e.currentTarget.style.boxShadow =
+                      "0 0 0 4px rgba(96, 165, 250, 0.15)";
+                    e.currentTarget.style.backgroundColor = "transparent";
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor =
+                      "rgba(255, 255, 255, 0.1)";
+                    e.currentTarget.style.boxShadow = "none";
+                    e.currentTarget.style.backgroundColor = "transparent";
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-4 justify-center">
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="px-8 py-3 rounded-xl text-sm font-medium transition-all backdrop-blur-xl"
+                style={{
+                  color: "rgba(255, 255, 255, 0.8)",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor =
+                    "rgba(255, 255, 255, 0.1)";
+                  e.currentTarget.style.transform = "scale(1.02)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                  e.currentTarget.style.transform = "scale(1)";
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={!title.trim()}
+                className="px-8 py-3 rounded-xl text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-xl"
+                style={{
+                  color: "white",
+                  backgroundColor: title.trim()
+                    ? "#007AFF"
+                    : "rgba(107, 114, 128, 0.4)",
+                  border: title.trim()
+                    ? "1px solid rgba(0, 122, 255, 0.3)"
+                    : "1px solid rgba(107, 114, 128, 0.2)",
+                  boxShadow: title.trim()
+                    ? "0 2px 8px rgba(0, 122, 255, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)"
+                    : "none",
+                }}
+                onMouseEnter={(e) => {
+                  if (title.trim()) {
+                    e.currentTarget.style.backgroundColor = "#0051D5";
+                    e.currentTarget.style.boxShadow =
+                      "0 4px 12px rgba(0, 122, 255, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2)";
+                    e.currentTarget.style.transform = "scale(1.02)";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (title.trim()) {
+                    e.currentTarget.style.backgroundColor = "#007AFF";
+                    e.currentTarget.style.boxShadow =
+                      "0 2px 8px rgba(0, 122, 255, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)";
+                    e.currentTarget.style.transform = "scale(1)";
+                  }
+                }}
+              >
+                Adicionar
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }

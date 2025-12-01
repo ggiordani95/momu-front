@@ -31,6 +31,7 @@ interface WorkspaceState {
   syncFiles: () => Promise<void>;
   addOptimisticFile: (file: File) => void;
   markFileAsDeleted: (fileId: string) => void;
+  markFilesAsDeleted: (fileIds: string[]) => void;
   markFileAsRestored: (fileId: string) => void;
   removeFilePermanently: (fileId: string) => void;
   updateFileInStore: (fileId: string, updates: Partial<File>) => void;
@@ -158,6 +159,29 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           deletedFileIds: updatedFiles
             .filter((f) => f.active === false)
             .map((f) => f.id),
+        });
+      },
+
+      // Mark multiple files as deleted (optimistic update) - more efficient for batch deletes
+      markFilesAsDeleted: (fileIds: string[]) => {
+        const state = get();
+        const fileIdsSet = new Set(fileIds);
+
+        const updatedFiles = state.files.map((file) =>
+          fileIdsSet.has(file.id) && file.active !== false
+            ? { ...file, active: false }
+            : file
+        );
+
+        const deletedCount = updatedFiles.filter(
+          (f) => f.active === false && fileIdsSet.has(f.id)
+        ).length;
+
+        set({ files: updatedFiles });
+        console.log(`🗑️ [Zustand] Marked ${deletedCount} files as deleted:`, {
+          fileIds,
+          totalFiles: updatedFiles.length,
+          deletedFiles: updatedFiles.filter((f) => f.active === false).length,
         });
       },
 

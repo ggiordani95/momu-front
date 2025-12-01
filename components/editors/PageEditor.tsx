@@ -25,6 +25,7 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import { Extension } from "@tiptap/core";
 import Image from "@tiptap/extension-image";
 import type { HierarchicalFile } from "@/lib/types";
+import { markdownToHtml } from "@/lib/utils/markdownToHtml";
 
 // Custom FontSize extension
 const FontSize = Extension.create({
@@ -100,7 +101,7 @@ export default function PageEditor({
   const [showFontSizeMenu, setShowFontSizeMenu] = useState(false);
   const fontSizeMenuRef = useRef<HTMLDivElement>(null);
 
-  // Helper function to convert \n to HTML breaks
+  // Helper function to convert markdown or \n to HTML breaks
   const convertNewlinesToHTML = (content: string): string => {
     if (!content) return "<p></p>";
 
@@ -109,9 +110,35 @@ export default function PageEditor({
       content.includes("<") &&
       content.includes(">") &&
       !content.includes("\\n") &&
-      !content.includes("\n")
+      !content.includes("\n") &&
+      !content.includes("#") &&
+      !content.includes("*") &&
+      !content.includes("`") &&
+      !content.includes("](")
     ) {
       return content;
+    }
+
+    // Check if content looks like markdown (has markdown syntax)
+    const hasMarkdownSyntax =
+      content.includes("#") || // Headers
+      content.includes("**") || // Bold
+      content.includes("*") || // Italic or lists
+      content.includes("`") || // Code
+      content.includes("](") || // Links
+      content.includes(">") || // Blockquotes
+      content.includes("- ") || // Lists
+      content.includes("1. "); // Numbered lists
+
+    // If it looks like markdown, convert it
+    if (hasMarkdownSyntax) {
+      try {
+        const html = markdownToHtml(content);
+        return html || "<p></p>";
+      } catch (error) {
+        console.error("Error converting markdown to HTML:", error);
+        // Fall through to regular conversion
+      }
     }
 
     // Handle both literal \n (escaped) and actual newlines

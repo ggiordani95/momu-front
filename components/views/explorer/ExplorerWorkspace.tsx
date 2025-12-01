@@ -1,8 +1,8 @@
 "use client";
 
-import { Folder as FolderIcon, Plus, X } from "lucide-react";
+import { Folder as FolderIcon, Plus } from "lucide-react";
 import { type ItemType } from "@/lib/itemTypes";
-import AddItemInline from "@/components/AddItemInline";
+import AddItemModal from "@/components/AddItemModal";
 import FolderSkeleton from "@/components/files/FolderSkeleton";
 import Breadcrumb from "@/components/Breadcrumb";
 import FileCard from "@/components/files/FileCard";
@@ -29,6 +29,7 @@ interface ExplorerWorkspaceProps {
     value: string
   ) => void;
   onItemDelete?: (id: string) => void;
+  onItemDeleteBatch?: (ids: string[]) => void;
   loading?: boolean;
   workspaceId?: string;
   pendingItems?: Map<string, { item: HierarchicalFile; data: CreateFileDto }>;
@@ -44,6 +45,7 @@ export function ExplorerWorkspace({
   onAddItem,
   onItemUpdate,
   onItemDelete,
+  onItemDeleteBatch,
   loading = false,
   workspaceId,
   pendingItems,
@@ -52,6 +54,8 @@ export function ExplorerWorkspace({
 }: ExplorerWorkspaceProps) {
   const isLoading = loading;
   const [showAddItem, setShowAddItem] = useState(false);
+
+  console.log(files);
 
   // Find current folder or use root - memoize with stable reference
   const currentFolder = useMemo(() => {
@@ -77,10 +81,15 @@ export function ExplorerWorkspace({
   const sortedItems = useMemo(() => {
     const folderFiles = currentFolderId
       ? currentFolder?.children || []
-      : files.filter((file) => !file.parent_id);
+      : files.filter((file) => !file.parent_id && file.active !== false);
+
+    // Filter out deleted files (active === false) - they should only appear in trash
+    const activeFiles = folderFiles.filter(
+      (file: HierarchicalFile) => file.active !== false
+    );
 
     // Sort by order_index
-    return [...folderFiles].sort(
+    return [...activeFiles].sort(
       (a, b) => (a.order_index || 0) - (b.order_index || 0)
     );
   }, [currentFolderId, currentFolder, files]);
@@ -124,12 +133,19 @@ export function ExplorerWorkspace({
         e.preventDefault();
         e.stopPropagation();
 
-        // Delete all selected files
-        selectedIds.forEach((fileId) => {
-          if (onItemDelete) {
+        // Delete all selected files in batch
+        // Convert Set to Array to ensure we process all items
+        const fileIdsArray = Array.from(selectedIds);
+
+        // Use batch delete if available (more efficient), otherwise delete one by one
+        if (onItemDeleteBatch && fileIdsArray.length > 1) {
+          onItemDeleteBatch(fileIdsArray);
+        } else if (onItemDelete) {
+          // Fallback to individual deletes
+          fileIdsArray.forEach((fileId) => {
             onItemDelete(fileId);
-          }
-        });
+          });
+        }
 
         // Clear selection after deleting
         clearSelection();
@@ -140,7 +156,7 @@ export function ExplorerWorkspace({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [selectedIds, onItemDelete, clearSelection]);
+  }, [selectedIds, onItemDelete, onItemDeleteBatch, clearSelection]);
 
   return (
     <div className="h-full flex flex-col">
@@ -158,49 +174,16 @@ export function ExplorerWorkspace({
         workspaces={workspaces}
         currentWorkspaceId={workspaceId}
         actionButton={
-          <div className="flex items-center gap-3">
-            {!showAddItem ? (
-              <button
-                onClick={() => setShowAddItem(true)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:bg-hover/50"
-                style={{
-                  color: "var(--foreground)",
-                }}
-              >
-                <Plus size={16} />
-                Adicionar Item
-              </button>
-            ) : (
-              <>
-                {onAddItem && (
-                  <div className="min-w-[400px]">
-                    <AddItemInline
-                      onAdd={(item) => {
-                        onAddItem({
-                          ...item,
-                          parent_id: currentFolderId || undefined,
-                        });
-                        setShowAddItem(false);
-                      }}
-                      onCancel={() => setShowAddItem(false)}
-                      parentId={currentFolderId || undefined}
-                      allowSections={true}
-                    />
-                  </div>
-                )}
-                <button
-                  onClick={() => setShowAddItem(false)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:bg-hover/50 shrink-0"
-                  style={{
-                    color: "var(--foreground)",
-                  }}
-                >
-                  <X size={16} />
-                  Cancelar
-                </button>
-              </>
-            )}
-          </div>
+          <button
+            onClick={() => setShowAddItem(true)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:bg-hover/50"
+            style={{
+              color: "var(--foreground)",
+            }}
+          >
+            <Plus size={16} />
+            Adicionar Item
+          </button>
         }
       />
 
@@ -281,6 +264,22 @@ export function ExplorerWorkspace({
                   isSelected={selectedIds.has(item.id)}
                 />
               ))}
+
+              {/* Add Item Modal */}
+              {showAddItem && onAddItem && (
+                <AddItemModal
+                  onAdd={(item) => {
+                    onAddItem({
+                      ...item,
+                      parent_id: currentFolderId || undefined,
+                    });
+                    setShowAddItem(false);
+                  }}
+                  onCancel={() => setShowAddItem(false)}
+                  parentId={currentFolderId || undefined}
+                  allowSections={true}
+                />
+              )}
 
               {/* Empty State */}
               {sortedItems.length === 0 && !showAddItem && !isLoading && (

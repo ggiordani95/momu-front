@@ -4,6 +4,7 @@ import { Folder } from "lucide-react";
 import { useMemo, useEffect, useCallback } from "react";
 import FileCard from "../../files/FileCard";
 import FolderSkeleton from "../../files/FolderSkeleton";
+import Breadcrumb from "../../Breadcrumb";
 import {
   useRestoreItem,
   usePermanentDeleteItem,
@@ -13,37 +14,39 @@ import {
   removePendingOperation,
 } from "@/lib/services/offlineSync";
 import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
-import type { HierarchicalFile } from "@/lib/types";
+import type { HierarchicalFile, Workspace } from "@/lib/types";
 import { useMultiSelect } from "@/lib/hooks/useMultiSelect";
 
 interface TrashWorkspaceProps {
   topicId: string;
   onRestore?: () => void;
   onPermanentDelete?: (id: string) => void;
+  workspaces?: Workspace[];
 }
 
 export function TrashWorkspace({
   topicId,
   onRestore,
   onPermanentDelete,
+  workspaces = [],
 }: TrashWorkspaceProps) {
-  // Use Zustand store - filter directly from global JSON
-  // Get all files from the store and filter by workspace and active === false
-  // Using selector to ensure re-render when files change
-  const allFiles = useWorkspaceStore((state) => state.files);
+  // Use Zustand store - use getDeletedFilesByWorkspace for better performance
+  // This ensures we get files with active === false
+  const { getDeletedFilesByWorkspace, files: allFiles } = useWorkspaceStore();
   const deletedFiles = useMemo(() => {
-    // Filter from global JSON: workspace current + active === false
-    const filtered = allFiles.filter(
-      (file) => file.workspace_id === topicId && file.active === false
-    );
+    // Use the getter function which filters by workspace and active === false
+    const filtered = getDeletedFilesByWorkspace(topicId);
     console.log(`🗑️ [TrashWorkspace] Filtered deleted files:`, {
       topicId,
       totalFiles: allFiles.length,
       deletedFilesCount: filtered.length,
       deletedFileIds: filtered.map((f) => f.id),
+      allFilesActiveStatus: allFiles
+        .filter((f) => f.workspace_id === topicId)
+        .map((f) => ({ id: f.id, active: f.active })),
     });
     return filtered;
-  }, [allFiles, topicId]);
+  }, [getDeletedFilesByWorkspace, topicId, allFiles]);
 
   const { isSyncing } = useWorkspaceStore();
   const loading = isSyncing;
@@ -57,19 +60,66 @@ export function TrashWorkspace({
         const { removeFilePermanently } = useWorkspaceStore.getState();
         removeFilePermanently(id);
 
+        // Call API to permanently delete from database
+        const { fileService } = await import("@/lib/services/fileService");
+        await fileService.permanentDelete(id);
+
+        // Also call mutation for React Query cache invalidation
         await permanentDeleteMutation.mutateAsync(id);
+
         if (onPermanentDelete) {
           onPermanentDelete(id);
+        }
+
+        // Sync files to refresh state from backend
+        const { syncFiles } = useWorkspaceStore.getState();
+        if (!useWorkspaceStore.getState().isSyncing) {
+          await syncFiles();
         }
       } catch (error) {
         console.error("Error permanently deleting item:", error);
         // On error, re-sync to get correct state
         const { syncFiles } = useWorkspaceStore.getState();
-        syncFiles();
+        if (!useWorkspaceStore.getState().isSyncing) {
+          syncFiles();
+        }
       }
     },
     [permanentDeleteMutation, onPermanentDelete]
   );
+
+  const handlePermanentDeleteBatch = useCallback(async (ids: string[]) => {
+    try {
+      // Optimistically remove files from Zustand store immediately
+      const { removeFilePermanently } = useWorkspaceStore.getState();
+      ids.forEach((id) => removeFilePermanently(id));
+
+      // Call API to permanently delete from database
+      const { fileService } = await import("@/lib/services/fileService");
+      const result = await fileService.permanentDeleteBatch(ids);
+
+      if (result.success) {
+        console.log(
+          `✅ [Permanent Delete Batch] Successfully deleted ${result.deleted} file(s) from database`
+        );
+
+        // Sync files to refresh state from backend
+        const { syncFiles } = useWorkspaceStore.getState();
+        if (!useWorkspaceStore.getState().isSyncing) {
+          await syncFiles();
+        }
+      } else {
+        throw new Error("Permanent delete batch failed");
+      }
+    } catch (error) {
+      console.error("Error permanently deleting items:", error);
+      // On error, re-sync to get correct state
+      const { syncFiles } = useWorkspaceStore.getState();
+      if (!useWorkspaceStore.getState().isSyncing) {
+        syncFiles();
+      }
+    }
+  }, []);
 
   // Multi-select functionality
   const {
@@ -97,10 +147,15 @@ export function TrashWorkspace({
         e.preventDefault();
         e.stopPropagation();
 
-        // Permanently delete all selected files
-        selectedIds.forEach((fileId: string) => {
-          handlePermanentDelete(fileId);
-        });
+        // Permanently delete all selected files in batch
+        const fileIdsArray = Array.from(selectedIds);
+
+        // Use batch delete for better performance
+        if (fileIdsArray.length > 1) {
+          handlePermanentDeleteBatch(fileIdsArray);
+        } else if (fileIdsArray.length === 1) {
+          handlePermanentDelete(fileIdsArray[0]);
+        }
 
         // Clear selection after deleting
         clearSelection();
@@ -111,7 +166,12 @@ export function TrashWorkspace({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [selectedIds, clearSelection, handlePermanentDelete]);
+  }, [
+    selectedIds,
+    clearSelection,
+    handlePermanentDelete,
+    handlePermanentDeleteBatch,
+  ]);
 
   // Get DELETE operations from localStorage that haven't been synced yet
   // These are items that were deleted but the Zustand store hasn't been updated yet
@@ -201,6 +261,15 @@ export function TrashWorkspace({
 
   return (
     <div className="h-full flex flex-col">
+      {/* Breadcrumb */}
+      <Breadcrumb
+        items={[]}
+        currentFolderId={null}
+        onNavigate={() => {}}
+        workspaces={workspaces}
+        currentWorkspaceId={topicId}
+        currentView="trash"
+      />
       {/* File Grid - same layout as FileExplorer */}
       <div
         ref={containerRef}

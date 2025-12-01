@@ -8,8 +8,7 @@ import {
   useCallback,
   startTransition,
 } from "react";
-import { useRouter, usePathname } from "next/navigation";
-
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useWorkspaceData } from "@/lib/hooks/useSyncFiles";
 import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
 import { buildHierarchy } from "@/lib/utils/hierarchy";
@@ -26,6 +25,7 @@ import {
 } from "@/lib/services/offlineSync";
 import { SocialWorkspace } from "@/components/views/social/SocialWorkspace";
 import { PlannerWorkspace } from "@/components/views/planner/PlannerWorkspace";
+import { AIWorkspace } from "@/components/views/ai/AIWorkspace";
 import { GlobalSearch } from "@/components/GlobalSearch";
 
 interface WorkspaceViewProps {
@@ -39,9 +39,32 @@ export default function WorkspaceView({
 }: WorkspaceViewProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Get view from URL query params, default to "explorer"
+  const viewFromUrl = searchParams.get("view") as
+    | "explorer"
+    | "settings"
+    | "trash"
+    | "social"
+    | "planner"
+    | "ai"
+    | null;
+
   const [currentView, setCurrentView] = useState<
-    "explorer" | "settings" | "trash" | "social" | "planner"
-  >("explorer");
+    "explorer" | "settings" | "trash" | "social" | "planner" | "ai"
+  >(viewFromUrl || "explorer");
+
+  // Update view when URL changes (only on mount or when view param changes)
+  useEffect(() => {
+    if (viewFromUrl && viewFromUrl !== currentView) {
+      setCurrentView(viewFromUrl);
+    } else if (!viewFromUrl && currentView !== "explorer") {
+      // If no view param and we're not on explorer, reset to explorer
+      // This handles the case when navigating to workspace root
+      setCurrentView("explorer");
+    }
+  }, [viewFromUrl, currentView]);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   // Track if component is mounted to avoid hydration mismatch
@@ -606,11 +629,145 @@ export default function WorkspaceView({
     }
   };
 
+  const handleItemDeleteBatch = async (ids: string[]) => {
+    console.log(
+      "🗑️ [WorkspaceView] handleItemDeleteBatch called with ids:",
+      ids
+    );
+
+    // Get the latest state from the store once for all files
+    const { files, markFilesAsDeleted } = useWorkspaceStore.getState();
+
+    // Filter to only files that exist and are active
+    const filesToDelete = files.filter(
+      (f) =>
+        ids.includes(f.id) &&
+        f.workspace_id === workspaceId &&
+        f.active !== false
+    );
+
+    if (filesToDelete.length === 0) {
+      console.warn("⚠️ No active files found to delete");
+      return;
+    }
+
+    const fileIdsToDelete = filesToDelete.map((f) => f.id);
+    const tempIds = fileIdsToDelete.filter((id) => id.startsWith("temp-"));
+
+    // Handle temporary items (not yet created in backend)
+    if (tempIds.length > 0) {
+      tempIds.forEach((id) => {
+        // Remove from pending items state
+        setPendingItems((prev) => {
+          const newMap = new Map(prev);
+          newMap.delete(id);
+          return newMap;
+        });
+
+        // Also remove the CREATE operation from localStorage
+        removePendingOperation(id);
+        console.log(`🗑️ Removed pending item and CREATE operation:`, id);
+      });
+    }
+
+    // Filter out temp IDs - only delete real files
+    const realFileIds = fileIdsToDelete.filter((id) => !id.startsWith("temp-"));
+
+    if (realFileIds.length === 0) {
+      console.log("ℹ️ Only temporary items to delete, skipping API call");
+      return;
+    }
+
+    // Mark all files as deleted in the store at once (optimistic update)
+    markFilesAsDeleted(fileIdsToDelete);
+    console.log(
+      `✅ [Delete] Updated Zustand store for ${fileIdsToDelete.length} files`
+    );
+
+    // Check if online to call API immediately
+    const isOnline = typeof navigator !== "undefined" && navigator.onLine;
+
+    if (isOnline) {
+      try {
+        // Call API to delete all files at once
+        const { fileService } = await import("@/lib/services/fileService");
+        const result = await fileService.deleteBatch(realFileIds);
+
+        if (result.success) {
+          console.log(
+            `✅ [Delete Batch] Successfully deleted ${result.deleted} file(s) via API`
+          );
+
+          // Remove DELETE operations from localStorage since they were synced
+          realFileIds.forEach((id) => {
+            const pendingOps = getPendingOperations();
+            const deleteOps = pendingOps.filter(
+              (op) => op.type === "DELETE" && op.id === id
+            );
+            deleteOps.forEach((op) => {
+              const operationId = `DELETE-${op.id}-${op.timestamp}`;
+              removePendingOperation(operationId);
+            });
+          });
+
+          // Sync files to get latest state from backend
+          const { syncFiles } = useWorkspaceStore.getState();
+          if (!useWorkspaceStore.getState().isSyncing) {
+            await syncFiles();
+          }
+        } else {
+          throw new Error("Delete batch failed");
+        }
+      } catch (error) {
+        console.error(
+          `❌ [Delete Batch] Failed to delete via API, saving to localStorage:`,
+          error
+        );
+
+        // Fallback: save to localStorage for offline sync
+        realFileIds.forEach((id) => {
+          const pendingOps = getPendingOperations();
+          const alreadyDeleted = pendingOps.some(
+            (op) => op.type === "DELETE" && op.id === id
+          );
+
+          if (!alreadyDeleted) {
+            savePendingOperation({
+              type: "DELETE",
+              id,
+              workspaceId,
+              timestamp: Date.now(),
+            });
+            console.log(`💾 Saved delete operation to localStorage:`, id);
+          }
+        });
+      }
+    } else {
+      // Offline: save to localStorage for sync
+      realFileIds.forEach((id) => {
+        const pendingOps = getPendingOperations();
+        const alreadyDeleted = pendingOps.some(
+          (op) => op.type === "DELETE" && op.id === id
+        );
+
+        if (!alreadyDeleted) {
+          savePendingOperation({
+            type: "DELETE",
+            id,
+            workspaceId,
+            timestamp: Date.now(),
+          });
+          console.log(`💾 Saved delete operation to localStorage:`, id);
+        }
+      });
+    }
+  };
+
   const handleItemDelete = async (id: string) => {
     console.log("🗑️ [WorkspaceView] handleItemDelete called with id:", id);
 
-    // First, check if the item is already marked as deleted in the store
-    // This is the source of truth for UI state
+    // Always get the latest state from the store to avoid race conditions
+    // This is especially important when deleting multiple files at once
     const { files, markFileAsDeleted } = useWorkspaceStore.getState();
     const file = files.find(
       (f) => f.id === id && f.workspace_id === workspaceId
@@ -628,10 +785,15 @@ export default function WorkspaceView({
     if (file && file.active !== false) {
       markFileAsDeleted(id);
       console.log(`✅ [Delete] Updated Zustand store for file: ${id}`);
+    } else if (!file) {
+      // File not found in store - might be a pending item or already deleted
+      console.warn(
+        `⚠️ File ${id} not found in store, checking if it's pending...`
+      );
     }
 
     // Then check if there's already a DELETE operation pending in localStorage
-    // If not, save it. If yes, we still want to update the UI (already done above)
+    // Get fresh state to avoid race conditions
     const pendingOps = getPendingOperations();
     const alreadyDeleted = pendingOps.some(
       (op) => op.type === "DELETE" && op.id === id
@@ -660,15 +822,23 @@ export default function WorkspaceView({
       return;
     }
 
-    // Save delete operation to localStorage for backend sync
-    // (markFileAsDeleted was already called above if the file exists)
-    savePendingOperation({
-      type: "DELETE",
-      id,
-      workspaceId,
-      timestamp: Date.now(),
-    });
-    console.log(`💾 Saved delete operation to localStorage:`, id);
+    // Only save delete operation if file exists in store
+    // This prevents creating delete operations for files that don't exist
+    if (file) {
+      // Save delete operation to localStorage for backend sync
+      // (markFileAsDeleted was already called above if the file exists)
+      savePendingOperation({
+        type: "DELETE",
+        id,
+        workspaceId,
+        timestamp: Date.now(),
+      });
+      console.log(`💾 Saved delete operation to localStorage:`, id);
+    } else {
+      console.warn(
+        `⚠️ File ${id} not found in store, skipping delete operation save`
+      );
+    }
 
     // Note: The actual backend sync will happen on next page load
     // The UI update happens via removeOptimisticItem in HomeContent
@@ -1118,12 +1288,14 @@ export default function WorkspaceView({
         handleItemUpdate={handleItemUpdate}
         handleAddItem={handleAddItem}
         handleItemDelete={handleItemDelete}
+        handleItemDeleteBatch={handleItemDeleteBatch}
         files={files}
         workspaceId={workspaceId}
         loading={loading}
         pendingItems={pendingItems}
         setPendingItems={setPendingItems}
         workspacesItems={workspacesItems}
+        router={router}
       />
       <GlobalSearch
         isOpen={isSearchOpen}
@@ -1146,16 +1318,18 @@ function HomeContent({
   handleItemUpdate,
   handleAddItem,
   handleItemDelete,
+  handleItemDeleteBatch,
   files,
   workspaceId,
   loading,
   pendingItems,
   setPendingItems,
   workspacesItems,
+  router,
 }: {
-  currentView: "explorer" | "settings" | "trash" | "social" | "planner";
+  currentView: "explorer" | "settings" | "trash" | "social" | "planner" | "ai";
   setCurrentView: (
-    view: "explorer" | "settings" | "trash" | "social" | "planner"
+    view: "explorer" | "settings" | "trash" | "social" | "planner" | "ai"
   ) => void;
   currentFolderId: string | null;
   selectedItem: HierarchicalFile | null;
@@ -1170,6 +1344,7 @@ function HomeContent({
   ) => void;
   handleAddItem: (item: CreateFileDto) => void;
   handleItemDelete: (id: string) => void;
+  handleItemDeleteBatch: (ids: string[]) => void;
   files: HierarchicalFile[];
   workspaceId: string;
   loading: boolean;
@@ -1180,6 +1355,7 @@ function HomeContent({
     >
   >;
   workspacesItems: Workspace[];
+  router: ReturnType<typeof useRouter>;
 }) {
   // Use Zustand store instead of React Query
   const { getFilesByWorkspace } = useWorkspaceData();
@@ -1197,6 +1373,7 @@ function HomeContent({
   // Use handlers directly - Zustand handles optimistic updates
   const wrappedHandleItemUpdate = handleItemUpdate;
   const wrappedHandleItemDelete = handleItemDelete;
+  const wrappedHandleItemDeleteBatch = handleItemDeleteBatch;
 
   // Create stable key for pending items to avoid unnecessary recalculations
   // Use size and keys string as dependencies since Map itself isn't tracked
@@ -1401,7 +1578,15 @@ function HomeContent({
 
       {/* Sidebar */}
       <SimpleSidebar
-        onNavigate={setCurrentView}
+        onNavigate={(view) => {
+          setCurrentView(view);
+          // Update URL with view query param
+          const newUrl =
+            view === "explorer"
+              ? `/${workspaceId}`
+              : `/${workspaceId}?view=${view}`;
+          router.replace(newUrl);
+        }}
         currentView={currentView}
         workspaceId={workspaceId}
       />
@@ -1426,6 +1611,7 @@ function HomeContent({
               onAddItem={handleAddItem}
               onItemUpdate={wrappedHandleItemUpdate}
               onItemDelete={wrappedHandleItemDelete}
+              onItemDeleteBatch={wrappedHandleItemDeleteBatch}
               loading={loading}
               workspaceId={workspaceId}
               pendingItems={pendingItems}
@@ -1435,6 +1621,7 @@ function HomeContent({
         ) : currentView === "trash" ? (
           <TrashWorkspace
             topicId={workspaceId}
+            workspaces={workspacesItems}
             onRestore={() => {
               // React Query will automatically refetch
             }}
@@ -1446,6 +1633,8 @@ function HomeContent({
           <SocialWorkspace />
         ) : currentView === "planner" ? (
           <PlannerWorkspace workspaceId={workspaceId} />
+        ) : currentView === "ai" ? (
+          <AIWorkspace workspaceId={workspaceId} />
         ) : (
           <SettingsWorkspace />
         )}
