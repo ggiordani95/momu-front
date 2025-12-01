@@ -439,9 +439,10 @@ export default function WorkspaceView({
     let newPath: string;
     let newPathSegments: string[] = [];
 
+    // Always include workspaceId in the path: /explorer/{workspaceId}/{folderPath}
     if (pathToFolder) {
-      newPath = `${baseRoute}/${pathToFolder.join("/")}`;
       newPathSegments = pathToFolder;
+      newPath = `${baseRoute}/${workspaceId}/${pathToFolder.join("/")}`;
     } else {
       // Fallback: check if folder exists at all (even if empty)
       const folderExists = findItemById(files, folderId);
@@ -452,21 +453,25 @@ export default function WorkspaceView({
           const parentPath = buildPathToFolder(files, parentId);
           if (parentPath) {
             newPathSegments = [...parentPath, folderId];
-            newPath = `${baseRoute}/${newPathSegments.join("/")}`;
+            newPath = `${baseRoute}/${workspaceId}/${newPathSegments.join(
+              "/"
+            )}`;
           } else {
             // Just use parent and folder
             newPathSegments = [parentId, folderId];
-            newPath = `${baseRoute}/${newPathSegments.join("/")}`;
+            newPath = `${baseRoute}/${workspaceId}/${newPathSegments.join(
+              "/"
+            )}`;
           }
         } else {
-          // Root level folder
+          // Root level folder - just folder ID after workspaceId
           newPathSegments = [folderId];
-          newPath = `${baseRoute}/${folderId}`;
+          newPath = `${baseRoute}/${workspaceId}/${folderId}`;
         }
       } else {
         // Folder not found, but navigate anyway (might be a new folder)
         newPathSegments = [folderId];
-        newPath = `${baseRoute}/${folderId}`;
+        newPath = `${baseRoute}/${workspaceId}/${folderId}`;
       }
     }
 
@@ -506,6 +511,23 @@ export default function WorkspaceView({
     // Remove the item ID if it's the last segment
     if (selectedItem && segments[segments.length - 1] === selectedItem.id) {
       segments.pop();
+    }
+
+    // Check if we're in explorer view with workspaceId structure
+    if (view === "explorer" && segments.length >= 2) {
+      const secondSegment = segments[1];
+      const { workspaces } = useWorkspaceStore.getState();
+      const isWorkspaceId = workspaces.some((w) => w.id === secondSegment);
+
+      if (isWorkspaceId) {
+        // In /explorer/{workspaceId}/... structure
+        // If only view and workspaceId remain, return /explorer/{workspaceId}
+        if (segments.length === 2) {
+          return `/${view}/${secondSegment}`;
+        }
+        // Return view route with workspaceId and remaining path segments
+        return `/${segments.join("/")}`;
+      }
     }
 
     // If only view remains, return just the view route
@@ -683,20 +705,71 @@ export default function WorkspaceView({
     );
   };
 
+  const handleNavigateToWorkspaceRoot = () => {
+    // Navigate to workspace root: /explorer/{workspaceId}
+    const view = pathname?.split("/")[1] || "explorer";
+    const newPath = `/${view}/${workspaceId}`;
+
+    // Update state
+    setCurrentFolderId(null);
+    setSelectedItem(null);
+
+    // Update URL
+    if (typeof window !== "undefined") {
+      requestAnimationFrame(() => {
+        window.history.replaceState(
+          { ...window.history.state, path: newPath },
+          "",
+          newPath
+        );
+      });
+    }
+  };
+
   const handleBack = () => {
     // Go up one level in the path
     const pathParts = pathname.split("/").filter(Boolean);
     const view = pathParts[0] || "explorer";
 
     let newPath: string;
-    if (pathParts.length > 1) {
-      // Remove last folder from path
-      pathParts.pop();
-      newPath = `/${pathParts.join("/")}`;
+
+    // Check if we're in explorer view and have workspaceId structure
+    if (view === "explorer" && pathParts.length >= 2) {
+      // Check if second segment is workspaceId
+      const secondSegment = pathParts[1];
+      const { workspaces } = useWorkspaceStore.getState();
+      const isWorkspaceId = workspaces.some((w) => w.id === secondSegment);
+
+      if (isWorkspaceId) {
+        // We're in /explorer/{workspaceId}/{folderPath} structure
+        if (pathParts.length > 2) {
+          // Remove last folder from path, keep workspaceId
+          const newPathParts = pathParts.slice(0, -1);
+          newPath = `/${newPathParts.join("/")}`;
+        } else {
+          // Go to workspace root: /explorer/{workspaceId}
+          newPath = `/${view}/${secondSegment}`;
+          setCurrentFolderId(null);
+        }
+      } else {
+        // Old structure or other view - use original logic
+        if (pathParts.length > 1) {
+          pathParts.pop();
+          newPath = `/${pathParts.join("/")}`;
+        } else {
+          newPath = `/${view}`;
+          setCurrentFolderId(null);
+        }
+      }
     } else {
-      // Go to view root (explorer, trash, etc)
-      newPath = `/${view}`;
-      setCurrentFolderId(null);
+      // Not in explorer or old structure
+      if (pathParts.length > 1) {
+        pathParts.pop();
+        newPath = `/${pathParts.join("/")}`;
+      } else {
+        newPath = `/${view}`;
+        setCurrentFolderId(null);
+      }
     }
 
     // Update URL asynchronously using history API to avoid re-render/flash
@@ -1055,29 +1128,6 @@ export default function WorkspaceView({
     []
   );
 
-  // Helper function to remove optimistic item from items list
-  const removeOptimisticItemFromContext = useCallback(
-    (itemId: string, itemsList: HierarchicalFile[]): HierarchicalFile[] => {
-      // Remove items
-      const removeFromList = (list: HierarchicalFile[]): HierarchicalFile[] => {
-        return list
-          .filter((item) => item.id !== itemId)
-          .map((item) => {
-            if (item.children) {
-              return {
-                ...item,
-                children: removeFromList(item.children),
-              };
-            }
-            return item;
-          });
-      };
-
-      return removeFromList(itemsList);
-    },
-    []
-  );
-
   // Don't render until mounted to avoid hydration mismatch
   // This ensures server and client render the same initial state
   if (!isMounted) {
@@ -1101,6 +1151,7 @@ export default function WorkspaceView({
         handleItemClick={handleItemClick}
         handleCloseEditor={handleCloseEditor}
         handleBack={handleBack}
+        handleNavigateToWorkspaceRoot={handleNavigateToWorkspaceRoot}
         handleItemUpdate={handleItemUpdate}
         handleItemComplete={handleItemComplete}
         handleAddItem={handleAddItem}
@@ -1200,6 +1251,7 @@ function HomeContent({
   handleItemClick,
   handleCloseEditor,
   handleBack,
+  handleNavigateToWorkspaceRoot,
   handleItemUpdate,
   handleItemComplete,
   handleAddItem,
@@ -1219,6 +1271,7 @@ function HomeContent({
   handleItemClick: (item: HierarchicalFile) => void;
   handleCloseEditor: () => void;
   handleBack: () => void;
+  handleNavigateToWorkspaceRoot: () => void;
   handleItemUpdate: (
     id: string,
     field: "title" | "content",
@@ -1478,6 +1531,7 @@ function HomeContent({
               onItemClick={handleItemClick}
               files={files}
               onBack={currentFolderId ? handleBack : undefined}
+              onNavigateToWorkspaceRoot={handleNavigateToWorkspaceRoot}
               onAddItem={handleAddItem}
               onItemUpdate={wrappedHandleItemUpdate}
               onItemComplete={wrappedHandleItemComplete}

@@ -12,17 +12,40 @@ export default function ExplorerPathPage() {
   const { selectedWorkspaceId, setSelectedWorkspaceId } = useWorkspaceStore();
   const path = params?.path as string[] | undefined;
 
+  // Parse path: first segment should be workspaceId, rest are folder/file IDs
+  const pathSegments = Array.isArray(path) ? path : path ? [path] : [];
+
+  // Check if first segment is a workspace ID
+  const firstSegment = pathSegments[0];
+  const isFirstSegmentWorkspaceId = workspaces.some(
+    (w) => w.id === firstSegment
+  );
+
+  // Extract workspace ID and folder/file path
+  const activeWorkspaceId = isFirstSegmentWorkspaceId
+    ? firstSegment
+    : selectedWorkspaceId || workspaces[0]?.id;
+
+  const folderPathSegments = isFirstSegmentWorkspaceId
+    ? pathSegments.slice(1)
+    : pathSegments;
+
   useEffect(() => {
-    if (workspaces.length > 0) {
-      // Initialize selectedWorkspaceId if not set
-      if (!selectedWorkspaceId) {
-        setSelectedWorkspaceId(workspaces[0].id);
+    if (workspaces.length > 0 && activeWorkspaceId) {
+      // Set workspace ID if it's in the URL or if not set
+      if (isFirstSegmentWorkspaceId) {
+        setSelectedWorkspaceId(activeWorkspaceId);
+      } else if (!selectedWorkspaceId) {
+        setSelectedWorkspaceId(activeWorkspaceId);
       }
     }
-  }, [workspaces, selectedWorkspaceId, setSelectedWorkspaceId]);
-
-  // Get active workspace from store
-  const activeWorkspaceId = selectedWorkspaceId || workspaces[0]?.id;
+  }, [
+    workspaces,
+    activeWorkspaceId,
+    isFirstSegmentWorkspaceId,
+    selectedWorkspaceId,
+    setSelectedWorkspaceId,
+  ]);
 
   if (!activeWorkspaceId) {
     return (
@@ -32,12 +55,10 @@ export default function ExplorerPathPage() {
     );
   }
 
-  const pathSegments = Array.isArray(path) ? path : path ? [path] : [];
-
   return (
     <WorkspaceView
       workspaceId={activeWorkspaceId}
-      pathSegments={pathSegments}
+      pathSegments={folderPathSegments}
     />
   );
 }

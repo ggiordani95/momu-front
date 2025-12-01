@@ -17,6 +17,7 @@ interface ExplorerWorkspaceProps {
   onFolderClick: (folderId: string) => void;
   onItemClick: (item: HierarchicalFile) => void;
   onBack?: () => void;
+  onNavigateToWorkspaceRoot?: () => void;
   onAddItem?: (item: {
     type: ItemType;
     title: string;
@@ -42,6 +43,7 @@ export function ExplorerWorkspace({
   onFolderClick,
   onItemClick,
   onBack,
+  onNavigateToWorkspaceRoot,
   onAddItem,
   onItemUpdate,
   onItemComplete,
@@ -183,8 +185,13 @@ export function ExplorerWorkspace({
         onNavigate={(folderId) => {
           if (folderId) {
             onFolderClick(folderId);
-          } else if (onBack) {
-            onBack();
+          } else {
+            // When clicking workspace name (folderId is null), navigate to workspace root
+            if (onNavigateToWorkspaceRoot) {
+              onNavigateToWorkspaceRoot();
+            } else if (onBack) {
+              onBack();
+            }
           }
         }}
       />
