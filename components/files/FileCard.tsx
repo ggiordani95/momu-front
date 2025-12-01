@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { FileEdit, Trash2, RotateCcw, X } from "lucide-react";
+import { FileEdit, Trash2, RotateCcw, X, Check } from "lucide-react";
 import Image from "next/image";
 import ContextMenu, {
   type ContextMenuAnchorRect,
@@ -27,6 +27,7 @@ interface FileCardProps {
   onClick: (e: React.MouseEvent) => void;
   onRename?: (id: string, field: "title" | "content", value: string) => void;
   onDelete?: (id: string) => void;
+  onComplete?: (id: string, completed: boolean) => void;
   appearanceOrder?: number;
   draggedItemId?: string | null;
   dragOverItemId?: string | null;
@@ -47,6 +48,7 @@ export default function FileCard({
   onClick,
   onRename,
   onDelete,
+  onComplete,
   appearanceOrder = 0,
   draggedItemId,
   dragOverItemId,
@@ -61,6 +63,9 @@ export default function FileCard({
   startRenaming = false,
   isSelected = false,
 }: FileCardProps) {
+  // Normalize completed field to always be a boolean
+  const isCompleted = file.completed === true;
+
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -198,6 +203,37 @@ export default function FileCard({
         } ${isTrashView ? "opacity-75" : ""}`}
       >
         <div className="relative w-full flex flex-col items-center">
+          {/* Checkbox for completing - visible on hover or when completed */}
+          {!isTrashView && onComplete && file.type !== "folder" && (
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                onComplete(file.id, !isCompleted);
+              }}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onComplete(file.id, !isCompleted);
+                }
+              }}
+              className={`absolute top-2 right-2 z-10 p-1.5 rounded-full border transition-all cursor-pointer ${
+                isCompleted
+                  ? "bg-green-500 border-green-500 text-white opacity-100"
+                  : "border-gray-300 text-gray-300 hover:border-green-500 hover:text-green-500 opacity-0 group-hover:opacity-100"
+              }`}
+              title={
+                isCompleted
+                  ? "Marcar como não concluído"
+                  : "Marcar como concluído"
+              }
+            >
+              <Check size={14} />
+            </div>
+          )}
+
           {file.type === "video" && file.youtube_id ? (
             <div className="relative w-full aspect-video overflow-hidden rounded-lg">
               <Image
@@ -211,7 +247,11 @@ export default function FileCard({
               {/* Title overlay at the bottom */}
               {!isRenaming && (
                 <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/80 via-black/60 to-transparent p-3">
-                  <span className="text-sm font-medium text-white text-center block truncate w-full drop-shadow-lg">
+                  <span
+                    className={`text-sm font-medium text-white text-center block truncate w-full drop-shadow-lg ${
+                      isCompleted ? "line-through opacity-60" : ""
+                    }`}
+                  >
                     {file.title}
                   </span>
                 </div>
@@ -228,7 +268,11 @@ export default function FileCard({
                 />
               </div>
               {!isRenaming && (
-                <span className="text-sm font-medium text-center truncate w-full group-hover:text-foreground mt-2">
+                <span
+                  className={`text-sm font-medium text-center truncate w-full group-hover:text-foreground mt-2 ${
+                    isCompleted ? "line-through opacity-60" : ""
+                  }`}
+                >
                   {file.title}
                 </span>
               )}
@@ -299,6 +343,19 @@ export default function FileCard({
                   },
                 ]
               : [
+                  {
+                    label: isCompleted
+                      ? "Marcar como não concluído"
+                      : "Marcar como concluído",
+                    icon: <Check size={16} />,
+                    onClick: () => {
+                      if (onComplete) {
+                        onComplete(file.id, !isCompleted);
+                      }
+                      setContextMenu(null);
+                    },
+                    disabled: file.type === "folder",
+                  },
                   {
                     label: "Renomear",
                     icon: <FileEdit size={16} />,

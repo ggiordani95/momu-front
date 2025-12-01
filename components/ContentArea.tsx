@@ -116,8 +116,8 @@ export default function ContentArea({
 
   const handleUpdate = (
     id: string,
-    field: "title" | "content",
-    value: string
+    field: "title" | "content" | "completed" | "video_watched_seconds",
+    value: string | boolean | number
   ) => {
     const updateItemInTree = (items: TopicItem[]): TopicItem[] => {
       return items.map((item) => {
@@ -135,8 +135,23 @@ export default function ContentArea({
     const updatedItems = updateItemInTree(items);
     setItems(updatedItems);
 
+    const updateData: UpdateFileDto = {};
+    if (field === "completed") {
+        updateData.completed = value as boolean;
+        if (value) {
+            updateData.completed_at = new Date().toISOString();
+        } else {
+            updateData.completed_at = undefined; // Or null, depending on backend
+        }
+    } else if (field === "video_watched_seconds") {
+        updateData.video_watched_seconds = value as number;
+    } else {
+        // title or content
+        (updateData as any)[field] = value;
+    }
+
     updateFileMutation.mutate(
-      { fileId: id, data: { [field]: value } as UpdateFileDto },
+      { fileId: id, data: updateData },
       {
         onError: (error) => {
           console.error("Error updating item:", error);

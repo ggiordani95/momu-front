@@ -29,6 +29,7 @@ interface ExplorerWorkspaceProps {
     field: "title" | "content",
     value: string
   ) => void;
+  onItemComplete?: (id: string, completed: boolean) => void;
   onItemDelete?: (id: string) => void;
   onItemDeleteBatch?: (ids: string[]) => void;
   loading?: boolean;
@@ -43,6 +44,7 @@ export function ExplorerWorkspace({
   onBack,
   onAddItem,
   onItemUpdate,
+  onItemComplete,
   onItemDelete,
   onItemDeleteBatch,
   loading = false,
@@ -246,6 +248,7 @@ export function ExplorerWorkspace({
                     }
                   }}
                   onRename={onItemUpdate}
+                  onComplete={onItemComplete}
                   onDelete={onItemDelete}
                   appearanceOrder={index}
                   draggedItemId={draggedItemId}

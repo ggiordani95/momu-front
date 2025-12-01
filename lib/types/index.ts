@@ -43,6 +43,9 @@ export interface File {
   parent_id?: string | null;
   order_index?: number;
   active?: boolean;
+  completed?: boolean;
+  completed_at?: string;
+  video_watched_seconds?: number;
   created_at: string;
   updated_at?: string;
 }
@@ -68,6 +71,23 @@ export interface UpdateFileDto {
   parent_id?: string | null;
   order_index?: number;
   active?: boolean;
+  completed?: boolean;
+  completed_at?: string;
+  video_watched_seconds?: number;
+}
+
+// ============================================
+// Progress Types
+// ============================================
+
+export interface WorkspaceProgress {
+  workspace_id: string;
+  total_files: number;
+  completed_files: number;
+  progress_percentage: number;
+  completed_videos: number;
+  completed_notes: number;
+  completed_folders: number;
 }
 
 // ============================================

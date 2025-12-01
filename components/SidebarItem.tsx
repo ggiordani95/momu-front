@@ -23,6 +23,7 @@ interface TopicItem {
   title: string;
   parent_id?: string;
   children?: TopicItem[];
+  completed?: boolean;
 }
 
 interface SidebarItemProps {
@@ -109,7 +110,7 @@ export default function SidebarItem({
           isActive
             ? "bg-blue-100 dark:bg-zinc-900/60 text-zinc-600 dark:text-blue-50 font-medium"
             : "hover:bg-hover"
-        }`}
+        } ${item.completed ? "opacity-60" : ""}`}
         style={{ paddingLeft: `${paddingLeft + 12}px` }}
         onContextMenu={handleContextMenu}
         onClick={handleItemClick}
@@ -130,16 +131,36 @@ export default function SidebarItem({
             )}
           </button>
         )}
-        <span className="shrink-0 flex items-center justify-center">
+        <span className="shrink-0 flex items-center justify-center relative">
           {(() => {
             const IconComponent = getItemTypeIcon(item.type);
             if (!IconComponent) {
               return getItemTypeEmoji(item.type);
             }
-            return React.createElement(IconComponent, { size: 16 });
+            return (
+              <div className="relative">
+                {React.createElement(IconComponent, { size: 16 })}
+                {item.completed && (
+                  <div className="absolute -bottom-1 -right-1 bg-green-500 rounded-full p-[1px] border border-sidebar">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="w-2 h-2 text-white"
+                    >
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </div>
+                )}
+              </div>
+            );
           })()}
         </span>
-        <span className="flex-1 min-w-0 truncate block">
+        <span className={`flex-1 min-w-0 truncate block ${item.completed ? "line-through text-muted-foreground" : ""}`}>
           {item.title || "Sem título..."}
         </span>
       </div>

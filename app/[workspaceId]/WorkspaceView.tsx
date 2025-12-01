@@ -827,6 +827,109 @@ export default function WorkspaceView({
     // The UI update happens via removeOptimisticItem in HomeContent
   };
 
+  const handleItemComplete = useCallback(
+    async (id: string, completed: boolean) => {
+      console.log(
+        `🔄 [COMPLETE] Starting update for file ${id}, completed: ${completed}`
+      );
+
+      // For existing items, optimistically update
+      const { updateFileInStore } = useWorkspaceStore.getState();
+      const { files: currentFiles } = useWorkspaceStore.getState();
+      const originalFile = currentFiles.find((f) => f.id === id);
+
+      if (!originalFile) {
+        console.warn(`⚠️ [COMPLETE] File not found in store: ${id}`);
+        return;
+      }
+
+      // Optimistic update
+      updateFileInStore(id, {
+        completed,
+        completed_at: completed ? new Date().toISOString() : undefined,
+      });
+
+      const isOnline = typeof navigator !== "undefined" && navigator.onLine;
+      console.log(`🌐 [COMPLETE] Online status: ${isOnline}`);
+
+      if (isOnline) {
+        try {
+          console.log(
+            `📡 [COMPLETE] Making API request to update file ${id}...`
+          );
+          const { fileService } = await import("@/lib/services/fileService");
+          const updateData = {
+            completed,
+            completed_at: completed ? new Date().toISOString() : undefined,
+          };
+
+          console.log(`📤 [COMPLETE] Update data:`, updateData);
+
+          const updatedFile = await fileService.update(id, updateData);
+
+          console.log(`📥 [COMPLETE] Received response:`, updatedFile);
+          console.log(
+            `📥 [COMPLETE] Response completed field:`,
+            updatedFile.completed
+          );
+          console.log(
+            `📥 [COMPLETE] Response completed_at field:`,
+            updatedFile.completed_at
+          );
+
+          // Use the values from the backend response instead of the local values
+          // This ensures we're using what was actually saved in the database
+          const backendCompleted = updatedFile.completed === true;
+
+          console.log(
+            `🔄 [COMPLETE] Using backend completed value: ${backendCompleted} (from backend: ${
+              updatedFile.completed
+            }, type: ${typeof updatedFile.completed})`
+          );
+
+          // Update store with response from backend
+          updateFileInStore(id, {
+            completed: backendCompleted,
+            completed_at: updatedFile.completed_at,
+            updated_at: updatedFile.updated_at,
+          });
+
+          console.log(
+            `✅ [COMPLETE] File marked as ${
+              completed ? "completed" : "incomplete"
+            }: ${id}`
+          );
+          return;
+        } catch (error: unknown) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          const errorStack = error instanceof Error ? error.stack : undefined;
+          console.error(`❌ [COMPLETE] Failed to update in backend:`, error);
+          console.error(`❌ [COMPLETE] Error details:`, {
+            message: errorMessage,
+            stack: errorStack,
+          });
+
+          // Revert optimistic update
+          if (originalFile) {
+            updateFileInStore(id, {
+              completed: originalFile.completed,
+              completed_at: originalFile.completed_at,
+            });
+            console.log(
+              `🔄 [COMPLETE] Reverted optimistic update for file ${id}`
+            );
+          }
+        }
+      } else {
+        console.warn(
+          `⚠️ [COMPLETE] Offline - update will be synced when online`
+        );
+      }
+    },
+    [workspaceId]
+  );
+
   const handleAddItem = useCallback(
     async (itemData: CreateFileDto) => {
       // Create directly in API - no temporary files
@@ -999,6 +1102,7 @@ export default function WorkspaceView({
         handleCloseEditor={handleCloseEditor}
         handleBack={handleBack}
         handleItemUpdate={handleItemUpdate}
+        handleItemComplete={handleItemComplete}
         handleAddItem={handleAddItem}
         handleItemDelete={handleItemDelete}
         handleItemDeleteBatch={handleItemDeleteBatch}
@@ -1097,6 +1201,7 @@ function HomeContent({
   handleCloseEditor,
   handleBack,
   handleItemUpdate,
+  handleItemComplete,
   handleAddItem,
   handleItemDelete,
   handleItemDeleteBatch,
@@ -1119,6 +1224,7 @@ function HomeContent({
     field: "title" | "content",
     value: string
   ) => void;
+  handleItemComplete: (id: string, completed: boolean) => void;
   handleAddItem: (item: CreateFileDto) => void;
   handleItemDelete: (id: string) => void;
   handleItemDeleteBatch: (ids: string[]) => void;
@@ -1148,6 +1254,7 @@ function HomeContent({
 
   // Use handlers directly - Zustand handles optimistic updates
   const wrappedHandleItemUpdate = handleItemUpdate;
+  const wrappedHandleItemComplete = handleItemComplete;
   const wrappedHandleItemDelete = handleItemDelete;
   const wrappedHandleItemDeleteBatch = handleItemDeleteBatch;
 
@@ -1373,6 +1480,7 @@ function HomeContent({
               onBack={currentFolderId ? handleBack : undefined}
               onAddItem={handleAddItem}
               onItemUpdate={wrappedHandleItemUpdate}
+              onItemComplete={wrappedHandleItemComplete}
               onItemDelete={wrappedHandleItemDelete}
               onItemDeleteBatch={wrappedHandleItemDeleteBatch}
               loading={loading}

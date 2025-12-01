@@ -69,7 +69,7 @@ export function useUpdateFile(workspaceId: string) {
   return useMutation({
     mutationFn: ({ fileId, data }: { fileId: string; data: UpdateFileDto }) =>
       fileService.update(fileId, data),
-    onSuccess: (updatedFile) => {
+    onSuccess: (updatedFile, variables) => {
       // Invalidate workspace items query
       queryClient.invalidateQueries({
         queryKey: fileKeys.workspace(workspaceId),
@@ -78,6 +78,13 @@ export function useUpdateFile(workspaceId: string) {
       queryClient.invalidateQueries({
         queryKey: fileKeys.file(updatedFile.id),
       });
+      
+      // If completed status changed, invalidate progress query
+      if (variables.data.completed !== undefined) {
+        queryClient.invalidateQueries({
+          queryKey: ["workspace-progress", workspaceId],
+        });
+      }
     },
   });
 }

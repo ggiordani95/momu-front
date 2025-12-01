@@ -6,6 +6,7 @@ import Image from "next/image";
 import ContextMenu from "./editors/ContextMenu";
 import { usePermanentDeleteItem } from "@/lib/hooks/querys/useFiles";
 import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
+import { ProgressSection } from "./ProgressSection";
 
 interface SimpleSidebarProps {
   onNavigate?: (
@@ -179,6 +180,9 @@ export default function SimpleSidebar({
             Lixeira
           </button>
 
+          {/* Progress Section */}
+          <ProgressSection workspaceId={workspaceId} />
+
           <button
             onClick={() => handleNavigate("settings")}
             className={`w-full flex items-center gap-2 p-2 rounded-md text-md font-medium transition-colors ${
@@ -206,6 +210,7 @@ export default function SimpleSidebar({
           </button>
         </div>
       </nav>
+      
       {/* Context Menu for Trash */}
       {trashContextMenu && (
         <ContextMenu

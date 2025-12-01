@@ -10,11 +10,15 @@ import {
   getItemTypeIcon,
   type ItemType,
 } from "@/lib/itemTypes";
-import type { HierarchicalItem } from "@/lib/types";
+import type { HierarchicalFile } from "@/lib/types";
 
 interface EditableContentItemProps {
-  item: HierarchicalItem;
-  onUpdate: (id: string, field: "title" | "content", value: string) => void;
+  item: HierarchicalFile;
+  onUpdate: (
+    id: string,
+    field: "title" | "content" | "completed" | "video_watched_seconds",
+    value: string | boolean | number
+  ) => void;
   onAddChild?: (parentId: string) => void;
   showAddFormForParentId?: string;
   AddItemFormComponent?: React.ReactNode;
@@ -23,8 +27,8 @@ interface EditableContentItemProps {
     targetItemId: string,
     position: "before" | "inside" | "after"
   ) => void;
-  allItems?: HierarchicalItem[];
-  setAllItems?: (items: HierarchicalItem[]) => void;
+  allItems?: HierarchicalFile[];
+  setAllItems?: (items: HierarchicalFile[]) => void;
   isNested?: boolean;
   // Shared drag state from parent
   draggedItemId?: string | null;
@@ -77,7 +81,10 @@ export default function EditableContentItem({
     return getItemTypeEmoji(type);
   };
 
-  const handleUpdate = (field: "title" | "content", value: string) => {
+  const handleUpdate = (
+    field: "title" | "content" | "completed" | "video_watched_seconds",
+    value: string | boolean | number
+  ) => {
     onUpdate(item.id, field, value);
   };
 
@@ -374,7 +381,7 @@ export default function EditableContentItem({
               className="ml-6 space-y-6 border-l-2 pl-6"
               style={{ borderColor: "var(--border-color)" }}
             >
-              {item.children.map((child: HierarchicalItem) => (
+              {item.children.map((child: HierarchicalFile) => (
                 <EditableContentItem
                   key={child.id}
                   item={child}
@@ -436,10 +443,27 @@ export default function EditableContentItem({
             <div className="flex items-center justify-center w-6 h-6">
               {getIcon(item.type, 20)}
             </div>
+            <button
+              onClick={() => handleUpdate("completed", !item.completed)}
+              className={`p-1 rounded-full border transition-colors ${
+                item.completed
+                  ? "bg-green-500 border-green-500 text-white"
+                  : "border-gray-300 text-gray-300 hover:border-green-500 hover:text-green-500"
+              }`}
+              title={
+                item.completed
+                  ? "Marcar como não concluído"
+                  : "Marcar como concluído"
+              }
+            >
+              <Check size={14} />
+            </button>
             <EditableText
               value={item.title}
               onSave={(value) => handleUpdate("title", value)}
-              className="text-xl font-semibold flex-1"
+              className={`text-xl font-semibold flex-1 ${
+                item.completed ? "line-through text-muted-foreground" : ""
+              }`}
               as="h3"
               placeholder="Título do vídeo..."
             />
@@ -461,10 +485,27 @@ export default function EditableContentItem({
             <div className="flex items-center justify-center w-5 h-5">
               {getIcon(item.type, 18)}
             </div>
+            <button
+              onClick={() => handleUpdate("completed", !item.completed)}
+              className={`p-1 rounded-full border transition-colors ${
+                item.completed
+                  ? "bg-green-500 border-green-500 text-white"
+                  : "border-gray-300 text-gray-300 hover:border-green-500 hover:text-green-500"
+              }`}
+              title={
+                item.completed
+                  ? "Marcar como não concluído"
+                  : "Marcar como concluído"
+              }
+            >
+              <Check size={14} />
+            </button>
             <EditableText
               value={item.title}
               onSave={(value) => handleUpdate("title", value)}
-              className="font-medium flex-1"
+              className={`font-medium flex-1 ${
+                item.completed ? "line-through text-muted-foreground" : ""
+              }`}
               as="h4"
               placeholder="Título da nota..."
             />
@@ -480,7 +521,7 @@ export default function EditableContentItem({
   );
 }
 
-function parseChecklistPreview(raw?: string, children?: HierarchicalItem[]) {
+function parseChecklistPreview(raw?: string, children?: HierarchicalFile[]) {
   if (!raw || !raw.trim()) {
     if (children && children.length > 0) {
       return children.map((child, index) => ({
