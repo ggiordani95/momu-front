@@ -2,28 +2,37 @@
 
 import { useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import WorkspaceView from "../WorkspaceView";
+import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
 
 export default function WorkspacePathPage() {
   const params = useParams();
   const router = useRouter();
   const workspaceId = params?.workspaceId as string;
   const path = params?.path as string[] | undefined;
+  const { setSelectedWorkspaceId } = useWorkspaceStore();
 
-  // If no workspaceId, redirect to home
+  // Redirect old workspace routes with paths to /explorer with path
   useEffect(() => {
-    if (!workspaceId) {
-      router.push("/");
+    if (workspaceId) {
+      // Set the workspace in Zustand store
+      setSelectedWorkspaceId(workspaceId);
+
+      // Build new path for explorer
+      const pathSegments = Array.isArray(path) ? path : path ? [path] : [];
+      const newPath =
+        pathSegments.length > 0
+          ? `/explorer/${pathSegments.join("/")}`
+          : "/explorer";
+
+      router.replace(newPath);
+    } else {
+      router.replace("/");
     }
-  }, [workspaceId, router]);
-
-  if (!workspaceId) {
-    return null;
-  }
-
-  const pathSegments = Array.isArray(path) ? path : path ? [path] : [];
+  }, [workspaceId, path, router, setSelectedWorkspaceId]);
 
   return (
-    <WorkspaceView workspaceId={workspaceId} pathSegments={pathSegments} />
+    <div className="flex h-screen items-center justify-center">
+      <p className="text-foreground/60">Redirecionando...</p>
+    </div>
   );
 }

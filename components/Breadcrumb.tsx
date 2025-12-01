@@ -1,19 +1,40 @@
 "use client";
 
-import { ChevronRight, ChevronDown } from "lucide-react";
-import type { HierarchicalFile, Workspace } from "@/lib/types";
-import { ReactNode, useState, useRef, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
-import { createPortal } from "react-dom";
+import { ChevronRight, Home } from "lucide-react";
+import type { HierarchicalFile } from "@/lib/types";
+import { ReactNode, useMemo } from "react";
+import { findItemById } from "@/lib/utils/hierarchy";
+import { WorkspaceSelector } from "./WorkspaceSelector";
+import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
 
 interface BreadcrumbProps {
   items: HierarchicalFile[];
   currentFolderId: string | null;
   onNavigate: (folderId: string | null) => void;
   actionButton?: ReactNode;
-  workspaces?: Workspace[];
-  currentWorkspaceId?: string;
   currentView?: "explorer" | "settings" | "trash" | "social" | "planner" | "ai";
+}
+
+// Build path from root to current folder
+function buildBreadcrumbPath(
+  items: HierarchicalFile[],
+  currentFolderId: string | null
+): HierarchicalFile[] {
+  if (!currentFolderId) return [];
+
+  const path: HierarchicalFile[] = [];
+  let currentId: string | null = currentFolderId;
+
+  // Build path by traversing up the hierarchy
+  while (currentId) {
+    const item = findItemById(items, currentId);
+    if (!item) break;
+
+    path.unshift(item); // Add to beginning
+    currentId = item.parent_id || null;
+  }
+
+  return path;
 }
 
 export default function Breadcrumb({
@@ -21,210 +42,81 @@ export default function Breadcrumb({
   currentFolderId,
   onNavigate,
   actionButton,
-  workspaces = [],
-  currentWorkspaceId,
-  currentView,
 }: BreadcrumbProps) {
-  const router = useRouter();
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+  // Get currentWorkspace from Zustand store
+  const { currentWorkspace } = useWorkspaceStore();
 
-  const handleToggleDropdown = () => {
-    if (!isDropdownOpen && buttonRef.current) {
-      // Calculate position before opening
-      const rect = buttonRef.current.getBoundingClientRect();
-      setDropdownPosition({
-        top: rect.bottom + 4,
-        left: rect.left,
-      });
-    }
-    setIsDropdownOpen(!isDropdownOpen);
-  };
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node) &&
-        buttonRef.current &&
-        !buttonRef.current.contains(event.target as Node)
-      ) {
-        setIsDropdownOpen(false);
-      }
-    };
-
-    if (isDropdownOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => {
-        document.removeEventListener("mousedown", handleClickOutside);
-      };
-    }
-  }, [isDropdownOpen]);
-
-  // Build path to current folder
-  const buildPath = (
-    items: HierarchicalFile[],
-    targetId: string | null,
-    currentPath: HierarchicalFile[] = []
-  ): HierarchicalFile[] | null => {
-    if (targetId === null) {
-      return currentPath;
-    }
-
-    for (const item of items) {
-      if (item.id === targetId) {
-        return [...currentPath, item];
-      }
-      if (item.children) {
-        const found = buildPath(item.children, targetId, [
-          ...currentPath,
-          item,
-        ]);
-        if (found) return found;
-      }
-    }
-    return null;
-  };
-
-  const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId);
-
-  const handleWorkspaceSelect = (workspaceId: string) => {
-    setIsDropdownOpen(false);
-    if (workspaceId !== currentWorkspaceId) {
-      // If we're in a specific view (like trash), maintain that view when switching workspaces
-      if (currentView && currentView !== "explorer") {
-        router.push(`/${workspaceId}?view=${currentView}`);
-      } else {
-        router.push(`/${workspaceId}`);
-      }
-    }
-  };
-
-  // Build breadcrumb items array
-  const breadcrumbItems = useMemo(() => {
-    const path = currentFolderId ? buildPath(items, currentFolderId) : [];
-    const breadcrumbItems: Array<{
-      id: string;
-      title: string;
-      onClick: () => void;
-    }> = [];
-
-    // Add workspace as root (only show if we're inside a folder)
-    if (currentWorkspace && currentFolderId) {
-      breadcrumbItems.push({
-        id: "workspace-root",
-        title: currentWorkspace.title,
-        onClick: () => onNavigate(null),
-      });
-    }
-
-    // Add path folders
-    if (path && path.length > 0) {
-      path.forEach((folder) => {
-        breadcrumbItems.push({
-          id: folder.id,
-          title: folder.title,
-          onClick: () => onNavigate(folder.id),
-        });
-      });
-    }
-
-    return breadcrumbItems;
-    // buildPath is a stable function, so we don't need to include it in dependencies
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentWorkspace, currentFolderId, items, onNavigate]);
+  // Build breadcrumb path
+  const breadcrumbPath = useMemo(
+    () => buildBreadcrumbPath(items, currentFolderId),
+    [items, currentFolderId]
+  );
 
   return (
-    <div
-      className="px-6 h-16 border-b flex items-center gap-3 overflow-x-auto"
-      style={{ borderColor: "var(--border-color)" }}
-    >
-      <div className="flex items-center gap-3 flex-1 min-w-0">
-        {/* Workspace Dropdown - Text + Chevron */}
-        <div className="relative">
-          <button
-            ref={buttonRef}
-            onClick={handleToggleDropdown}
-            className="flex items-center gap-1.5 text-sm font-medium transition-all whitespace-nowrap px-2 py-1 rounded-md hover:bg-hover/50 active:bg-hover/70"
-            style={{
-              color: "var(--foreground)",
-            }}
-          >
-            {currentWorkspace?.title || "Selecionar workspace"}
-            <ChevronDown
-              size={14}
-              className={`transition-transform duration-200 ${
-                isDropdownOpen ? "rotate-180" : ""
-              }`}
-            />
-          </button>
-          {/* Dropdown Menu - Using Portal with fixed positioning */}
-          {isDropdownOpen &&
-            workspaces.length > 0 &&
-            typeof window !== "undefined" &&
-            createPortal(
-              <div
-                ref={dropdownRef}
-                className="fixed bg-background border rounded-lg shadow-lg z-[99999] min-w-[200px] max-h-[300px] overflow-y-auto animate-in fade-in zoom-in-95 duration-150"
-                style={{
-                  top: `${dropdownPosition.top}px`,
-                  left: `${dropdownPosition.left}px`,
-                  borderColor: "var(--border-color)",
-                  backgroundColor: "var(--background)",
-                }}
-              >
-                {workspaces.map((workspace) => (
-                  <button
-                    key={workspace.id}
-                    onClick={() => handleWorkspaceSelect(workspace.id)}
-                    className={`w-full text-left px-3 py-2 text-sm transition-colors ${
-                      workspace.id === currentWorkspaceId
-                        ? "bg-hover font-medium"
-                        : "hover:bg-hover/50"
-                    }`}
-                  >
-                    {workspace.title}
-                  </button>
-                ))}
-              </div>,
-              document.body
-            )}
-        </div>
-        {/* Separator */}
-        {breadcrumbItems.length > 0 && (
-          <div className="h-4 w-px bg-border opacity-30" />
-        )}
+    <div className="px-6 py-3 flex items-center gap-3 border-b border-border bg-background/50 backdrop-blur-sm relative z-10">
+      {/* Workspace Selector */}
+      <div
+        className="shrink-0 w-48 relative z-20"
+        style={{ pointerEvents: "auto" }}
+      >
+        <WorkspaceSelector
+          currentWorkspaceId={currentWorkspace?.id}
+          currentView="explorer"
+        />
+      </div>
 
-        {/* Breadcrumb Path */}
-        {breadcrumbItems.length > 0 && (
-          <div className="flex items-center gap-2">
-            {breadcrumbItems.map((item, index) => (
-              <div key={item.id} className="flex items-center gap-2">
+      {/* Breadcrumb Path */}
+      <div className="flex-1 flex items-center overflow-x-auto min-w-0">
+        {/* Workspace */}
+        <button
+          onClick={() => onNavigate(null)}
+          className="flex items-center p-2 rounded-lg text-sm font-medium transition-all hover:bg-hover/50 shrink-0"
+          style={{
+            color:
+              currentFolderId === null
+                ? "var(--foreground)"
+                : "var(--foreground)/70",
+          }}
+        >
+          {currentWorkspace?.title && (
+            <>
+              <span className="rounded-lg text-md font-semibold shrink-0">
+                {currentWorkspace?.title}
+              </span>
+            </>
+          )}
+        </button>
+        {(currentFolderId !== null || breadcrumbPath.length > 0) && (
+          <ChevronRight size={16} className="text-foreground/40 shrink-0" />
+        )}
+        {/* Folder Path */}
+        {breadcrumbPath.length > 0 && (
+          <>
+            {breadcrumbPath.map((folder, index) => (
+              <div key={folder.id} className="flex items-center gap-2 shrink-0">
                 <button
-                  onClick={item.onClick}
-                  className={`text-sm whitespace-nowrap transition-all px-2 py-1 rounded ${
-                    index === breadcrumbItems.length - 1
-                      ? "font-medium opacity-100"
-                      : "opacity-70 hover:opacity-100 hover:bg-hover/30"
-                  }`}
+                  onClick={() => onNavigate(folder.id)}
+                  className="p-2 rounded-lg text-sm font-medium transition-all hover:bg-hover/50 truncate max-w-[200px]"
                   style={{
-                    color: "var(--foreground)",
+                    color:
+                      index === breadcrumbPath.length - 1
+                        ? "var(--foreground)"
+                        : "var(--foreground)/70",
                   }}
+                  title={folder.title}
                 >
-                  {item.title}
+                  {folder.title}
                 </button>
-                {index < breadcrumbItems.length - 1 && (
-                  <ChevronRight size={12} className="opacity-30 shrink-0" />
+                {index < breadcrumbPath.length - 1 && (
+                  <ChevronRight size={16} className="text-foreground/40" />
                 )}
               </div>
             ))}
-          </div>
+          </>
         )}
       </div>
-      {/* Action Button (e.g., Add Item) */}
+
+      {/* Action Button */}
       {actionButton && <div className="shrink-0 ml-auto">{actionButton}</div>}
     </div>
   );

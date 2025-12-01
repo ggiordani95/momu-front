@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from "react";
 import {
-  Sparkles,
   ArrowUp,
   Loader2,
   Search,
@@ -13,15 +12,22 @@ import {
   Pencil,
   Trash2,
   Airplay,
+  FolderPlus,
+  X,
+  FileText,
 } from "lucide-react";
-import { JSONViewer } from "./JSONViewer";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import {
   useAIChats,
   useCreateAIChat,
   useUpdateAIChat,
   useDeleteAIChat,
+  useGenerateAI,
 } from "@/lib/hooks/querys/useAIChats";
+import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
+import { fileService } from "@/lib/services/fileService";
+import type { CreateFileDto } from "@/lib/types";
+import { WorkspaceSelector } from "@/components/WorkspaceSelector";
 
 interface Message {
   id: string;
@@ -40,11 +46,26 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [input, setInput] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
+
+  // React Query mutation for AI generation
+  const generateAIMutation = useGenerateAI();
   const [searchQuery, setSearchQuery] = useState("");
+  const [showFolderModal, setShowFolderModal] = useState(false);
+  const [selectedChatForIndex, setSelectedChatForIndex] = useState<
+    string | null
+  >(null);
+  const [isIndexing, setIsIndexing] = useState(false);
+  const [selectedText, setSelectedText] = useState("");
+  const [selectionPosition, setSelectionPosition] = useState({ x: 0, y: 0 });
+  const [showCreateNoteButton, setShowCreateNoteButton] = useState(false);
+  const [showNoteModal, setShowNoteModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
+
+  const { getFilesByWorkspace, syncFiles, selectedWorkspaceId, workspaces } =
+    useWorkspaceStore();
+  const activeWorkspaceId = selectedWorkspaceId || workspaceId;
 
   // Get userId
   const userId =
@@ -146,8 +167,59 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
     }
   };
 
+  const handleIndexChat = (chatId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedChatForIndex(chatId);
+    setShowFolderModal(true);
+  };
+
+  const handleCreateNoteFromChat = async (folderId: string | null) => {
+    if (!selectedChatForIndex) return;
+
+    const chat = chats.find((c) => c.id === selectedChatForIndex);
+    if (!chat) return;
+
+    setIsIndexing(true);
+    try {
+      // Format chat messages as markdown
+      const chatContent = (chat.messages as unknown[])
+        .map((m: unknown) => {
+          const msg = m as { role: string; content: string };
+          const role = msg.role === "user" ? "**Você:**" : "**IA:**";
+          return `${role}\n\n${msg.content}\n\n---\n\n`;
+        })
+        .join("\n");
+
+      const noteTitle = chat.title || "Chat sem título";
+      const noteContent = `# ${noteTitle}\n\n${chatContent}`;
+
+      // Create note file
+      const noteData: CreateFileDto = {
+        type: "note",
+        title: noteTitle,
+        content: noteContent,
+        parent_id: folderId || undefined,
+      };
+
+      await fileService.create(activeWorkspaceId, noteData);
+
+      // Sync files to update the store
+      await syncFiles();
+
+      // Close modal and show success
+      setShowFolderModal(false);
+      setSelectedChatForIndex(null);
+      alert("Nota criada com sucesso!");
+    } catch (error) {
+      console.error("❌ [AI] Error creating note from chat:", error);
+      alert("Erro ao criar nota. Tente novamente.");
+    } finally {
+      setIsIndexing(false);
+    }
+  };
+
   const handleSend = async () => {
-    if (!input.trim() || isGenerating) return;
+    if (!input.trim() || generateAIMutation.isPending) return;
 
     const userMessage: Message = {
       id: `msg-${Date.now()}-user`,
@@ -158,63 +230,51 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
 
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
-    setIsGenerating(true);
 
-    try {
-      // Get userId from localStorage
-      const userId =
-        typeof window !== "undefined"
-          ? localStorage.getItem("userId") || "user-001"
-          : "user-001";
+    // Get userId from localStorage
+    const userId =
+      typeof window !== "undefined"
+        ? localStorage.getItem("userId") || "user-001"
+        : "user-001";
 
-      // Call AI endpoint
-      const response = await fetch("http://localhost:3001/ai/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+    // Use React Query mutation
+    generateAIMutation.mutate(
+      {
+        topic: userMessage.content,
+        workspaceId,
+        userId,
+      },
+      {
+        onSuccess: (data) => {
+          if (!data.success) {
+            throw new Error(data.message || "No response from AI");
+          }
+
+          const assistantMessage: Message = {
+            id: `msg-${Date.now()}-assistant`,
+            role: "assistant",
+            content: data.rawResponse || "Resposta recebida da IA",
+            timestamp: new Date(),
+            rawResponse: data.rawResponse,
+            fullResponse: data.fullResponse,
+          };
+
+          setMessages((prev) => [...prev, assistantMessage]);
         },
-        body: JSON.stringify({
-          topic: userMessage.content,
-          workspaceId,
-          userId,
-        }),
-      });
+        onError: (err) => {
+          const errorMessage: Message = {
+            id: `msg-${Date.now()}-error`,
+            role: "assistant",
+            content: `❌ Erro ao gerar estrutura: ${
+              err instanceof Error ? err.message : "Erro desconhecido"
+            }`,
+            timestamp: new Date(),
+          };
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to generate content");
+          setMessages((prev) => [...prev, errorMessage]);
+        },
       }
-
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error("No response from AI");
-      }
-
-      const assistantMessage: Message = {
-        id: `msg-${Date.now()}-assistant`,
-        role: "assistant",
-        content: data.rawResponse || "Resposta recebida da IA",
-        timestamp: new Date(),
-        rawResponse: data.rawResponse,
-        fullResponse: data.fullResponse,
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (err) {
-      const errorMessage: Message = {
-        id: `msg-${Date.now()}-error`,
-        role: "assistant",
-        content: `❌ Erro ao gerar estrutura: ${
-          err instanceof Error ? err.message : "Erro desconhecido"
-        }`,
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsGenerating(false);
-    }
+    );
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -224,10 +284,68 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
     }
   };
 
-  // Get the last assistant message with response data
-  const lastAssistantMessage = messages
-    .filter((m) => m.role === "assistant" && m.fullResponse)
-    .pop();
+  // Handle text selection in assistant messages
+  useEffect(() => {
+    const handleSelection = () => {
+      const selection = window.getSelection();
+      if (selection && selection.toString().trim().length > 0) {
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        setSelectedText(selection.toString().trim());
+        setSelectionPosition({
+          x: rect.left + rect.width / 2,
+          y: rect.top - 10,
+        });
+        setShowCreateNoteButton(true);
+      } else {
+        setShowCreateNoteButton(false);
+        setSelectedText("");
+      }
+    };
+
+    document.addEventListener("selectionchange", handleSelection);
+    return () => {
+      document.removeEventListener("selectionchange", handleSelection);
+    };
+  }, []);
+
+  const handleCreateNoteFromSelection = () => {
+    if (selectedText.trim()) {
+      setShowNoteModal(true);
+      setShowCreateNoteButton(false);
+      // Clear selection
+      window.getSelection()?.removeAllRanges();
+    }
+  };
+
+  const handleCreateNote = async (folderId: string | null) => {
+    if (!selectedText.trim()) return;
+
+    setIsIndexing(true);
+    try {
+      const noteTitle = selectedText.substring(0, 50) || "Nota da IA";
+      const noteContent = selectedText;
+
+      const noteData: CreateFileDto = {
+        type: "note",
+        title: noteTitle,
+        content: noteContent,
+        parent_id: folderId || undefined,
+      };
+
+      await fileService.create(activeWorkspaceId, noteData);
+      await syncFiles();
+
+      setShowNoteModal(false);
+      setSelectedText("");
+      alert("Nota criada com sucesso!");
+    } catch (error) {
+      console.error("❌ [AI] Error creating note from selection:", error);
+      alert("Erro ao criar nota. Tente novamente.");
+    } finally {
+      setIsIndexing(false);
+    }
+  };
 
   return (
     <div className="h-full flex bg-background">
@@ -236,6 +354,14 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
         ref={sidebarRef}
         className="w-64 border-r border-border bg-background flex flex-col"
       >
+        {/* Workspace Selector */}
+        <div className="p-3 border-b border-border">
+          <WorkspaceSelector
+            currentWorkspaceId={workspaceId}
+            currentView="ai"
+          />
+        </div>
+
         {/* New Chat Button */}
         <div className="p-3 border-b border-border">
           <button
@@ -286,12 +412,22 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
                       }`}
                     >
                       <span className="truncate flex-1">{chat.title}</span>
-                      <button
-                        onClick={(e) => deleteChat(chat.id, e)}
-                        className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-foreground/10 rounded transition-opacity"
-                      >
-                        <Trash2 className="w-4 h-4 text-foreground/40" />
-                      </button>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => handleIndexChat(chat.id, e)}
+                          className="p-1.5 hover:bg-foreground/10 rounded transition-colors"
+                          title="Indexar como nota"
+                        >
+                          <FolderPlus className="w-4 h-4 text-foreground/40" />
+                        </button>
+                        <button
+                          onClick={(e) => deleteChat(chat.id, e)}
+                          className="p-1.5 hover:bg-foreground/10 rounded transition-colors"
+                          title="Deletar chat"
+                        >
+                          <Trash2 className="w-4 h-4 text-foreground/40" />
+                        </button>
+                      </div>
                     </div>
                   ))}
             </div>
@@ -330,9 +466,7 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
                   }`}
                 >
                   {message.role === "assistant" && (
-                    <div className="w-10 h-10 rounded-full bg-foreground/5 flex items-center justify-center shrink-0 border border-border">
-                      <Airplay className="w-5 h-5 text-foreground/50" />
-                    </div>
+                    <Airplay className="w-5 h-5 text-foreground/50" />
                   )}
                   <div
                     className={`flex-1 max-w-[75%] ${
@@ -351,10 +485,20 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
                           {message.content}
                         </div>
                       ) : (
-                        <MarkdownRenderer
-                          content={message.content}
-                          className="text-base leading-relaxed"
-                        />
+                        <div
+                          className="selectable-content"
+                          style={{
+                            userSelect: "text",
+                            WebkitUserSelect: "text",
+                            MozUserSelect: "text",
+                            msUserSelect: "text",
+                          }}
+                        >
+                          <MarkdownRenderer
+                            content={message.content}
+                            className="text-base leading-relaxed"
+                          />
+                        </div>
                       )}
                     </div>
                   </div>
@@ -367,11 +511,9 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
                   )}
                 </div>
               ))}
-              {isGenerating && (
+              {generateAIMutation.isPending && (
                 <div className="flex gap-4 justify-start items-start">
-                  <div className="w-10 h-10 rounded-full bg-foreground/5 flex items-center justify-center shrink-0 border border-border">
-                    <Sparkles className="w-5 h-5 text-foreground/50" />
-                  </div>
+                  <Airplay className="w-5 h-5 text-foreground/50" />
                   <div className="flex-1">
                     <div className="bg-foreground/5 rounded-lg p-5 border border-border/50">
                       <Loader2 className="w-5 h-5 animate-spin text-foreground/40" />
@@ -410,7 +552,7 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
                 placeholder="Comece pedindo sobre algo..."
                 className="w-full bg-transparent text-foreground placeholder:text-foreground/40 focus:outline-none resize-none text-base mb-5"
                 rows={1}
-                disabled={isGenerating}
+                disabled={generateAIMutation.isPending}
                 style={{
                   minHeight: "32px",
                   maxHeight: "200px",
@@ -443,10 +585,10 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
                 </div>
                 <button
                   onClick={handleSend}
-                  disabled={!input.trim() || isGenerating}
+                  disabled={!input.trim() || generateAIMutation.isPending}
                   className="w-12 h-12 rounded-lg bg-foreground/10 hover:bg-foreground/15 disabled:bg-foreground/5 disabled:cursor-not-allowed text-foreground/70 hover:text-foreground flex items-center justify-center transition-all shrink-0 border border-border/50"
                 >
-                  {isGenerating ? (
+                  {generateAIMutation.isPending ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
                     <ArrowUp className="w-5 h-5" />
@@ -457,6 +599,145 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
           </div>
         </div>
       </div>
+
+      {/* Create Note Button (floating when text is selected) */}
+      {showCreateNoteButton && selectedText && (
+        <div
+          className="fixed z-50"
+          style={{
+            left: `${selectionPosition.x}px`,
+            top: `${selectionPosition.y}px`,
+            transform: "translateX(-50%)",
+          }}
+        >
+          <button
+            onClick={handleCreateNoteFromSelection}
+            className="flex items-center gap-2 px-4 py-2 bg-foreground text-background rounded-lg shadow-lg hover:bg-foreground/90 transition-colors text-sm font-medium"
+          >
+            <FileText className="w-4 h-4" />
+            Criar Nota
+          </button>
+        </div>
+      )}
+
+      {/* Note Creation Modal */}
+      {showNoteModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-sidebar rounded-lg p-6 w-full max-w-md border border-border">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Criar Nota</h2>
+              <button
+                onClick={() => {
+                  setShowNoteModal(false);
+                  setSelectedText("");
+                }}
+                className="text-foreground/60 hover:text-foreground transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <p className="text-sm text-foreground/70 mb-2">
+              Workspace:{" "}
+              <strong>
+                {workspaces.find((w) => w.id === activeWorkspaceId)?.title}
+              </strong>
+            </p>
+
+            <p className="text-sm text-foreground/70 mb-4">
+              Selecione a pasta onde deseja salvar a nota. Deixe vazio para
+              salvar na raiz.
+            </p>
+
+            <div className="space-y-2 max-h-64 overflow-y-auto mb-4">
+              <button
+                onClick={() => handleCreateNote(null)}
+                disabled={isIndexing}
+                className="w-full text-left px-4 py-2 rounded-lg hover:bg-foreground/5 transition-colors border border-border disabled:opacity-50"
+              >
+                📁 Raiz (sem pasta)
+              </button>
+              {getFilesByWorkspace(activeWorkspaceId)
+                .filter(
+                  (file) => file.type === "folder" && file.active !== false
+                )
+                .map((folder) => (
+                  <button
+                    key={folder.id}
+                    onClick={() => handleCreateNote(folder.id)}
+                    disabled={isIndexing}
+                    className="w-full text-left px-4 py-2 rounded-lg hover:bg-foreground/5 transition-colors border border-border disabled:opacity-50"
+                  >
+                    📂 {folder.title}
+                  </button>
+                ))}
+            </div>
+
+            {isIndexing && (
+              <div className="flex items-center justify-center gap-2 text-sm text-foreground/60">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Criando nota...
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Folder Selection Modal */}
+      {showFolderModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-sidebar rounded-lg p-6 w-full max-w-md border border-border">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Escolher Pasta</h2>
+              <button
+                onClick={() => {
+                  setShowFolderModal(false);
+                  setSelectedChatForIndex(null);
+                }}
+                className="text-foreground/60 hover:text-foreground transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <p className="text-sm text-foreground/70 mb-4">
+              Selecione a pasta onde deseja salvar a nota do chat. Deixe vazio
+              para salvar na raiz.
+            </p>
+
+            <div className="space-y-2 max-h-64 overflow-y-auto mb-4">
+              <button
+                onClick={() => handleCreateNoteFromChat(null)}
+                disabled={isIndexing}
+                className="w-full text-left px-4 py-2 rounded-lg hover:bg-foreground/5 transition-colors border border-border disabled:opacity-50"
+              >
+                📁 Raiz (sem pasta)
+              </button>
+              {getFilesByWorkspace(workspaceId)
+                .filter(
+                  (file) => file.type === "folder" && file.active !== false
+                )
+                .map((folder) => (
+                  <button
+                    key={folder.id}
+                    onClick={() => handleCreateNoteFromChat(folder.id)}
+                    disabled={isIndexing}
+                    className="w-full text-left px-4 py-2 rounded-lg hover:bg-foreground/5 transition-colors border border-border disabled:opacity-50"
+                  >
+                    📂 {folder.title}
+                  </button>
+                ))}
+            </div>
+
+            {isIndexing && (
+              <div className="flex items-center justify-center gap-2 text-sm text-foreground/60">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Criando nota...
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

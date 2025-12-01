@@ -55,16 +55,19 @@ export function useMultiSelect(options?: UseMultiSelectOptions) {
 
   // Handle mouse down - start selection
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    // Only start selection with RIGHT mouse button (button === 2)
+    if (e.button !== 2) {
+      return; // Only allow selection with right mouse button
+    }
+
     // Only start selection if clicking on empty space (not on a file card)
     const target = e.target as HTMLElement;
     if (target.closest("[data-file-id]")) {
       return; // Clicked on a file card, let it handle the click
     }
 
-    // Check if Ctrl/Cmd is pressed for multi-select
-    if (e.ctrlKey || e.metaKey) {
-      return; // Let individual file clicks handle Ctrl+click
-    }
+    // Prevent context menu when starting selection with right button
+    e.preventDefault();
 
     // Start selection box
     if (containerRef.current) {
@@ -93,8 +96,19 @@ export function useMultiSelect(options?: UseMultiSelectOptions) {
   // Handle mouse move - update selection box
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
-      if (!isSelecting || !startPointRef.current || !containerRef.current)
+      // Only continue selection if right button is still pressed
+      if (!isSelecting || !startPointRef.current || !containerRef.current) {
         return;
+      }
+
+      // Check if right mouse button is still pressed
+      if (e.buttons !== 2 && e.buttons !== 0) {
+        // If right button is not pressed, stop selection
+        setIsSelecting(false);
+        setSelectionBox(null);
+        startPointRef.current = null;
+        return;
+      }
 
       const containerRect = containerRef.current.getBoundingClientRect();
       const endX =

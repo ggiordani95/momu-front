@@ -22,26 +22,15 @@ export const FolderIcon: React.FC<IconProps> = ({ size = 20 }) => (
 );
 
 // Video icon - Using Lucide React Play icon with green dot
-export const VideoIcon: React.FC<IconProps> = ({
-  size = 20,
-  className = "",
-}) => (
+export const VideoIcon: React.FC<IconProps> = ({ size = 20 }) => (
   <div className="relative inline-block" style={{ width: size, height: size }}>
-    <Play
-      size={size}
-      className={className}
-      style={{ color: "var(--foreground)", opacity: 0.8 }}
-    />
-    <div
-      className="absolute rounded-full"
-      style={{
-        width: size * 0.3,
-        height: size * 0.3,
-        backgroundColor: "#4CAF50",
-        bottom: 0,
-        right: 0,
-        transform: "translate(25%, 25%)",
-      }}
+    <Image
+      src="/icons/video.png"
+      alt="Vídeo"
+      width={size}
+      height={size}
+      style={{ objectFit: "contain", opacity: 0.9 }}
+      priority
     />
   </div>
 );

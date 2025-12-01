@@ -8,7 +8,7 @@ import {
   useCallback,
   startTransition,
 } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useWorkspaceData } from "@/lib/hooks/useSyncFiles";
 import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
 import { buildHierarchy } from "@/lib/utils/hierarchy";
@@ -18,15 +18,12 @@ import PageEditor from "@/components/editors/PageEditor";
 import { TrashWorkspace } from "@/components/views/trash/TrashWorkspace";
 import { SettingsWorkspace } from "@/components/views/settings/SettingsWorkspace";
 import { ExplorerWorkspace } from "@/components/views/explorer/ExplorerWorkspace";
-import {
-  savePendingOperation,
-  removePendingOperation,
-  getPendingOperations,
-} from "@/lib/services/offlineSync";
 import { SocialWorkspace } from "@/components/views/social/SocialWorkspace";
 import { PlannerWorkspace } from "@/components/views/planner/PlannerWorkspace";
 import { AIWorkspace } from "@/components/views/ai/AIWorkspace";
 import { GlobalSearch } from "@/components/GlobalSearch";
+import { Search, Plus } from "lucide-react";
+import { FolderIcon, NoteIcon, VideoIcon } from "@/components/icons/ItemIcons";
 
 interface WorkspaceViewProps {
   workspaceId: string;
@@ -39,32 +36,79 @@ export default function WorkspaceView({
 }: WorkspaceViewProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
 
-  // Get view from URL query params, default to "explorer"
-  const viewFromUrl = searchParams.get("view") as
-    | "explorer"
-    | "settings"
-    | "trash"
-    | "social"
-    | "planner"
-    | "ai"
-    | null;
+  // Get current view from Zustand store (single source of truth)
+  const { currentView: storeView, setCurrentView } = useWorkspaceStore();
 
-  const [currentView, setCurrentView] = useState<
-    "explorer" | "settings" | "trash" | "social" | "planner" | "ai"
-  >(viewFromUrl || "explorer");
+  // Sync URL with store ONLY on initial load or direct URL navigation (not internal navigation)
+  // Use a ref to track if we've already synced to avoid unnecessary updates
+  const hasSyncedRef = useRef(false);
+  const prevPathnameRef = useRef<string | null>(null);
+  const isInternalNavRef = useRef(false);
 
-  // Update view when URL changes (only on mount or when view param changes)
   useEffect(() => {
-    if (viewFromUrl && viewFromUrl !== currentView) {
-      setCurrentView(viewFromUrl);
-    } else if (!viewFromUrl && currentView !== "explorer") {
-      // If no view param and we're not on explorer, reset to explorer
-      // This handles the case when navigating to workspace root
-      setCurrentView("explorer");
+    // Check if this is an internal navigation FIRST (before checking pathname change)
+    // This prevents the effect from running when SimpleSidebar updates the URL
+    if (
+      typeof window !== "undefined" &&
+      (window as Window & { __isInternalNavigation?: boolean })
+        .__isInternalNavigation
+    ) {
+      isInternalNavRef.current = true;
+      // Update prevPathnameRef to prevent this effect from running again
+      prevPathnameRef.current = pathname;
+      return;
     }
-  }, [viewFromUrl, currentView]);
+
+    // Reset internal nav flag if it was set
+    if (isInternalNavRef.current) {
+      isInternalNavRef.current = false;
+    }
+
+    // Skip if pathname hasn't actually changed (and it's not an internal nav)
+    if (prevPathnameRef.current === pathname && hasSyncedRef.current) {
+      return;
+    }
+    prevPathnameRef.current = pathname;
+
+    // Get view from URL pathname (e.g., /explorer, /trash, /ai)
+    const viewFromPath = pathname?.split("/")[1] as
+      | "explorer"
+      | "settings"
+      | "trash"
+      | "social"
+      | "planner"
+      | "ai"
+      | undefined;
+
+    // Only sync on initial load or when pathname changes from external navigation
+    if (!hasSyncedRef.current) {
+      // Initial load: sync URL to store
+      if (viewFromPath) {
+        setCurrentView(viewFromPath);
+      } else {
+        // No view in URL on initial load, default to explorer and update URL silently
+        setCurrentView("explorer");
+        if (typeof window !== "undefined") {
+          requestAnimationFrame(() => {
+            window.history.replaceState(
+              { ...window.history.state, view: "explorer" },
+              "",
+              "/explorer"
+            );
+          });
+        }
+      }
+      hasSyncedRef.current = true;
+    } else if (viewFromPath && viewFromPath !== storeView) {
+      // External navigation (user typed URL directly or used browser back/forward)
+      setCurrentView(viewFromPath);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  // Use store view as single source of truth (not pathname)
+  const currentView = storeView;
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   // Track if component is mounted to avoid hydration mismatch
@@ -72,23 +116,77 @@ export default function WorkspaceView({
 
   // Set mounted state after component mounts (client-side only)
   useEffect(() => {
-    // Use a state update function to avoid synchronous setState in effect
     setTimeout(() => {
       setIsMounted(true);
     }, 0);
   }, []);
 
+  const [showSearchHint, setShowSearchHint] = useState(false);
+  const searchHintTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Open search with Ctrl+K or Cmd+K
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         setIsSearchOpen(true);
+        setShowSearchHint(false);
+        return;
+      }
+
+      // Close search hint if search is open
+      if (isSearchOpen) {
+        setShowSearchHint(false);
+        return;
+      }
+
+      // Show hint when user types a regular character (not modifier keys)
+      // Only if not typing in an input/textarea/contenteditable
+      const target = e.target as HTMLElement;
+      const isTypingInInput =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable ||
+        target?.closest("input, textarea, [contenteditable]");
+
+      // Check if it's a printable character (letters, numbers, and common characters)
+      const isPrintableChar =
+        e.key.length === 1 &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        /^[a-zA-Z0-9]$/.test(e.key);
+
+      if (!isTypingInInput && isPrintableChar) {
+        console.log(
+          "Showing search hint - key:",
+          e.key,
+          "target:",
+          target?.tagName
+        );
+        setShowSearchHint(true);
+
+        // Clear existing timeout
+        if (searchHintTimeoutRef.current) {
+          clearTimeout(searchHintTimeoutRef.current);
+        }
+
+        // Hide hint after 4 seconds
+        searchHintTimeoutRef.current = setTimeout(() => {
+          setShowSearchHint(false);
+        }, 4000);
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+    // Use capture phase to catch events earlier
+    document.addEventListener("keydown", handleKeyDown, true);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown, true);
+      if (searchHintTimeoutRef.current) {
+        clearTimeout(searchHintTimeoutRef.current);
+      }
+    };
+  }, [isSearchOpen]);
 
   const [selectedItem, setSelectedItem] = useState<HierarchicalFile | null>(
     null
@@ -103,7 +201,11 @@ export default function WorkspaceView({
   // Use Zustand store instead of React Query
   // Only access store data after component is mounted to avoid hydration mismatch
   // Subscribe directly to files array to react to changes when markFileAsDeleted is called
-  const { workspaces, files: allFiles } = useWorkspaceStore();
+  const {
+    workspaces,
+    files: allFiles,
+    setCurrentWorkspace,
+  } = useWorkspaceStore();
   const { isSyncing } = useWorkspaceStore();
 
   // Filter files by workspace and active status
@@ -115,12 +217,24 @@ export default function WorkspaceView({
     );
   }, [allFiles, workspaceId, isMounted]);
   const files = useMemo(() => buildHierarchy(workspaceFiles), [workspaceFiles]);
-  const loading = isMounted ? isSyncing : true; // Show loading on server
+  const loading = isMounted ? isSyncing : true;
   const itemsError = null;
-  const workspacesItems = isMounted ? workspaces : []; // Empty array on server
+  const workspacesItems = isMounted ? workspaces : [];
+
+  // Update currentWorkspace in store when workspaceId changes
+  useEffect(() => {
+    if (isMounted && workspaceId && workspacesItems.length > 0) {
+      const workspace = workspacesItems.find((w) => w.id === workspaceId);
+      if (workspace) {
+        setCurrentWorkspace({
+          id: workspace.id,
+          title: workspace.title,
+        });
+      }
+    }
+  }, [workspaceId, workspacesItems, isMounted, setCurrentWorkspace]);
 
   useEffect(() => {
-    // Se não estiver carregando, não houver items, e não houver erro, verificar se o workspace existe
     if (
       !loading &&
       files.length === 0 &&
@@ -130,15 +244,29 @@ export default function WorkspaceView({
       const workspaceExists = workspacesItems.some((f) => f.id === workspaceId);
       if (!workspaceExists) {
         console.warn(
-          `⚠️ Workspace ${workspaceId} não existe, redirecionando para o primeiro workspace disponível`
+          `⚠️ Workspace ${workspaceId} não existe, redirecionando para /explorer`
         );
-        const firstWorkspaceId = workspacesItems[0]?.id;
-        if (firstWorkspaceId) {
-          router.replace(`/${firstWorkspaceId}`);
+        // Only redirect if we're not in trash view (trash view can have empty files)
+        const view = currentView || "explorer";
+        if (view !== "trash") {
+          // Redirect to explorer view (workspace managed by Zustand) without page reload
+          startTransition(() => {
+            router.replace("/explorer", { scroll: false });
+          });
         }
       }
     }
-  }, [loading, files.length, itemsError, workspaceId, workspacesItems, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    loading,
+    files.length,
+    itemsError,
+    workspaceId,
+    workspacesItems,
+    router,
+    // Use storeView directly to ensure stable dependency
+    storeView,
+  ]);
   // Note: Mutations are no longer used directly - operations are saved to localStorage
   // and synced on next page load via useOfflineSync
 
@@ -247,12 +375,18 @@ export default function WorkspaceView({
       return null;
     };
 
+    // Get current view from pathname
+    const viewFromPath = pathname?.split("/")[1] || "explorer";
+    const baseRoute = `/${viewFromPath}`;
+
     // First try to find the folder in the files tree
     const pathToFolder = buildPathToFolder(files, folderId);
+    let newPath: string;
+    let newPathSegments: string[] = [];
+
     if (pathToFolder) {
-      const newPath = `/${workspaceId}/${pathToFolder.join("/")}`;
-      // Use replace instead of push to avoid adding to history and reduce flicker
-      router.replace(newPath);
+      newPath = `${baseRoute}/${pathToFolder.join("/")}`;
+      newPathSegments = pathToFolder;
     } else {
       // Fallback: check if folder exists at all (even if empty)
       const folderExists = findItemById(files, folderId);
@@ -262,25 +396,46 @@ export default function WorkspaceView({
         if (parentId) {
           const parentPath = buildPathToFolder(files, parentId);
           if (parentPath) {
-            const newPath = `/${workspaceId}/${[...parentPath, folderId].join(
-              "/"
-            )}`;
-            router.replace(newPath);
+            newPathSegments = [...parentPath, folderId];
+            newPath = `${baseRoute}/${newPathSegments.join("/")}`;
           } else {
             // Just use parent and folder
-            router.replace(`/${workspaceId}/${parentId}/${folderId}`);
+            newPathSegments = [parentId, folderId];
+            newPath = `${baseRoute}/${newPathSegments.join("/")}`;
           }
         } else {
           // Root level folder
-          router.replace(`/${workspaceId}/${folderId}`);
+          newPathSegments = [folderId];
+          newPath = `${baseRoute}/${folderId}`;
         }
       } else {
         // Folder not found, but navigate anyway (might be a new folder)
-        router.replace(`/${workspaceId}/${folderId}`);
+        newPathSegments = [folderId];
+        newPath = `${baseRoute}/${folderId}`;
       }
     }
-    // Don't set currentFolderId here - let the useEffect handle it based on pathSegments
-    // This prevents double state updates and flicker
+
+    // Update state directly to avoid waiting for pathname to change
+    const targetItem = findItemById(files, folderId);
+    if (targetItem && targetItem.type === "folder") {
+      // Update state immediately
+      prevCurrentFolderIdRef.current = folderId;
+      prevSelectedItemIdRef.current = null;
+      setCurrentFolderId(folderId);
+      setSelectedItem(null);
+    }
+
+    // Update URL asynchronously using history API to avoid re-render/flash
+    // Use requestAnimationFrame to ensure it happens after React's render
+    if (typeof window !== "undefined") {
+      requestAnimationFrame(() => {
+        window.history.replaceState(
+          { ...window.history.state, path: newPath },
+          "",
+          newPath
+        );
+      });
+    }
   };
 
   const getBasePathWithoutEditor = () => {
@@ -290,14 +445,20 @@ export default function WorkspaceView({
         : pathname;
     const segments = trimmed.split("/").filter(Boolean);
 
+    // Get view from first segment (explorer, trash, ai, etc)
+    const view = segments[0] || "explorer";
+
+    // Remove the item ID if it's the last segment
     if (selectedItem && segments[segments.length - 1] === selectedItem.id) {
       segments.pop();
     }
 
-    if (segments.length === 0) {
-      return "/";
+    // If only view remains, return just the view route
+    if (segments.length <= 1) {
+      return `/${view}`;
     }
 
+    // Return view route with remaining path segments
     return `/${segments.join("/")}`;
   };
 
@@ -315,14 +476,25 @@ export default function WorkspaceView({
     if (item.type === "video" && item.youtube_url) {
       window.open(item.youtube_url, "_blank");
     } else if (item.type === "note") {
-      // Open page for editing
+      // Update state first
       setSelectedItem(item);
       setCurrentFolderId(item.parent_id || null);
 
       const basePath = getBasePathWithoutEditor();
       previousEditorPathRef.current = basePath;
       const nextPath = appendSegment(basePath, item.id);
-      router.push(nextPath);
+
+      // Update URL asynchronously using history API to avoid re-render/flash
+      // Use requestAnimationFrame to ensure it happens after React's render
+      if (typeof window !== "undefined") {
+        requestAnimationFrame(() => {
+          window.history.pushState(
+            { ...window.history.state, path: nextPath },
+            "",
+            nextPath
+          );
+        });
+      }
     }
   };
 
@@ -339,8 +511,17 @@ export default function WorkspaceView({
     setSelectedItem(null);
     const previousPath = previousEditorPathRef.current;
     if (previousPath) {
-      router.push(previousPath);
       previousEditorPathRef.current = null;
+      // Update URL asynchronously using history API to avoid re-render/flash
+      if (typeof window !== "undefined") {
+        requestAnimationFrame(() => {
+          window.history.replaceState(
+            { ...window.history.state, path: previousPath },
+            "",
+            previousPath
+          );
+        });
+      }
       return;
     }
 
@@ -351,10 +532,22 @@ export default function WorkspaceView({
     const segments = trimmed.split("/").filter(Boolean);
     if (segments.length > 0) {
       segments.pop();
+      // Get current view from pathname
+      const viewFromPath = pathname?.split("/")[1] || "explorer";
       const fallbackPath = segments.length
         ? `/${segments.join("/")}`
-        : `/${workspaceId}`;
-      router.push(fallbackPath);
+        : `/${viewFromPath}`;
+
+      // Update URL asynchronously using history API to avoid re-render/flash
+      if (typeof window !== "undefined") {
+        requestAnimationFrame(() => {
+          window.history.replaceState(
+            { ...window.history.state, path: fallbackPath },
+            "",
+            fallbackPath
+          );
+        });
+      }
     }
   };
 
@@ -372,182 +565,30 @@ export default function WorkspaceView({
       const { updateFileInStore } = useWorkspaceStore.getState();
       updateFileInStore(id, { [field]: value });
 
-      // If updating title of a pending item, update the operation in localStorage
-      if (field === "title" && pendingItem) {
-        // If parent_id is a temporary ID, check if parent was already created
-        // If not, create item without parent_id (at root level)
-        let parentId: string | undefined = pendingItem.data.parent_id;
-        if (parentId && parentId.startsWith("temp-")) {
-          // Check if parent was already created in backend
-          const parentPending = pendingItems.get(parentId);
-          if (parentPending) {
-            // Parent is still pending, create item at root level for now
-            console.log(
-              "⚠️ Parent is still pending, creating item at root level"
-            );
-            parentId = undefined;
-          } else {
-            // Parent should exist in backend, but we don't know its real ID
-            // For now, create at root level
-            console.log(
-              "⚠️ Parent was pending but not found, creating item at root level"
-            );
-            parentId = undefined;
-          }
+      // Update the pending item data
+      setPendingItems((prev) => {
+        const newMap = new Map(prev);
+        const existing = newMap.get(id);
+        if (existing) {
+          newMap.set(id, {
+            ...existing,
+            data: { ...existing.data, [field]: value },
+            item: { ...existing.item, [field]: value },
+          });
         }
+        return newMap;
+      });
 
-        // Update the pending item data with the new title
-        setPendingItems((prev) => {
-          const newMap = new Map(prev);
-          const existing = newMap.get(id);
-          if (existing) {
-            newMap.set(id, {
-              ...existing,
-              data: { ...existing.data, title: value, parent_id: parentId },
-              item: { ...existing.item, title: value },
-            });
-          }
-          return newMap;
-        });
-
-        // Update the operation in localStorage
-        savePendingOperation({
-          type: "CREATE",
-          id: id, // Keep the same temp ID
-          workspaceId,
-          data: {
-            ...pendingItem.data,
-            title: value,
-            parent_id: parentId || null,
-          },
-          timestamp: Date.now(),
-        });
-
-        // Trigger sync immediately if online (don't wait for next page load)
-        const isOnline = typeof navigator !== "undefined" && navigator.onLine;
-        if (isOnline) {
-          // Use dynamic imports to avoid circular dependencies
-          Promise.all([
-            import("@/lib/services/fileService"),
-            import("@/lib/services/offlineSync"),
-            import("@/lib/stores/workspaceStore"),
-          ]).then(
-            ([
-              { fileService },
-              { getPendingOperations, clearPendingOperations },
-              { useWorkspaceStore },
-            ]) => {
-              // Get pending operations and sync them
-              const operations = getPendingOperations();
-              if (operations.length > 0) {
-                fileService
-                  .syncBatch(operations)
-                  .then((result) => {
-                    if (result.success && result.failed === 0) {
-                      const storeState = useWorkspaceStore.getState();
-
-                      // Update temporary IDs in Zustand store with real IDs
-                      if (
-                        result.tempIdMap &&
-                        Object.keys(result.tempIdMap).length > 0
-                      ) {
-                        const updatedFiles = storeState.files.map((file) => {
-                          const realId = result.tempIdMap?.[file.id];
-                          if (realId) {
-                            console.log(
-                              `🔄 [UPDATE] Updating temp ID ${file.id} -> ${realId} in store`
-                            );
-                            return { ...file, id: realId };
-                          }
-                          return file;
-                        });
-                        // Update files in store with real IDs
-                        storeState.setFiles(updatedFiles);
-
-                        // Also update pendingItems to use real IDs
-                        setPendingItems((prev) => {
-                          const newMap = new Map();
-                          prev.forEach((value, key) => {
-                            const realId = result.tempIdMap?.[key];
-                            if (realId) {
-                              newMap.set(realId, {
-                                ...value,
-                                item: { ...value.item, id: realId },
-                              });
-                            } else {
-                              newMap.set(key, value);
-                            }
-                          });
-                          return newMap;
-                        });
-                      }
-
-                      clearPendingOperations();
-
-                      // Trigger sync-files to refresh all data (this will get the real IDs from backend)
-                      if (!storeState.isSyncing) {
-                        storeState.syncFiles().then(() => {
-                          console.log(
-                            `✅ [UPDATE] File synced successfully: ${id} -> ${
-                              result.tempIdMap?.[id] || "unknown"
-                            }`
-                          );
-                        });
-                      } else {
-                        console.log(
-                          `✅ [UPDATE] File synced successfully: ${id} -> ${
-                            result.tempIdMap?.[id] || "unknown"
-                          }`
-                        );
-                      }
-                    } else {
-                      console.warn(
-                        `⚠️ [UPDATE] Some operations failed: ${result.failed} failed, ${result.synced} synced`
-                      );
-                    }
-                  })
-                  .catch((error) => {
-                    console.error(`❌ [UPDATE] Failed to sync file:`, error);
-                  });
-              }
-            }
-          );
+      // If item is already created in backend, update it directly
+      // Otherwise, it will be updated when the item is created
+      if (!id.startsWith("temp-")) {
+        try {
+          const { fileService } = await import("@/lib/services/fileService");
+          await fileService.update(id, { [field]: value });
+          console.log(`✅ [UPDATE] Updated pending item in backend: ${id}`);
+        } catch (error) {
+          console.error(`❌ [UPDATE] Failed to update pending item:`, error);
         }
-      } else if (pendingItem) {
-        // For content updates on pending items, just update the pending data
-        setPendingItems((prev) => {
-          const newMap = new Map(prev);
-          const existing = newMap.get(id);
-          if (existing) {
-            newMap.set(id, {
-              ...existing,
-              data: { ...existing.data, [field]: value },
-              item: { ...existing.item, [field]: value },
-            });
-          }
-          return newMap;
-        });
-
-        // Also save UPDATE operation for content changes
-        savePendingOperation({
-          type: "UPDATE",
-          id,
-          workspaceId,
-          field,
-          value,
-          timestamp: Date.now(),
-        });
-      } else if (isTemporaryItem) {
-        // Item is temporary but not in pendingItems (shouldn't happen, but handle it)
-        // Just save UPDATE operation
-        savePendingOperation({
-          type: "UPDATE",
-          id,
-          workspaceId,
-          field,
-          value,
-          timestamp: Date.now(),
-        });
       }
       return;
     }
@@ -571,61 +612,52 @@ export default function WorkspaceView({
           updated_at: updatedFile.updated_at,
         });
 
-        // Remove any pending UPDATE operation for this file from localStorage
-        // For UPDATE operations, we need to find and remove them manually
-        // since removePendingOperation expects the full operation ID format
-        const pendingOps = getPendingOperations();
-        const updateOpsToRemove = pendingOps.filter(
-          (op) => op.type === "UPDATE" && op.id === id && op.field === field
-        );
-
-        if (updateOpsToRemove.length > 0) {
-          // Remove each UPDATE operation using its full operation ID
-          updateOpsToRemove.forEach((op) => {
-            const operationId = `UPDATE-${op.id}-${op.timestamp}`;
-            removePendingOperation(operationId);
-          });
-        }
-
         console.log(
           `✅ [UPDATE] File updated in backend: ${id} ${field} = "${value}"`
         );
         return;
       } catch (error) {
-        console.error(
-          `❌ [UPDATE] Failed to update in backend, saving to localStorage:`,
-          error
-        );
+        console.error(`❌ [UPDATE] Failed to update in backend:`, error);
         // Fall through to save in localStorage as fallback
       }
     }
 
-    // Save to localStorage for offline sync or as fallback
-    savePendingOperation({
-      type: "UPDATE",
-      id,
-      workspaceId,
-      field,
-      value,
-      timestamp: Date.now(),
-    });
-    console.log(
-      `💾 [UPDATE] Saved to localStorage for sync: ${id} ${field} = "${value}"`
+    // If update failed, revert optimistic update
+    const { updateFileInStore: revertUpdate } = useWorkspaceStore.getState();
+    const originalFile = files.find((f) => f.id === id);
+    if (originalFile) {
+      revertUpdate(id, { [field]: originalFile[field] });
+    }
+    console.error(
+      `❌ [UPDATE] Failed to update file, reverted optimistic update: ${id}`
     );
   };
 
   const handleBack = () => {
     // Go up one level in the path
     const pathParts = pathname.split("/").filter(Boolean);
-    if (pathParts.length > 2) {
+    const view = pathParts[0] || "explorer";
+
+    let newPath: string;
+    if (pathParts.length > 1) {
       // Remove last folder from path
       pathParts.pop();
-      const newPath = `/${pathParts.join("/")}`;
-      router.push(newPath);
+      newPath = `/${pathParts.join("/")}`;
     } else {
-      // Go to workspace root
-      router.push(`/${workspaceId}`);
+      // Go to view root (explorer, trash, etc)
+      newPath = `/${view}`;
       setCurrentFolderId(null);
+    }
+
+    // Update URL asynchronously using history API to avoid re-render/flash
+    if (typeof window !== "undefined") {
+      requestAnimationFrame(() => {
+        window.history.replaceState(
+          { ...window.history.state, path: newPath },
+          "",
+          newPath
+        );
+      });
     }
   };
 
@@ -664,9 +696,7 @@ export default function WorkspaceView({
           return newMap;
         });
 
-        // Also remove the CREATE operation from localStorage
-        removePendingOperation(id);
-        console.log(`🗑️ Removed pending item and CREATE operation:`, id);
+        console.log(`🗑️ Removed pending item:`, id);
       });
     }
 
@@ -698,18 +728,6 @@ export default function WorkspaceView({
             `✅ [Delete Batch] Successfully deleted ${result.deleted} file(s) via API`
           );
 
-          // Remove DELETE operations from localStorage since they were synced
-          realFileIds.forEach((id) => {
-            const pendingOps = getPendingOperations();
-            const deleteOps = pendingOps.filter(
-              (op) => op.type === "DELETE" && op.id === id
-            );
-            deleteOps.forEach((op) => {
-              const operationId = `DELETE-${op.id}-${op.timestamp}`;
-              removePendingOperation(operationId);
-            });
-          });
-
           // Sync files to get latest state from backend
           const { syncFiles } = useWorkspaceStore.getState();
           if (!useWorkspaceStore.getState().isSyncing) {
@@ -724,42 +742,8 @@ export default function WorkspaceView({
           error
         );
 
-        // Fallback: save to localStorage for offline sync
-        realFileIds.forEach((id) => {
-          const pendingOps = getPendingOperations();
-          const alreadyDeleted = pendingOps.some(
-            (op) => op.type === "DELETE" && op.id === id
-          );
-
-          if (!alreadyDeleted) {
-            savePendingOperation({
-              type: "DELETE",
-              id,
-              workspaceId,
-              timestamp: Date.now(),
-            });
-            console.log(`💾 Saved delete operation to localStorage:`, id);
-          }
-        });
+        console.error(`❌ [Delete Batch] Failed to delete:`, error);
       }
-    } else {
-      // Offline: save to localStorage for sync
-      realFileIds.forEach((id) => {
-        const pendingOps = getPendingOperations();
-        const alreadyDeleted = pendingOps.some(
-          (op) => op.type === "DELETE" && op.id === id
-        );
-
-        if (!alreadyDeleted) {
-          savePendingOperation({
-            type: "DELETE",
-            id,
-            workspaceId,
-            timestamp: Date.now(),
-          });
-          console.log(`💾 Saved delete operation to localStorage:`, id);
-        }
-      });
     }
   };
 
@@ -792,20 +776,6 @@ export default function WorkspaceView({
       );
     }
 
-    // Then check if there's already a DELETE operation pending in localStorage
-    // Get fresh state to avoid race conditions
-    const pendingOps = getPendingOperations();
-    const alreadyDeleted = pendingOps.some(
-      (op) => op.type === "DELETE" && op.id === id
-    );
-
-    if (alreadyDeleted) {
-      console.log(
-        `ℹ️ Item ${id} already has DELETE operation in localStorage, UI updated`
-      );
-      return;
-    }
-
     // Check if it's a pending item (not yet created in backend)
     if (id.startsWith("temp-")) {
       // Remove from pending items state
@@ -814,33 +784,34 @@ export default function WorkspaceView({
         newMap.delete(id);
         return newMap;
       });
-
-      // Also remove the CREATE operation from localStorage
-      // This prevents the item from being created when syncing
-      removePendingOperation(id);
-      console.log(`🗑️ Removed pending item and CREATE operation:`, id);
+      // Also remove from Zustand store
+      const { files, setFiles } = useWorkspaceStore.getState();
+      setFiles(files.filter((f) => f.id !== id));
+      console.log(`🗑️ Removed pending item:`, id);
       return;
     }
 
-    // Only save delete operation if file exists in store
-    // This prevents creating delete operations for files that don't exist
+    // Delete directly in API
     if (file) {
-      // Save delete operation to localStorage for backend sync
-      // (markFileAsDeleted was already called above if the file exists)
-      savePendingOperation({
-        type: "DELETE",
-        id,
-        workspaceId,
-        timestamp: Date.now(),
-      });
-      console.log(`💾 Saved delete operation to localStorage:`, id);
-    } else {
-      console.warn(
-        `⚠️ File ${id} not found in store, skipping delete operation save`
-      );
-    }
+      try {
+        const { fileService } = await import("@/lib/services/fileService");
+        await fileService.delete(id);
+        console.log(`✅ [Delete] File deleted in backend: ${id}`);
 
-    // Note: The actual backend sync will happen on next page load
+        // Sync files to refresh state
+        const { syncFiles } = useWorkspaceStore.getState();
+        if (!useWorkspaceStore.getState().isSyncing) {
+          await syncFiles();
+        }
+      } catch (error) {
+        console.error(`❌ [Delete] Failed to delete file:`, error);
+        // On error, restore file in store
+        const { markFileAsRestored } = useWorkspaceStore.getState();
+        markFileAsRestored(id);
+      }
+    } else {
+      console.warn(`⚠️ File ${id} not found in store, skipping delete`);
+    }
     // The UI update happens via removeOptimisticItem in HomeContent
   };
 
@@ -972,111 +943,69 @@ export default function WorkspaceView({
     // Don't open editor automaticamente - deixa aparecer na lista pra renomear
     setCurrentFolderId(itemData.parent_id || null);
 
-    // Save CREATE operation to localStorage for offline sync
-    savePendingOperation({
-      type: "CREATE",
-      id: tempId,
-      workspaceId,
-      data: {
-        ...itemData,
-        parent_id: itemData.parent_id || null,
-        order_index: nextOrderIndex,
-      },
-      timestamp: Date.now(),
-    });
-    console.log(`💾 Saved create operation to localStorage:`, tempId);
-
     console.log(`📝 Created optimistic item:`, optimisticItem);
 
-    // Trigger sync immediately if online (don't wait for next page load)
-    const isOnline = typeof navigator !== "undefined" && navigator.onLine;
-    if (isOnline) {
-      // Use dynamic imports to avoid circular dependencies
-      Promise.all([
-        import("@/lib/services/fileService"),
-        import("@/lib/services/offlineSync"),
-        import("@/lib/stores/workspaceStore"),
-      ]).then(
-        ([
-          { fileService },
-          { getPendingOperations, clearPendingOperations },
-          { useWorkspaceStore },
-        ]) => {
-          // Get pending operations and sync them
-          const operations = getPendingOperations();
-          if (operations.length > 0) {
-            fileService
-              .syncBatch(operations)
-              .then((result) => {
-                if (result.success && result.failed === 0) {
-                  const storeState = useWorkspaceStore.getState();
+    // Create directly in API
+    try {
+      const { fileService } = await import("@/lib/services/fileService");
+      const createdFile = await fileService.create(workspaceId, {
+        ...itemData,
+        parent_id: itemData.parent_id || undefined,
+      });
 
-                  // Update temporary IDs in Zustand store with real IDs
-                  if (
-                    result.tempIdMap &&
-                    Object.keys(result.tempIdMap).length > 0
-                  ) {
-                    const updatedFiles = storeState.files.map((file) => {
-                      const realId = result.tempIdMap?.[file.id];
-                      if (realId) {
-                        console.log(
-                          `🔄 [CREATE] Updating temp ID ${file.id} -> ${realId} in store`
-                        );
-                        return { ...file, id: realId };
-                      }
-                      return file;
-                    });
-                    // Update files in store with real IDs
-                    storeState.setFiles(updatedFiles);
+      // Update Zustand store with real file from backend
+      const { syncFiles, files, setFiles } = useWorkspaceStore.getState();
 
-                    // Also update pendingItems to use real IDs
-                    setPendingItems((prev) => {
-                      const newMap = new Map();
-                      prev.forEach((value, key) => {
-                        const realId = result.tempIdMap?.[key];
-                        if (realId) {
-                          newMap.set(realId, {
-                            ...value,
-                            item: { ...value.item, id: realId },
-                          });
-                        } else {
-                          newMap.set(key, value);
-                        }
-                      });
-                      return newMap;
-                    });
-                  }
+      // Remove temporary file and add real file
+      const updatedFiles = files
+        .filter((f) => f.id !== tempId)
+        .concat(createdFile);
+      setFiles(updatedFiles);
 
-                  clearPendingOperations();
+      console.log(`🔄 [CREATE] Replaced temp file in store:`, {
+        tempId,
+        realId: createdFile.id,
+        filesBefore: files.length,
+        filesAfter: updatedFiles.length,
+        removedTemp: files.filter((f) => f.id === tempId).length,
+      });
 
-                  // Trigger sync-files to refresh all data (this will get the real IDs from backend)
-                  if (!storeState.isSyncing) {
-                    storeState.syncFiles().then(() => {
-                      console.log(
-                        `✅ [CREATE] File synced successfully: ${tempId} -> ${
-                          result.tempIdMap?.[tempId] || "unknown"
-                        }`
-                      );
-                    });
-                  } else {
-                    console.log(
-                      `✅ [CREATE] File synced successfully: ${tempId} -> ${
-                        result.tempIdMap?.[tempId] || "unknown"
-                      }`
-                    );
-                  }
-                } else {
-                  console.warn(
-                    `⚠️ [CREATE] Some operations failed: ${result.failed} failed, ${result.synced} synced`
-                  );
-                }
-              })
-              .catch((error) => {
-                console.error(`❌ [CREATE] Failed to sync file:`, error);
-              });
-          }
+      // Update pendingItems to use real ID
+      setPendingItems((prev) => {
+        const newMap = new Map();
+        const pendingItem = prev.get(tempId);
+        if (pendingItem) {
+          newMap.set(createdFile.id, {
+            item: { ...pendingItem.item, id: createdFile.id },
+            data: pendingItem.data,
+          });
         }
+        prev.forEach((value, key) => {
+          if (key !== tempId) {
+            newMap.set(key, value);
+          }
+        });
+        return newMap;
+      });
+
+      // Sync files to refresh all data
+      if (!useWorkspaceStore.getState().isSyncing) {
+        await syncFiles();
+      }
+
+      console.log(
+        `✅ [CREATE] File created successfully: ${tempId} -> ${createdFile.id}`
       );
+    } catch (error) {
+      console.error(`❌ [CREATE] Failed to create file:`, error);
+      // On error, remove optimistic file from store
+      const { files, setFiles } = useWorkspaceStore.getState();
+      setFiles(files.filter((f) => f.id !== tempId));
+      setPendingItems((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(tempId);
+        return newMap;
+      });
     }
 
     // Note: The item will be added to context in HomeContent via useEffect
@@ -1220,47 +1149,6 @@ export default function WorkspaceView({
     []
   );
 
-  // Helper function to update an item in the items list
-  const updateItemInContext = useCallback(
-    (
-      itemId: string,
-      field: "title" | "content",
-      value: string,
-      itemsList: HierarchicalFile[]
-    ): HierarchicalFile[] => {
-      console.log(
-        `🔧 [updateItemInContext] Updating ${itemId} ${field} = "${value}"`
-      );
-      const updateInList = (list: HierarchicalFile[]): HierarchicalFile[] => {
-        return list.map((item) => {
-          if (item.id === itemId) {
-            console.log(
-              `🔧 [updateItemInContext] Found item to update: ${item.id} "${item.title}" -> "${value}"`
-            );
-            return { ...item, [field]: value };
-          }
-          if (item.children) {
-            return {
-              ...item,
-              children: updateInList(item.children),
-            };
-          }
-          return item;
-        });
-      };
-      const result = updateInList(itemsList);
-      const updatedItem = findItemById(result, itemId);
-      console.log(
-        `🔧 [updateItemInContext] Result:`,
-        updatedItem
-          ? { id: updatedItem.id, title: updatedItem.title }
-          : "NOT FOUND"
-      );
-      return result;
-    },
-    []
-  );
-
   // Don't render until mounted to avoid hydration mismatch
   // This ensures server and client render the same initial state
   if (!isMounted) {
@@ -1278,7 +1166,6 @@ export default function WorkspaceView({
     <>
       <HomeContent
         currentView={currentView}
-        setCurrentView={setCurrentView}
         currentFolderId={currentFolderId}
         selectedItem={selectedItem}
         handleFolderClick={handleFolderClick}
@@ -1295,20 +1182,81 @@ export default function WorkspaceView({
         pendingItems={pendingItems}
         setPendingItems={setPendingItems}
         workspacesItems={workspacesItems}
-        router={router}
       />
       <GlobalSearch
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
         workspaceId={workspaceId}
       />
+
+      {/* Add Item Icons and Search Hint - appears when user types */}
+      {!isSearchOpen && currentView === "explorer" && (
+        <div className="fixed bottom-6 right-6 z-10 animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <div className="flex flex-col gap-3">
+            {/* Add Item Icons */}
+            <div className="flex items-center justify-evenly gap-2 p-2 rounded-xl bg-background/80 backdrop-blur-sm">
+              {/* Folder Icon */}
+              <button
+                onClick={() => {
+                  handleAddItem({
+                    type: "folder",
+                    title: "Nova Pasta",
+                    parent_id: currentFolderId || undefined,
+                  });
+                }}
+                className="p-2 rounded-lg transition-all hover:scale-110"
+                title="Adicionar Pasta"
+                style={{ color: "#a78bfa" }}
+              >
+                <FolderIcon size={32} />
+              </button>
+
+              {/* Note Icon */}
+              <button
+                onClick={() => {
+                  handleAddItem({
+                    type: "note",
+                    title: "Novo Bloco de Notas",
+                    parent_id: currentFolderId || undefined,
+                  });
+                }}
+                className="p-2 rounded-lg transition-all hover:scale-110"
+                title="Adicionar Bloco de Notas"
+                style={{ color: "#60a5fa" }}
+              >
+                <NoteIcon size={32} />
+              </button>
+
+              {/* Video Icon - opens modal */}
+              <button
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent("openAddItemModal"));
+                }}
+                className="p-2 rounded-lg transition-all hover:scale-110"
+                title="Adicionar Vídeo"
+                style={{ color: "#f87171" }}
+              >
+                <VideoIcon size={32} />
+              </button>
+            </div>
+
+            {/* Search Hint */}
+            <div className="p-2.5 rounded-xl flex items-center gap-2 text-foreground bg-background/80 backdrop-blur-sm">
+              <span className="text-sm font-medium">Pressione</span>
+              <kbd className="px-2.5 py-1 rounded-lg text-sm text-foreground/70 font-semibold bg-foreground/5">
+                Ctrl + K
+              </kbd>
+              <span className="text-sm font-medium">para buscar</span>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
 
 function HomeContent({
   currentView,
-  setCurrentView,
   currentFolderId,
   selectedItem,
   handleFolderClick,
@@ -1325,12 +1273,8 @@ function HomeContent({
   pendingItems,
   setPendingItems,
   workspacesItems,
-  router,
 }: {
   currentView: "explorer" | "settings" | "trash" | "social" | "planner" | "ai";
-  setCurrentView: (
-    view: "explorer" | "settings" | "trash" | "social" | "planner" | "ai"
-  ) => void;
   currentFolderId: string | null;
   selectedItem: HierarchicalFile | null;
   handleFolderClick: (folderId: string) => void;
@@ -1355,7 +1299,6 @@ function HomeContent({
     >
   >;
   workspacesItems: Workspace[];
-  router: ReturnType<typeof useRouter>;
 }) {
   // Use Zustand store instead of React Query
   const { getFilesByWorkspace } = useWorkspaceData();
@@ -1577,19 +1520,7 @@ function HomeContent({
       />
 
       {/* Sidebar */}
-      <SimpleSidebar
-        onNavigate={(view) => {
-          setCurrentView(view);
-          // Update URL with view query param
-          const newUrl =
-            view === "explorer"
-              ? `/${workspaceId}`
-              : `/${workspaceId}?view=${view}`;
-          router.replace(newUrl);
-        }}
-        currentView={currentView}
-        workspaceId={workspaceId}
-      />
+      <SimpleSidebar currentView={currentView} workspaceId={workspaceId} />
 
       {/* Main Content */}
       <main className="flex-1 overflow-hidden relative z-10">
@@ -1613,9 +1544,7 @@ function HomeContent({
               onItemDelete={wrappedHandleItemDelete}
               onItemDeleteBatch={wrappedHandleItemDeleteBatch}
               loading={loading}
-              workspaceId={workspaceId}
               pendingItems={pendingItems}
-              workspaces={workspacesItems ?? []}
             />
           )
         ) : currentView === "trash" ? (

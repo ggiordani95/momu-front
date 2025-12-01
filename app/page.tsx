@@ -10,9 +10,8 @@ export default function Home() {
 
   useEffect(() => {
     if (workspaces.length > 0) {
-      // Redirect to first workspace
-      const firstWorkspaceId = workspaces[0].id;
-      router.push(`/${firstWorkspaceId}`);
+      // Redirect to explorer view (workspace managed by Zustand)
+      router.push("/explorer");
     }
   }, [workspaces, router]);
 

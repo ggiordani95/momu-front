@@ -187,7 +187,8 @@ export function PlannerWorkspace({ workspaceId }: { workspaceId: string }) {
   };
 
   const navigateToItem = (itemId: string) => {
-    router.push(`/${workspaceId}/${itemId}`);
+    // Navigate to explorer view (workspace managed by Zustand)
+    router.push(`/explorer/${itemId}`);
   };
 
   const filteredCards = cards.filter((card) => {

@@ -1,25 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import {
-  FolderTree,
-  Settings,
-  Trash2,
-  Share2,
-  Calendar,
-  Sparkles,
-  Airplay,
-} from "lucide-react";
+import { FolderTree, Settings, Trash2, Airplay } from "lucide-react";
 import Image from "next/image";
 import ContextMenu from "./editors/ContextMenu";
 import { usePermanentDeleteItem } from "@/lib/hooks/querys/useFiles";
 import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
 
 interface SimpleSidebarProps {
-  onNavigate: (
+  onNavigate?: (
     view: "explorer" | "settings" | "trash" | "social" | "planner" | "ai"
   ) => void;
-  currentView: "explorer" | "settings" | "trash" | "social" | "planner" | "ai";
+  currentView?: "explorer" | "settings" | "trash" | "social" | "planner" | "ai";
   workspaceId: string;
 }
 
@@ -28,6 +20,49 @@ export default function SimpleSidebar({
   currentView,
   workspaceId,
 }: SimpleSidebarProps) {
+  const { currentView: storeView, setCurrentView } = useWorkspaceStore();
+
+  // Use store view if currentView prop is not provided
+  const activeView = currentView || storeView;
+
+  const handleNavigate = (
+    view: "explorer" | "settings" | "trash" | "social" | "planner" | "ai"
+  ) => {
+    // Mark this as internal navigation FIRST to prevent WorkspaceView from re-rendering
+    // We'll set a flag in the window object that WorkspaceView can check
+    if (typeof window !== "undefined") {
+      (
+        window as Window & { __isInternalNavigation?: boolean }
+      ).__isInternalNavigation = true;
+    }
+
+    // Update view in Zustand store (instant UI update)
+    setCurrentView(view);
+
+    // Update URL asynchronously using history API to avoid re-render/flash
+    // Use requestAnimationFrame to ensure it happens after React's render
+    if (typeof window !== "undefined") {
+      requestAnimationFrame(() => {
+        const newUrl = `/${view}`;
+        window.history.replaceState(
+          { ...window.history.state, view },
+          "",
+          newUrl
+        );
+        // Clear the flag after a delay to ensure WorkspaceView's useEffect has run
+        setTimeout(() => {
+          (
+            window as Window & { __isInternalNavigation?: boolean }
+          ).__isInternalNavigation = false;
+        }, 100);
+      });
+    }
+
+    // Call onNavigate callback if provided (for backward compatibility)
+    if (onNavigate) {
+      onNavigate(view);
+    }
+  };
   const [trashContextMenu, setTrashContextMenu] = useState<{
     x: number;
     y: number;
@@ -79,7 +114,7 @@ export default function SimpleSidebar({
   };
   return (
     <aside
-      className="w-52 bg-[var(--sidebar-bg)] shrink-0 border-r flex flex-col relative z-10"
+      className="w-52 bg-sidebar shrink-0 border-r flex flex-col relative z-10"
       style={{
         borderColor: "var(--border-color)",
       }}
@@ -89,23 +124,16 @@ export default function SimpleSidebar({
         style={{ borderColor: "var(--border-color)" }}
       >
         <div className="flex items-center justify-center p-4">
-          <Image
-            src="/momu.png"
-            alt="MOMU"
-            width={32}
-            height={32}
-            className="h-9  object-contain"
-            priority
-          />
+          <Image src="/momu.png" alt="Logo" width={42} height={42} />
         </div>
       </div>
 
       <nav className="flex-1 overflow-y-auto p-2">
         <div className="space-y-1">
           <button
-            onClick={() => onNavigate("explorer")}
+            onClick={() => handleNavigate("explorer")}
             className={`w-full flex items-center gap-2 p-2 rounded-md text-md font-medium transition-colors ${
-              currentView === "explorer"
+              activeView === "explorer"
                 ? "bg-hover text-foreground"
                 : "hover:bg-hover/50 text-foreground/70"
             }`}
@@ -139,10 +167,10 @@ export default function SimpleSidebar({
           </button> */}
 
           <button
-            onClick={() => onNavigate("trash")}
+            onClick={() => handleNavigate("trash")}
             onContextMenu={handleTrashContextMenu}
             className={`w-full flex items-center gap-2 p-2 rounded-md text-md font-medium transition-colors ${
-              currentView === "trash"
+              activeView === "trash"
                 ? "bg-hover text-foreground"
                 : "hover:bg-hover/50 text-foreground/70"
             }`}
@@ -152,9 +180,9 @@ export default function SimpleSidebar({
           </button>
 
           <button
-            onClick={() => onNavigate("settings")}
+            onClick={() => handleNavigate("settings")}
             className={`w-full flex items-center gap-2 p-2 rounded-md text-md font-medium transition-colors ${
-              currentView === "settings"
+              activeView === "settings"
                 ? "bg-hover text-foreground"
                 : "hover:bg-hover/50 text-foreground/70"
             }`}
@@ -163,18 +191,21 @@ export default function SimpleSidebar({
             Configurações
           </button>
 
-          <div className="border-t border-[var(--border-color)] my-2" />
+          <div className="border-t border-border my-2" />
 
           <button
-            onClick={() => onNavigate("ai")}
-            className={`w-full flex items-center gap-2 p-2 rounded-md text-md font-medium transition-colors`}
+            onClick={() => handleNavigate("ai")}
+            className={`w-full flex items-center gap-2 p-2 rounded-md text-md font-medium transition-colors ${
+              activeView === "ai"
+                ? "bg-hover text-foreground"
+                : "hover:bg-hover/50 text-foreground/70"
+            }`}
           >
-            <Airplay size={21} className="text-purple-300" />
+            <Airplay size={21} className="text-purple-500" />
             Assistente de IA
           </button>
         </div>
       </nav>
-
       {/* Context Menu for Trash */}
       {trashContextMenu && (
         <ContextMenu

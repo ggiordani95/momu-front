@@ -118,3 +118,28 @@ export function useDeleteAIChat() {
     },
   });
 }
+
+// Generate AI response mutation
+interface GenerateAIDto {
+  topic: string;
+  workspaceId: string;
+  userId: string;
+}
+
+interface GenerateAIResponse {
+  success: boolean;
+  rawResponse?: string;
+  fullResponse?: Record<string, unknown>;
+  message?: string;
+}
+
+export function useGenerateAI() {
+  return useMutation({
+    mutationFn: async (data: GenerateAIDto): Promise<GenerateAIResponse> => {
+      return apiRequest<GenerateAIResponse>("/ai/generate", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+  });
+}

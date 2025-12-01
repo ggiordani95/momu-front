@@ -1,16 +1,17 @@
 "use client";
 
-import { Folder as FolderIcon, Plus } from "lucide-react";
+import { Folder as FolderIcon } from "lucide-react";
 import { type ItemType } from "@/lib/itemTypes";
 import AddItemModal from "@/components/AddItemModal";
 import FolderSkeleton from "@/components/files/FolderSkeleton";
 import Breadcrumb from "@/components/Breadcrumb";
 import FileCard from "@/components/files/FileCard";
 import React, { useState, useMemo, useEffect } from "react";
-import type { HierarchicalFile, CreateFileDto, Workspace } from "@/lib/types";
+import type { HierarchicalFile, CreateFileDto } from "@/lib/types";
 import { findItemById } from "@/lib/utils/hierarchy";
 import { useDragAndDrop } from "@/lib/hooks/useDragAndDrop";
 import { useMultiSelect } from "@/lib/hooks/useMultiSelect";
+import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
 interface ExplorerWorkspaceProps {
   currentFolderId?: string | null;
   onFolderClick: (folderId: string) => void;
@@ -31,9 +32,7 @@ interface ExplorerWorkspaceProps {
   onItemDelete?: (id: string) => void;
   onItemDeleteBatch?: (ids: string[]) => void;
   loading?: boolean;
-  workspaceId?: string;
   pendingItems?: Map<string, { item: HierarchicalFile; data: CreateFileDto }>;
-  workspaces?: Workspace[];
   files: HierarchicalFile[]; // Files from Zustand store
 }
 
@@ -47,15 +46,30 @@ export function ExplorerWorkspace({
   onItemDelete,
   onItemDeleteBatch,
   loading = false,
-  workspaceId,
   pendingItems,
-  workspaces = [],
   files, // Files from Zustand store (passed as prop)
 }: ExplorerWorkspaceProps) {
   const isLoading = loading;
   const [showAddItem, setShowAddItem] = useState(false);
 
-  console.log(files);
+  // Listen for custom event to open add item modal
+  useEffect(() => {
+    const handleOpenAddItem = () => {
+      setShowAddItem(true);
+    };
+    window.addEventListener(
+      "openAddItemModal",
+      handleOpenAddItem as EventListener
+    );
+    return () => {
+      window.removeEventListener(
+        "openAddItemModal",
+        handleOpenAddItem as EventListener
+      );
+    };
+  }, []);
+
+  const { currentWorkspace } = useWorkspaceStore();
 
   // Find current folder or use root - memoize with stable reference
   const currentFolder = useMemo(() => {
@@ -103,7 +117,7 @@ export function ExplorerWorkspace({
     draggedItemId,
     dragOverItemId,
   } = useDragAndDrop({
-    workspaceId: workspaceId || "",
+    workspaceId: currentWorkspace?.id || "",
     currentFolderId: currentFolderId ?? null,
   });
 
@@ -171,20 +185,6 @@ export function ExplorerWorkspace({
             onBack();
           }
         }}
-        workspaces={workspaces}
-        currentWorkspaceId={workspaceId}
-        actionButton={
-          <button
-            onClick={() => setShowAddItem(true)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:bg-hover/50"
-            style={{
-              color: "var(--foreground)",
-            }}
-          >
-            <Plus size={16} />
-            Adicionar Item
-          </button>
-        }
       />
 
       {/* File Grid */}
@@ -229,26 +229,21 @@ export function ExplorerWorkspace({
                       return;
                     }
 
-                    // Handle multi-select modifiers (Ctrl/Cmd/Shift)
+                    // Don't handle left click for selection - only right button drag selects
+                    // But still allow Ctrl/Cmd/Shift for multi-select
                     if (e.ctrlKey || e.metaKey || e.shiftKey) {
                       handleFileClick(item.id, e);
                       e.stopPropagation();
                       return;
                     }
 
-                    // For single click without modifiers:
-                    // First, select this item (clears other selections)
-                    handleFileClick(item.id, e);
-
-                    // Then trigger normal click action
-                    // Use requestAnimationFrame to ensure selection happens first
-                    requestAnimationFrame(() => {
-                      if (item.type === "folder") {
-                        onFolderClick(item.id);
-                      } else {
-                        onItemClick(item);
-                      }
-                    });
+                    // For single click without modifiers: just trigger normal click action
+                    // Don't select with left click
+                    if (item.type === "folder") {
+                      onFolderClick(item.id);
+                    } else {
+                      onItemClick(item);
+                    }
                   }}
                   onRename={onItemUpdate}
                   onDelete={onItemDelete}

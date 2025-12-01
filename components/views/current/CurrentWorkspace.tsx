@@ -4,13 +4,13 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 
 import {
-  useWorkspaceItems,
-  useCreateItem,
-  useUpdateItem,
-  useDeleteItem,
+  useWorkspaceFiles,
+  useCreateFile,
+  useUpdateFile,
+  useDeleteFile,
 } from "@/lib/hooks/querys/useFiles";
-import type { HierarchicalItem, CreateItemDto } from "@/lib/types";
-import { ItemsProvider, useItems } from "@/lib/contexts/ItemsContext";
+import type { HierarchicalFile, CreateFileDto } from "@/lib/types";
+
 import SimpleSidebar from "@/components/SimpleSidebar";
 import PageEditor from "@/components/editors/PageEditor";
 import { TrashWorkspace } from "@/components/views/trash/TrashWorkspace";
@@ -32,17 +32,17 @@ export default function CurrentWorkspace({
     "explorer" | "settings" | "trash"
   >("explorer");
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
-  const [selectedItem, setSelectedItem] = useState<HierarchicalItem | null>(
+  const [selectedItem, setSelectedItem] = useState<HierarchicalFile | null>(
     null
   );
   const previousEditorPathRef = useRef<string | null>(null);
 
   // React Query hooks
   const { data: items = [], isLoading: loading } =
-    useWorkspaceItems(workspaceId);
-  const createItemMutation = useCreateItem(workspaceId);
-  const updateItemMutation = useUpdateItem(workspaceId);
-  const deleteItemMutation = useDeleteItem(workspaceId);
+    useWorkspaceFiles(workspaceId);
+  const createItemMutation = useCreateFile(workspaceId);
+  const updateItemMutation = useUpdateFile(workspaceId);
+  const deleteItemMutation = useDeleteFile(workspaceId);
 
   const pathKey = pathSegments.join("/");
 
@@ -69,7 +69,9 @@ export default function CurrentWorkspace({
 
       if (targetItem.type === "folder") {
         setCurrentFolderId(targetItem.id);
-        setSelectedItem((prev) => (prev?.id === targetItem.id ? prev : null));
+        setSelectedItem((prev: HierarchicalFile | null) =>
+          prev?.id === targetItem.id ? prev : null
+        );
       } else {
         setSelectedItem(targetItem);
         setCurrentFolderId(targetItem.parent_id || null);
@@ -82,7 +84,7 @@ export default function CurrentWorkspace({
   const handleFolderClick = (folderId: string) => {
     // Build path to folder (including parent folders)
     const buildPathToFolder = (
-      items: HierarchicalItem[],
+      items: HierarchicalFile[],
       targetId: string,
       currentPath: string[] = []
     ): string[] | null => {
@@ -139,7 +141,7 @@ export default function CurrentWorkspace({
     return `${trimmed}/${segment}`;
   };
 
-  const handleItemClick = (item: HierarchicalItem) => {
+  const handleItemClick = (item: HierarchicalFile) => {
     // Handle item click (open page, video, etc.)
     if (item.type === "video" && item.youtube_url) {
       window.open(item.youtube_url, "_blank");
@@ -186,7 +188,7 @@ export default function CurrentWorkspace({
     // Send to backend - React Query will invalidate and refetch
     try {
       await updateItemMutation.mutateAsync({
-        itemId: id,
+        fileId: id,
         data: { [field]: value },
       });
     } catch (error) {
@@ -218,7 +220,7 @@ export default function CurrentWorkspace({
     }
   };
 
-  const handleAddItem = async (itemData: CreateItemDto) => {
+  const handleAddItem = async (itemData: CreateFileDto) => {
     try {
       console.log(`📝 Creating item:`, { ...itemData, workspaceId });
 
@@ -243,24 +245,22 @@ export default function CurrentWorkspace({
   };
 
   return (
-    <ItemsProvider initialItems={items}>
-      <HomeContent
-        currentView={currentView}
-        setCurrentView={setCurrentView}
-        currentFolderId={currentFolderId}
-        selectedItem={selectedItem}
-        handleFolderClick={handleFolderClick}
-        handleItemClick={handleItemClick}
-        handleCloseEditor={handleCloseEditor}
-        handleBack={handleBack}
-        handleItemUpdate={handleItemUpdate}
-        handleAddItem={handleAddItem}
-        handleItemDelete={handleItemDelete}
-        items={items}
-        workspaceId={workspaceId}
-        loading={loading}
-      />
-    </ItemsProvider>
+    <HomeContent
+      currentView={currentView}
+      setCurrentView={setCurrentView}
+      currentFolderId={currentFolderId}
+      selectedItem={selectedItem}
+      handleFolderClick={handleFolderClick}
+      handleItemClick={handleItemClick}
+      handleCloseEditor={handleCloseEditor}
+      handleBack={handleBack}
+      handleItemUpdate={handleItemUpdate}
+      handleAddItem={handleAddItem}
+      handleItemDelete={handleItemDelete}
+      items={items}
+      workspaceId={workspaceId}
+      loading={loading}
+    />
   );
 }
 
@@ -283,9 +283,9 @@ function HomeContent({
   currentView: "explorer" | "settings" | "trash";
   setCurrentView: (view: "explorer" | "settings" | "trash") => void;
   currentFolderId: string | null;
-  selectedItem: HierarchicalItem | null;
+  selectedItem: HierarchicalFile | null;
   handleFolderClick: (folderId: string) => void;
-  handleItemClick: (item: HierarchicalItem) => void;
+  handleItemClick: (item: HierarchicalFile) => void;
   handleCloseEditor: () => void;
   handleBack: () => void;
   handleItemUpdate: (
@@ -293,21 +293,12 @@ function HomeContent({
     field: "title" | "content",
     value: string
   ) => void;
-  handleAddItem: (item: CreateItemDto) => void;
+  handleAddItem: (item: CreateFileDto) => void;
   handleItemDelete: (id: string) => void;
-  items: HierarchicalItem[];
+  items: HierarchicalFile[];
   workspaceId: string;
   loading: boolean;
 }) {
-  const itemsContext = useItems();
-
-  // Sync items with context when they change
-  useEffect(() => {
-    if (itemsContext) {
-      itemsContext.setItems(items);
-    }
-  }, [items, itemsContext]);
-
   return (
     <div
       className="flex h-screen overflow-hidden relative bg-background"
@@ -326,7 +317,13 @@ function HomeContent({
       <SimpleSidebar
         onNavigate={
           setCurrentView as (
-            view: "explorer" | "settings" | "trash" | "social" | "planner"
+            view:
+              | "explorer"
+              | "settings"
+              | "trash"
+              | "social"
+              | "planner"
+              | "ai"
           ) => void
         }
         currentView={currentView}
@@ -338,12 +335,13 @@ function HomeContent({
         {currentView === "explorer" ? (
           selectedItem && selectedItem.type === "note" ? (
             <PageEditor
-              item={selectedItem}
+              file={selectedItem}
               onBack={handleCloseEditor}
               onUpdate={handleItemUpdate}
             />
           ) : (
             <ExplorerWorkspace
+              files={items}
               currentFolderId={currentFolderId}
               onFolderClick={handleFolderClick}
               onItemClick={handleItemClick}
@@ -352,7 +350,6 @@ function HomeContent({
               onItemUpdate={handleItemUpdate}
               onItemDelete={handleItemDelete}
               loading={loading}
-              workspaceId={workspaceId}
             />
           )
         ) : currentView === "trash" ? (
@@ -374,9 +371,9 @@ function HomeContent({
 }
 
 function findItemById(
-  items: HierarchicalItem[],
+  items: HierarchicalFile[],
   id: string
-): HierarchicalItem | null {
+): HierarchicalFile | null {
   for (const item of items) {
     if (item.id === id) {
       return item;

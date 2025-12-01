@@ -13,10 +13,26 @@ export interface SyncFilesResponse {
   error?: string;
 }
 
+export type ViewType =
+  | "explorer"
+  | "settings"
+  | "trash"
+  | "social"
+  | "planner"
+  | "ai";
+
+interface CurrentWorkspace {
+  id: string;
+  title: string;
+}
+
 interface WorkspaceState {
   // Data
   workspaces: Workspace[];
   files: File[];
+  selectedWorkspaceId: string | null;
+  currentWorkspace: CurrentWorkspace | null;
+  currentView: ViewType;
 
   // Loading states
   isLoading: boolean;
@@ -28,6 +44,9 @@ interface WorkspaceState {
   setWorkspaces: (workspaces: Workspace[]) => void;
   setFiles: (files: File[]) => void;
   setSyncData: (data: SyncFilesResponse) => void;
+  setSelectedWorkspaceId: (workspaceId: string | null) => void;
+  setCurrentWorkspace: (workspace: CurrentWorkspace | null) => void;
+  setCurrentView: (view: ViewType) => void;
   syncFiles: () => Promise<void>;
   addOptimisticFile: (file: File) => void;
   markFileAsDeleted: (fileId: string) => void;
@@ -52,6 +71,9 @@ interface WorkspaceState {
 const initialState = {
   workspaces: [],
   files: [],
+  selectedWorkspaceId: null,
+  currentWorkspace: null,
+  currentView: "explorer" as ViewType,
   isLoading: false,
   isSyncing: false,
   lastSyncAt: null,
@@ -71,6 +93,13 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       setWorkspaces: (workspaces) => set({ workspaces }),
 
       setFiles: (files) => set({ files }),
+
+      setSelectedWorkspaceId: (workspaceId) =>
+        set({ selectedWorkspaceId: workspaceId }),
+
+      setCurrentWorkspace: (workspace) => set({ currentWorkspace: workspace }),
+
+      setCurrentView: (view) => set({ currentView: view }),
 
       setSyncData: (data) => {
         set({
@@ -261,6 +290,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         workspaces: state.workspaces,
         files: state.files,
         lastSyncAt: state.lastSyncAt,
+        selectedWorkspaceId: state.selectedWorkspaceId,
+        currentWorkspace: state.currentWorkspace,
+        currentView: state.currentView,
       }),
     }
   )

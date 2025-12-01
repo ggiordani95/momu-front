@@ -5,12 +5,11 @@ import EditableContentItem from "./editors/EditableContentItem";
 import AddItemInline from "./AddItemInline";
 import AddItemButton from "./AddItemButton";
 import RichTextEditor from "./editors/RichTextEditor";
-import { useItems } from "../lib/contexts/ItemsContext";
 import { type ItemType, getItemTypeIcon } from "@/lib/itemTypes";
-import { HierarchicalItem } from "@/lib/types";
+import { HierarchicalFile, UpdateFileDto } from "@/lib/types";
 import {
-  useCreateItem,
-  useUpdateItem,
+  useCreateFile,
+  useUpdateFile,
   useUpdateItemOrder,
 } from "@/lib/hooks/querys/useFiles";
 import { toast } from "sonner";
@@ -40,19 +39,12 @@ export default function ContentArea({
   initialItems,
   topicId,
 }: ContentAreaProps) {
-  const itemsContext = useItems();
   const [items, setItems] = useState(initialItems);
-  const createItemMutation = useCreateItem(topicId);
-  const updateItemMutation = useUpdateItem(topicId);
+  const createFileMutation = useCreateFile(topicId);
+  const updateFileMutation = useUpdateFile(topicId);
   const updateItemOrderMutation = useUpdateItemOrder(topicId);
   const optimisticIdRef = useRef(0);
 
-  // Sync items with context when they change
-  useEffect(() => {
-    if (itemsContext) {
-      itemsContext.setItems(items as HierarchicalItem[]);
-    }
-  }, [items, itemsContext]);
   const [addItemPosition, setAddItemPosition] =
     useState<AddItemPosition | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
@@ -143,8 +135,8 @@ export default function ContentArea({
     const updatedItems = updateItemInTree(items);
     setItems(updatedItems);
 
-    updateItemMutation.mutate(
-      { itemId: id, data: { [field]: value } },
+    updateFileMutation.mutate(
+      { fileId: id, data: { [field]: value } as UpdateFileDto },
       {
         onError: (error) => {
           console.error("Error updating item:", error);
@@ -177,8 +169,8 @@ export default function ContentArea({
     setItems((prev) => insertItem(prev, optimisticItem, itemData.parent_id));
     setAddItemPosition(null);
 
-    createItemMutation.mutate(itemData, {
-      onSuccess: (newItem) => {
+    createFileMutation.mutate(itemData, {
+      onSuccess: (newItem: HierarchicalFile) => {
         const mappedItem: TopicItem = {
           id: newItem.id,
           type: newItem.type,
@@ -615,7 +607,7 @@ export default function ContentArea({
             {items.map((item) => (
               <div key={item.id} className="space-y-8">
                 <EditableContentItem
-                  item={item as HierarchicalItem}
+                  item={item as HierarchicalFile}
                   onUpdate={handleUpdate}
                   onAddChild={(parentId) =>
                     openAddItem({ type: "child", parentId })
@@ -636,8 +628,8 @@ export default function ContentArea({
                     ) : undefined
                   }
                   onMoveItem={handleMoveItem}
-                  allItems={items as HierarchicalItem[]}
-                  setAllItems={setItems as (items: HierarchicalItem[]) => void}
+                  allItems={items as HierarchicalFile[]}
+                  setAllItems={setItems as (items: HierarchicalFile[]) => void}
                 />
               </div>
             ))}
@@ -715,7 +707,7 @@ export default function ContentArea({
           {displayItems.map((item) => (
             <div key={item.id} className="space-y-8">
               <EditableContentItem
-                item={item as HierarchicalItem}
+                item={item as HierarchicalFile}
                 onUpdate={handleUpdate}
                 onAddChild={(parentId) =>
                   openAddItem({ type: "child", parentId })
@@ -736,7 +728,7 @@ export default function ContentArea({
                   ) : undefined
                 }
                 onMoveItem={handleMoveItem}
-                allItems={items as HierarchicalItem[]}
+                allItems={items as HierarchicalFile[]}
                 setAllItems={(newItems) => {
                   setItems(newItems as TopicItem[]);
                   if (selectedModuleId) {

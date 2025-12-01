@@ -5,14 +5,11 @@ import { useMemo, useEffect, useCallback } from "react";
 import FileCard from "../../files/FileCard";
 import FolderSkeleton from "../../files/FolderSkeleton";
 import Breadcrumb from "../../Breadcrumb";
+import { WorkspaceSelector } from "@/components/WorkspaceSelector";
 import {
   useRestoreItem,
   usePermanentDeleteItem,
 } from "@/lib/hooks/querys/useFiles";
-import {
-  getPendingOperations,
-  removePendingOperation,
-} from "@/lib/services/offlineSync";
 import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
 import type { HierarchicalFile, Workspace } from "@/lib/types";
 import { useMultiSelect } from "@/lib/hooks/useMultiSelect";
@@ -56,13 +53,48 @@ export function TrashWorkspace({
   const handlePermanentDelete = useCallback(
     async (id: string) => {
       try {
+        // Check if file exists in store before trying to delete
+        const { files, removeFilePermanently } = useWorkspaceStore.getState();
+        const fileExists = files.some((f) => f.id === id);
+
+        if (!fileExists) {
+          console.warn(
+            `⚠️ File ${id} not found in store, may have already been deleted`
+          );
+          return;
+        }
+
         // Optimistically remove file from Zustand store immediately
-        const { removeFilePermanently } = useWorkspaceStore.getState();
         removeFilePermanently(id);
 
         // Call API to permanently delete from database
         const { fileService } = await import("@/lib/services/fileService");
-        await fileService.permanentDelete(id);
+        try {
+          await fileService.permanentDelete(id);
+        } catch (apiError: unknown) {
+          // If file not found, it may have already been deleted - restore in store
+          const isNotFound =
+            (apiError instanceof Error &&
+              apiError.message?.includes("not found")) ||
+            (apiError &&
+              typeof apiError === "object" &&
+              "status" in apiError &&
+              (apiError as { status?: number }).status === 404);
+
+          if (isNotFound) {
+            console.log(
+              `ℹ️ File ${id} not found in backend, may have already been deleted`
+            );
+            // File already deleted, restore it in store (it was removed optimistically)
+            const { markFileAsRestored } = useWorkspaceStore.getState();
+            markFileAsRestored(id);
+            return;
+          }
+          // Re-throw other errors - restore file in store on error
+          const { markFileAsRestored } = useWorkspaceStore.getState();
+          markFileAsRestored(id);
+          throw apiError;
+        }
 
         // Also call mutation for React Query cache invalidation
         await permanentDeleteMutation.mutateAsync(id);
@@ -70,19 +102,11 @@ export function TrashWorkspace({
         if (onPermanentDelete) {
           onPermanentDelete(id);
         }
-
-        // Sync files to refresh state from backend
-        const { syncFiles } = useWorkspaceStore.getState();
-        if (!useWorkspaceStore.getState().isSyncing) {
-          await syncFiles();
-        }
       } catch (error) {
         console.error("Error permanently deleting item:", error);
-        // On error, re-sync to get correct state
-        const { syncFiles } = useWorkspaceStore.getState();
-        if (!useWorkspaceStore.getState().isSyncing) {
-          syncFiles();
-        }
+        // On error, restore file in store (it was removed optimistically)
+        const { markFileAsRestored } = useWorkspaceStore.getState();
+        markFileAsRestored(id);
       }
     },
     [permanentDeleteMutation, onPermanentDelete]
@@ -90,34 +114,56 @@ export function TrashWorkspace({
 
   const handlePermanentDeleteBatch = useCallback(async (ids: string[]) => {
     try {
+      // Filter out files that don't exist in store
+      const { files, removeFilePermanently, markFileAsRestored } =
+        useWorkspaceStore.getState();
+      const existingIds = ids.filter((id) => files.some((f) => f.id === id));
+
+      if (existingIds.length === 0) {
+        console.warn(`⚠️ No files found in store to delete`);
+        return;
+      }
+
       // Optimistically remove files from Zustand store immediately
-      const { removeFilePermanently } = useWorkspaceStore.getState();
-      ids.forEach((id) => removeFilePermanently(id));
+      existingIds.forEach((id) => removeFilePermanently(id));
 
       // Call API to permanently delete from database
       const { fileService } = await import("@/lib/services/fileService");
-      const result = await fileService.permanentDeleteBatch(ids);
+      try {
+        const result = await fileService.permanentDeleteBatch(existingIds);
 
-      if (result.success) {
-        console.log(
-          `✅ [Permanent Delete Batch] Successfully deleted ${result.deleted} file(s) from database`
-        );
-
-        // Sync files to refresh state from backend
-        const { syncFiles } = useWorkspaceStore.getState();
-        if (!useWorkspaceStore.getState().isSyncing) {
-          await syncFiles();
+        if (result.success) {
+          console.log(
+            `✅ [Permanent Delete Batch] Successfully deleted ${result.deleted} file(s) from database`
+          );
+        } else {
+          throw new Error("Permanent delete batch failed");
         }
-      } else {
-        throw new Error("Permanent delete batch failed");
+      } catch (apiError: unknown) {
+        // If some files not found, that's okay - they may have already been deleted
+        const isNotFound =
+          (apiError instanceof Error &&
+            apiError.message?.includes("not found")) ||
+          (apiError &&
+            typeof apiError === "object" &&
+            "status" in apiError &&
+            (apiError as { status?: number }).status === 404);
+
+        if (isNotFound) {
+          console.log(
+            `ℹ️ Some files not found in backend, may have already been deleted`
+          );
+          return;
+        }
+        // On error, restore files in store (they were removed optimistically)
+        existingIds.forEach((id) => markFileAsRestored(id));
+        throw apiError;
       }
     } catch (error) {
       console.error("Error permanently deleting items:", error);
-      // On error, re-sync to get correct state
-      const { syncFiles } = useWorkspaceStore.getState();
-      if (!useWorkspaceStore.getState().isSyncing) {
-        syncFiles();
-      }
+      // On error, restore files in store (they were removed optimistically)
+      const { markFileAsRestored } = useWorkspaceStore.getState();
+      ids.forEach((id) => markFileAsRestored(id));
     }
   }, []);
 
@@ -173,45 +219,11 @@ export function TrashWorkspace({
     handlePermanentDeleteBatch,
   ]);
 
-  // Get DELETE operations from localStorage that haven't been synced yet
-  // These are items that were deleted but the Zustand store hasn't been updated yet
-  const pendingDeletes = useMemo(() => {
-    const operations = getPendingOperations(topicId);
-    const deleteOps = operations.filter((op) => op.type === "DELETE");
-
-    // Find the items that were deleted locally but not yet in Zustand store
-    const deletedItems: HierarchicalFile[] = [];
-    const deletedFileIds = new Set(deletedFiles.map((f) => f.id));
-
-    deleteOps.forEach((op) => {
-      if (op.type === "DELETE" && !deletedFileIds.has(op.id)) {
-        // Item was deleted but not yet in Zustand store
-        // Try to find it in all files (including deleted ones) from global JSON
-        const file = allFiles.find(
-          (f) => f.id === op.id && f.workspace_id === topicId
-        );
-        if (file) {
-          // Create a HierarchicalFile from the File
-          deletedItems.push({
-            ...file,
-            children: [],
-          } as HierarchicalFile);
-        }
-      }
-    });
-
-    return deletedItems;
-  }, [topicId, deletedFiles, allFiles]);
-
   const handleRestore = async (id: string) => {
     try {
       // Optimistically mark file as restored in Zustand store
       const { markFileAsRestored } = useWorkspaceStore.getState();
       markFileAsRestored(id);
-
-      // Remove DELETE operation from localStorage if it exists
-      // This prevents the item from being deleted again when syncing
-      removePendingOperation(id);
 
       await restoreItemMutation.mutateAsync(id);
       if (onRestore) {
@@ -222,37 +234,13 @@ export function TrashWorkspace({
     }
   };
 
-  // Merge Zustand deleted files (from global JSON) and locally deleted items
-  // Remove duplicates using a Map to ensure unique IDs
+  // Use deleted files directly from Zustand store
   const allTrashItems = useMemo(() => {
-    const itemsMap = new Map<string, HierarchicalFile>();
-
-    // First, add Zustand deleted files from global JSON (filtered by workspace + active === false)
-    // These are the most up-to-date from syncService
-    deletedFiles.forEach((file) => {
-      itemsMap.set(file.id, {
-        ...file,
-        children: [],
-      } as HierarchicalFile);
-    });
-
-    // Then, add local-only items (not yet synced to Zustand)
-    // These are items deleted locally but Zustand store hasn't been updated yet
-    pendingDeletes.forEach((file) => {
-      if (!itemsMap.has(file.id)) {
-        itemsMap.set(file.id, file);
-      }
-    });
-
-    const result = Array.from(itemsMap.values());
-    console.log(`🗑️ [TrashWorkspace] allTrashItems calculated:`, {
-      deletedFilesCount: deletedFiles.length,
-      pendingDeletesCount: pendingDeletes.length,
-      totalTrashItems: result.length,
-      trashItemIds: result.map((f) => f.id),
-    });
-    return result;
-  }, [deletedFiles, pendingDeletes]);
+    return deletedFiles.map((file) => ({
+      ...file,
+      children: [],
+    })) as HierarchicalFile[];
+  }, [deletedFiles]);
 
   // Sort items by order_index (same as FileExplorer)
   const sortedItems = [...allTrashItems].sort(
@@ -261,15 +249,12 @@ export function TrashWorkspace({
 
   return (
     <div className="h-full flex flex-col">
+      {/* Workspace Selector */}
+      <div className="p-4 border-b border-border">
+        <WorkspaceSelector currentWorkspaceId={topicId} currentView="trash" />
+      </div>
       {/* Breadcrumb */}
-      <Breadcrumb
-        items={[]}
-        currentFolderId={null}
-        onNavigate={() => {}}
-        workspaces={workspaces}
-        currentWorkspaceId={topicId}
-        currentView="trash"
-      />
+      <Breadcrumb items={[]} currentFolderId={null} onNavigate={() => {}} />
       {/* File Grid - same layout as FileExplorer */}
       <div
         ref={containerRef}

@@ -160,7 +160,7 @@ export default function AddItemModal({
       >
         {/* Icon Grid - macOS Dock style */}
         {!selectedType && (
-          <div className="flex items-center justify-center gap-6">
+          <div className="flex items-center justify-center gap-8">
             {availableTypes.map((itemType, index) => {
               const IconComponent = itemType.icon;
               return (
@@ -168,29 +168,16 @@ export default function AddItemModal({
                   key={itemType.type}
                   type="button"
                   onClick={() => handleTypeClick(itemType.type)}
-                  className="flex flex-col items-center justify-center transition-all duration-300"
+                  className="flex flex-col items-center justify-center transition-all duration-300 group"
                   style={{
                     opacity: isMounted ? 1 : 0,
-                    transform: isMounted
-                      ? "translateY(0) scale(1)"
-                      : "translateY(40px) scale(0.7)",
-                    transition: `all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) ${
-                      0.1 + index * 0.1
-                    }s`,
+
                     backgroundColor: "transparent",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform =
-                      "translateY(-12px) scale(1.15)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "translateY(0) scale(1)";
                   }}
                 >
                   <div
-                    className="mb-2 p-6 rounded-3xl transition-all duration-300"
+                    className="mb-3 p-8 rounded-3xl transition-all duration-300 relative"
                     style={{
-                      backgroundColor: "transparent",
                       color:
                         itemType.type === "folder"
                           ? "#a78bfa"
@@ -202,10 +189,10 @@ export default function AddItemModal({
                     <IconComponent size={96} />
                   </div>
                   <span
-                    className="text-lg font-medium"
+                    className="text-xl font-semibold transition-colors"
                     style={{
-                      color: "rgba(255, 255, 255, 0.9)",
-                      textShadow: "0 1px 2px rgba(0, 0, 0, 0.5)",
+                      color: "rgba(255, 255, 255, 0.95)",
+                      textShadow: "0 2px 4px rgba(0, 0, 0, 0.5)",
                     }}
                   >
                     {itemType.label}

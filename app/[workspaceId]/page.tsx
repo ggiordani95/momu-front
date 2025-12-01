@@ -2,24 +2,30 @@
 
 import { useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import WorkspaceView from "./WorkspaceView";
+import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
 
 export default function WorkspacePage() {
   const params = useParams();
   const router = useRouter();
   const workspaceId = params?.workspaceId as string;
+  const { setSelectedWorkspaceId } = useWorkspaceStore();
 
-  // If no workspaceId, redirect to home
+  // Redirect old workspace routes to /explorer
   useEffect(() => {
-    if (!workspaceId) {
-      router.push("/");
+    if (workspaceId) {
+      // Set the workspace in Zustand store
+      setSelectedWorkspaceId(workspaceId);
+      // Redirect to explorer view
+      router.replace("/explorer");
+    } else {
+      // If no workspaceId, redirect to home
+      router.replace("/");
     }
-  }, [workspaceId, router]);
+  }, [workspaceId, router, setSelectedWorkspaceId]);
 
-  if (!workspaceId) {
-    return null;
-  }
-
-  // Show workspace root (no folder selected)
-  return <WorkspaceView workspaceId={workspaceId} pathSegments={[]} />;
+  return (
+    <div className="flex h-screen items-center justify-center">
+      <p className="text-foreground/60">Redirecionando...</p>
+    </div>
+  );
 }
