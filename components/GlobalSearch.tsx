@@ -204,24 +204,24 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
     window.matchMedia("(prefers-color-scheme: dark)").matches;
 
   const darkModeBackground = isDarkMode
-    ? "rgba(255, 255, 255, 0.08)"
-    : "rgba(255, 255, 255, 0.4)";
+    ? "rgba(255, 255, 255, 0.12)"
+    : "rgba(255, 255, 255, 0.5)";
   const darkModeText = isDarkMode
     ? "rgba(255, 255, 255, 0.9)"
     : "rgba(0, 0, 0, 0.9)";
 
   return (
-    <div className="fixed inset-0 z-100 flex items-start justify-center pt-[15vh] px-4">
+    <div className="fixed inset-0 z-100 flex items-start justify-center pt-[28vh] px-4">
       {/* Backdrop with blur - Glass effect */}
       <div
-        className="fixed inset-0 transition-opacity duration-200"
+        className="fixed inset-0 transition-opacity duration-500"
         onClick={onClose}
         style={{
           backgroundColor: isDarkMode
-            ? "rgba(0, 0, 0, 0.3)"
-            : "rgba(255, 255, 255, 0.5)",
-          backdropFilter: "blur(80px) saturate(180%)",
-          WebkitBackdropFilter: "blur(80px) saturate(180%)",
+            ? "rgba(0, 0, 0, 0.2)"
+            : "rgba(255, 255, 255, 0.6)",
+          backdropFilter: "blur(1px) saturate(120%)",
+          WebkitBackdropFilter: "blur(1px) saturate(120%)",
         }}
       />
 
@@ -229,20 +229,23 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
       <div
         className="w-full max-w-[700px] relative z-10 animate-in fade-in zoom-in-95 duration-200"
         style={{
-          animation: "spotlight-in 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+          animation: "spotlight-in 0.1s cubic-bezier(0.16, 1, 0.3, 1)",
         }}
       >
         <div
           className="rounded-3xl overflow-hidden shadow-2xl border"
           style={{
+            backgroundColor: isDarkMode
+              ? "rgba(0, 0, 0, 0.2)"
+              : "rgba(255, 255, 255, 0.6)",
             backdropFilter: "blur(80px) saturate(180%)",
             WebkitBackdropFilter: "blur(80px) saturate(180%)",
             border: isDarkMode
               ? "1px solid rgba(255, 255, 255, 0.15)"
               : "1px solid rgba(255, 255, 255, 0.5)",
             boxShadow: isDarkMode
-              ? "0 20px 60px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15), inset 0 -1px 0 rgba(255, 255, 255, 0.05)"
-              : "0 20px 60px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(255, 255, 255, 0.3)",
+              ? "0 20px 60px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15), inset 0 -1px 0 rgba(255, 255, 255, 0.05)"
+              : "0 20px 60px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(255, 255, 255, 0.3)",
           }}
         >
           {/* Search Input */}

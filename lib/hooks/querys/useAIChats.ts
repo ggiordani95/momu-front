@@ -124,6 +124,7 @@ interface GenerateAIDto {
   topic: string;
   workspaceId: string;
   userId: string;
+  model?: string;
 }
 
 interface GenerateAIResponse {

@@ -252,7 +252,7 @@ export function ExplorerWorkspace({
                   dragOverItemId={dragOverItemId}
                   onDragStart={handleDragStart}
                   onDragOver={handleDragOver}
-                  startRenaming={pendingItems?.has(item.id) || false}
+                  startRenaming={false}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                   onDragEnd={handleDragEnd}

@@ -62,6 +62,7 @@ interface WorkspaceState {
   getDeletedFilesByWorkspace: (workspaceId: string) => File[];
   getFileById: (fileId: string) => File | undefined;
   getWorkspaceById: (workspaceId: string) => Workspace | undefined;
+  getNextOrderIndex: (workspaceId: string, parentId?: string | null) => number;
 }
 
 // ============================================
@@ -108,6 +109,28 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           lastSyncAt: new Date(),
           error: data.error || null,
         });
+      },
+
+      // Calcula o próximo order_index disponível para um workspace + parent_id
+      getNextOrderIndex: (workspaceId, parentId = null) => {
+        const state = get();
+        const relevantFiles = state.files.filter((file) => {
+          if (file.workspace_id !== workspaceId) return false;
+          const fileParent =
+            file.parent_id === undefined || file.parent_id === null
+              ? null
+              : file.parent_id;
+          const targetParent =
+            parentId === undefined || parentId === null ? null : parentId;
+          return fileParent === targetParent;
+        });
+
+        if (relevantFiles.length === 0) return 0;
+
+        const maxOrderIndex = Math.max(
+          ...relevantFiles.map((f) => f.order_index ?? 0)
+        );
+        return maxOrderIndex + 1;
       },
 
       // Sync action

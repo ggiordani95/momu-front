@@ -4,28 +4,25 @@ import { Folder } from "lucide-react";
 import { useMemo, useEffect, useCallback } from "react";
 import FileCard from "../../files/FileCard";
 import FolderSkeleton from "../../files/FolderSkeleton";
-import Breadcrumb from "../../Breadcrumb";
 import { WorkspaceSelector } from "@/components/WorkspaceSelector";
 import {
   useRestoreItem,
   usePermanentDeleteItem,
 } from "@/lib/hooks/querys/useFiles";
 import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
-import type { HierarchicalFile, Workspace } from "@/lib/types";
+import type { HierarchicalFile } from "@/lib/types";
 import { useMultiSelect } from "@/lib/hooks/useMultiSelect";
 
 interface TrashWorkspaceProps {
   topicId: string;
   onRestore?: () => void;
   onPermanentDelete?: (id: string) => void;
-  workspaces?: Workspace[];
 }
 
 export function TrashWorkspace({
   topicId,
   onRestore,
   onPermanentDelete,
-  workspaces = [],
 }: TrashWorkspaceProps) {
   // Use Zustand store - use getDeletedFilesByWorkspace for better performance
   // This ensures we get files with active === false
@@ -253,8 +250,6 @@ export function TrashWorkspace({
       <div className="p-4 border-b border-border">
         <WorkspaceSelector currentWorkspaceId={topicId} currentView="trash" />
       </div>
-      {/* Breadcrumb */}
-      <Breadcrumb items={[]} currentFolderId={null} onNavigate={() => {}} />
       {/* File Grid - same layout as FileExplorer */}
       <div
         ref={containerRef}

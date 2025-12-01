@@ -91,7 +91,7 @@ function getUserId(): string {
 
 export async function apiRequest<T>(
   endpoint: string,
-  options?: RequestInit
+  options?: RequestInit & { timeout?: number }
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
   const userId = getUserId();
@@ -137,13 +137,30 @@ export async function apiRequest<T>(
     }
   }
 
+  // Add timeout to prevent hanging requests
+  // AI endpoints need more time (130s), others use default (30s)
+  const defaultTimeout = 30000; // 30 seconds
+  const aiTimeout = 130000; // 130 seconds (slightly more than backend's 120s)
+  const timeout =
+    options?.timeout ??
+    (endpoint.includes("/ai/") ? aiTimeout : defaultTimeout);
+
+  // Log timeout for AI requests for debugging
+  if (endpoint.includes("/ai/") && typeof window !== "undefined") {
+    console.log(
+      `[API] Using ${timeout / 1000}s timeout for AI endpoint: ${endpoint}`
+    );
+  }
+
+  // Remove timeout from options before passing to fetch (it's not a valid RequestInit property)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { timeout: _removedTimeout, ...fetchOptions } = options || {};
+
   const config: RequestInit = {
-    ...options,
+    ...fetchOptions,
     headers: headers,
   };
 
-  // Add timeout to prevent hanging requests
-  const timeout = 10000; // 30 seconds
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 

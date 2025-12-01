@@ -128,9 +128,8 @@ export default function FileCard({
   };
 
   const handleRenameSave = () => {
-    const isOptimisticItem = file.id.startsWith("temp-");
     if (renameValue.trim() && onRename) {
-      if (isOptimisticItem || renameValue.trim() !== file.title) {
+      if (renameValue.trim() !== file.title) {
         onRename(file.id, "title", renameValue.trim());
       } else {
         setRenameValue(file.title);

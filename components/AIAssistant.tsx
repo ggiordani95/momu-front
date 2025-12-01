@@ -5,6 +5,11 @@ import { Sparkles, Loader2, X } from "lucide-react";
 import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
 import { fileService } from "@/lib/services/fileService";
 import type { CreateFileDto } from "@/lib/types";
+import {
+  AIModelSelector,
+  AI_MODELS,
+  type AIModelValue,
+} from "@/components/AIModelSelector";
 
 interface AIAssistantProps {
   workspaceId: string;
@@ -18,6 +23,9 @@ export function AIAssistant({
   onFilesCreated,
 }: AIAssistantProps) {
   const [topic, setTopic] = useState("");
+  const [selectedModel, setSelectedModel] = useState<AIModelValue>(
+    AI_MODELS[0].value
+  );
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { addOptimisticFile, syncFiles } = useWorkspaceStore();
@@ -48,6 +56,7 @@ export function AIAssistant({
           topic: topic.trim(),
           workspaceId,
           userId,
+          model: selectedModel,
         }),
       });
 
@@ -69,13 +78,15 @@ export function AIAssistant({
       const createdFiles: CreateFileDto[] = [];
       const idMap = new Map<string, string>(); // Maps temp IDs to real IDs
 
-      // Extract temp IDs from files (stored in __tempId field by backend)
-      const filesWithTempIds = data.files.map((file: any) => {
-        const tempId = file.__tempId || `temp-${Date.now()}-${Math.random()
-          .toString(36)
-          .substr(2, 9)}`;
-        return { file, tempId };
-      });
+      // Extract temp IDs from files (stored em __tempId pelo backend ou gerados aqui)
+      const filesWithTempIds = data.files.map(
+        (file: CreateFileDto & { __tempId?: string }) => {
+          const tempId =
+            file.__tempId ||
+            `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          return { file, tempId };
+        }
+      );
 
       // Helper function to create a file and update idMap
       const createFileWithMapping = async (
@@ -87,13 +98,22 @@ export function AIAssistant({
           fileData.parent_id = idMap.get(fileData.parent_id)!;
         }
 
-        // Remove __tempId from fileData before sending
-        const { __tempId, ...cleanFileData } = fileData as any;
+        // Remove __tempId from fileData antes de enviar
+        const { __tempId, ...cleanFileData } = fileData as CreateFileDto & {
+          __tempId?: string;
+        };
 
-        // Create file in backend
-        const createdFile = await fileService.create(workspaceId, cleanFileData);
+        const { getNextOrderIndex } = useWorkspaceStore.getState();
+        const parentId = cleanFileData.parent_id || null;
+        const nextOrderIndex = getNextOrderIndex(workspaceId, parentId);
+
+        // Create file in backend with calculated order_index
+        const createdFile = await fileService.create(workspaceId, {
+          ...cleanFileData,
+          order_index: nextOrderIndex,
+        });
         idMap.set(tempId, createdFile.id);
-        createdFiles.push(createdFile);
+        createdFiles.push(createdFile as CreateFileDto);
         console.log(
           `✅ [AI] Created file: ${createdFile.id} - ${createdFile.title}`
         );
@@ -130,9 +150,7 @@ export function AIAssistant({
       onClose();
     } catch (err) {
       console.error("❌ [AI] Error:", err);
-      setError(
-        err instanceof Error ? err.message : "Erro ao gerar conteúdo"
-      );
+      setError(err instanceof Error ? err.message : "Erro ao gerar conteúdo");
     } finally {
       setIsGenerating(false);
     }
@@ -160,6 +178,17 @@ export function AIAssistant({
         </p>
 
         <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-2 text-foreground/80">
+              Modelo de IA
+            </label>
+            <AIModelSelector
+              selectedModel={selectedModel}
+              onModelChange={setSelectedModel}
+              disabled={isGenerating}
+            />
+          </div>
+
           <div>
             <label
               htmlFor="topic"
@@ -225,4 +254,3 @@ export function AIAssistant({
     </div>
   );
 }
-

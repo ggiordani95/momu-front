@@ -57,6 +57,7 @@ export interface CreateFileDto {
   content?: string;
   youtube_url?: string;
   parent_id?: string;
+  order_index?: number;
   active?: boolean;
 }
 

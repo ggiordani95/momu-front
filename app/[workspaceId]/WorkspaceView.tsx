@@ -126,11 +126,69 @@ export default function WorkspaceView({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Check if user is typing in an input/textarea/contenteditable
+      const target = e.target as HTMLElement;
+      const isTypingInInput =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable ||
+        target?.closest("input, textarea, [contenteditable]");
+
       // Open search with Ctrl+K or Cmd+K
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         setIsSearchOpen(true);
         setShowSearchHint(false);
+        return;
+      }
+
+      // Add folder with Ctrl+F or Cmd+F (only in explorer view)
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        e.key === "f" &&
+        !isTypingInInput &&
+        currentView === "explorer"
+      ) {
+        e.preventDefault();
+        if (handleAddItemRef.current) {
+          handleAddItemRef.current({
+            type: "folder",
+            title: "Nova Pasta",
+            parent_id: currentFolderId || undefined,
+          });
+        }
+        return;
+      }
+
+      // Add note with Ctrl+Y or Cmd+Y (only in explorer view)
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        (e.key === "y" || e.key === "Y") &&
+        !isTypingInInput &&
+        currentView === "explorer"
+      ) {
+        e.preventDefault();
+        if (handleAddItemRef.current) {
+          handleAddItemRef.current({
+            type: "note",
+            title: "Novo Bloco de Notas",
+            parent_id: currentFolderId || undefined,
+          });
+        }
+        return;
+      }
+
+      // Add video with Ctrl+Shift+V or Cmd+Shift+V (only in explorer view)
+      // Using V for "Video" to avoid browser conflicts
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        e.shiftKey &&
+        (e.key === "V" || e.key === "v") &&
+        !isTypingInInput &&
+        currentView === "explorer"
+      ) {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("openAddItemModal"));
         return;
       }
 
@@ -142,12 +200,6 @@ export default function WorkspaceView({
 
       // Show hint when user types a regular character (not modifier keys)
       // Only if not typing in an input/textarea/contenteditable
-      const target = e.target as HTMLElement;
-      const isTypingInInput =
-        target?.tagName === "INPUT" ||
-        target?.tagName === "TEXTAREA" ||
-        target?.isContentEditable ||
-        target?.closest("input, textarea, [contenteditable]");
 
       // Check if it's a printable character (letters, numbers, and common characters)
       const isPrintableChar =
@@ -186,7 +238,7 @@ export default function WorkspaceView({
         clearTimeout(searchHintTimeoutRef.current);
       }
     };
-  }, [isSearchOpen]);
+  }, [isSearchOpen, currentView, currentFolderId]);
 
   const [selectedItem, setSelectedItem] = useState<HierarchicalFile | null>(
     null
@@ -195,6 +247,9 @@ export default function WorkspaceView({
     Map<string, { item: HierarchicalFile; data: CreateFileDto }>
   >(new Map());
   const previousEditorPathRef = useRef<string | null>(null);
+  const handleAddItemRef = useRef<
+    ((itemData: CreateFileDto) => Promise<void>) | null
+  >(null);
 
   // Use Zustand store for global state management
 
@@ -558,13 +613,8 @@ export default function WorkspaceView({
   ) => {
     // Check if this is a pending item (not yet created in backend)
     const pendingItem = pendingItems.get(id);
-    const isTemporaryItem = id.startsWith("temp-");
 
-    if (pendingItem || isTemporaryItem) {
-      // Update Zustand store optimistically (so UI updates immediately)
-      const { updateFileInStore } = useWorkspaceStore.getState();
-      updateFileInStore(id, { [field]: value });
-
+    if (pendingItem) {
       // Update the pending item data
       setPendingItems((prev) => {
         const newMap = new Map(prev);
@@ -581,7 +631,7 @@ export default function WorkspaceView({
 
       // If item is already created in backend, update it directly
       // Otherwise, it will be updated when the item is created
-      if (!id.startsWith("temp-")) {
+      {
         try {
           const { fileService } = await import("@/lib/services/fileService");
           await fileService.update(id, { [field]: value });
@@ -684,29 +734,6 @@ export default function WorkspaceView({
     }
 
     const fileIdsToDelete = filesToDelete.map((f) => f.id);
-    const tempIds = fileIdsToDelete.filter((id) => id.startsWith("temp-"));
-
-    // Handle temporary items (not yet created in backend)
-    if (tempIds.length > 0) {
-      tempIds.forEach((id) => {
-        // Remove from pending items state
-        setPendingItems((prev) => {
-          const newMap = new Map(prev);
-          newMap.delete(id);
-          return newMap;
-        });
-
-        console.log(`🗑️ Removed pending item:`, id);
-      });
-    }
-
-    // Filter out temp IDs - only delete real files
-    const realFileIds = fileIdsToDelete.filter((id) => !id.startsWith("temp-"));
-
-    if (realFileIds.length === 0) {
-      console.log("ℹ️ Only temporary items to delete, skipping API call");
-      return;
-    }
 
     // Mark all files as deleted in the store at once (optimistic update)
     markFilesAsDeleted(fileIdsToDelete);
@@ -721,7 +748,7 @@ export default function WorkspaceView({
       try {
         // Call API to delete all files at once
         const { fileService } = await import("@/lib/services/fileService");
-        const result = await fileService.deleteBatch(realFileIds);
+        const result = await fileService.deleteBatch(fileIdsToDelete);
 
         if (result.success) {
           console.log(
@@ -776,21 +803,6 @@ export default function WorkspaceView({
       );
     }
 
-    // Check if it's a pending item (not yet created in backend)
-    if (id.startsWith("temp-")) {
-      // Remove from pending items state
-      setPendingItems((prev) => {
-        const newMap = new Map(prev);
-        newMap.delete(id);
-        return newMap;
-      });
-      // Also remove from Zustand store
-      const { files, setFiles } = useWorkspaceStore.getState();
-      setFiles(files.filter((f) => f.id !== id));
-      console.log(`🗑️ Removed pending item:`, id);
-      return;
-    }
-
     // Delete directly in API
     if (file) {
       try {
@@ -815,202 +827,43 @@ export default function WorkspaceView({
     // The UI update happens via removeOptimisticItem in HomeContent
   };
 
-  const handleAddItem = async (itemData: CreateFileDto) => {
-    // For all items (including videos), save to localStorage for offline sync
-    // Videos will also be saved to localStorage and synced on next page load
+  const handleAddItem = useCallback(
+    async (itemData: CreateFileDto) => {
+      // Create directly in API - no temporary files
+      try {
+        const { fileService } = await import("@/lib/services/fileService");
+        const { getNextOrderIndex } = useWorkspaceStore.getState();
 
-    // For non-video items, create optimistically and open editor
-    const tempId = `temp-${Date.now()}-${Math.random()
-      .toString(36)
-      .substr(2, 9)}`;
+        const parentId = itemData.parent_id || null;
+        const nextOrderIndex = getNextOrderIndex(workspaceId, parentId);
 
-    // Calculate the next order_index for this parent_id
-    // Find all items with the same parent_id (or root items if parent_id is null)
-    // This function needs to check both backend items and pending items
-    const getItemsForParent = (
-      parentId: string | null | undefined
-    ): HierarchicalFile[] => {
-      if (parentId === null || parentId === undefined) {
-        // Root files - include both backend files and pending items
-        const rootBackendFiles = files.filter((file) => !file.parent_id);
-        const rootPendingItems = Array.from(pendingItems.values())
-          .map(({ item }) => item)
-          .filter((item) => !item.parent_id);
-        return [...rootBackendFiles, ...rootPendingItems];
-      }
-
-      // Files inside a folder - check both backend files and pending items
-      // First check backend files
-      const parent = findItemById(files, parentId);
-      if (parent) {
-        return parent.children || [];
-      }
-
-      // If not found in backend, check pending items
-      const pendingParent = pendingItems.get(parentId);
-      if (pendingParent) {
-        return pendingParent.item.children || [];
-      }
-
-      // If parent is not found at all, return empty array
-      // This can happen if parent is a temporary item that hasn't been added to pendingItems yet
-      return [];
-    };
-
-    const siblingItems = getItemsForParent(itemData.parent_id);
-    // Also include pending items with the same parent_id
-    const pendingSiblings = Array.from(pendingItems.values())
-      .map(({ item }) => item)
-      .filter((item) => {
-        if (itemData.parent_id === null || itemData.parent_id === undefined) {
-          return !item.parent_id;
-        }
-        return item.parent_id === itemData.parent_id;
-      });
-
-    // Get max order_index from both existing and pending items
-    const allSiblings = [...siblingItems, ...pendingSiblings];
-    const maxOrderIndex =
-      allSiblings.length > 0
-        ? Math.max(...allSiblings.map((item) => item.order_index || 0))
-        : -1;
-    const nextOrderIndex = maxOrderIndex + 1;
-
-    const optimisticItem: HierarchicalFile = {
-      id: tempId,
-      workspace_id: workspaceId,
-      parent_id: itemData.parent_id || null,
-      type: itemData.type,
-      title: itemData.title || "Novo item",
-      content: itemData.content || undefined,
-      youtube_id: undefined,
-      youtube_url: undefined,
-      order_index: nextOrderIndex,
-      active: true,
-      created_at: new Date().toISOString(),
-      children: [],
-    };
-
-    // Add optimistically to Zustand store
-    // HierarchicalFile extends File, so we can pass it directly
-    // The store will only use the File properties (children is ignored)
-    const { addOptimisticFile } = useWorkspaceStore.getState();
-    // Extract only File properties (exclude children)
-    const fileForStore: import("@/lib/types").File = {
-      id: optimisticItem.id,
-      workspace_id: optimisticItem.workspace_id,
-      type: optimisticItem.type,
-      title: optimisticItem.title,
-      content: optimisticItem.content,
-      youtube_id: optimisticItem.youtube_id,
-      youtube_url: optimisticItem.youtube_url,
-      parent_id: optimisticItem.parent_id,
-      order_index: optimisticItem.order_index,
-      active: optimisticItem.active,
-      created_at: optimisticItem.created_at,
-      updated_at: optimisticItem.updated_at,
-    };
-    addOptimisticFile(fileForStore);
-
-    // Add to pending items
-    setPendingItems((prev) => {
-      const newMap = new Map(prev);
-      newMap.set(tempId, { item: optimisticItem, data: itemData });
-
-      // If this item has a parent_id, update the parent's children array
-      if (itemData.parent_id) {
-        const parentPending = newMap.get(itemData.parent_id);
-        if (parentPending) {
-          // Parent is also a pending item, update its children
-          const updatedParent = {
-            ...parentPending.item,
-            children: [...(parentPending.item.children || []), optimisticItem],
-          };
-          newMap.set(itemData.parent_id, {
-            ...parentPending,
-            item: updatedParent,
-          });
-          console.log(
-            `✅ Updated parent ${itemData.parent_id} children:`,
-            updatedParent.children.length
-          );
-        }
-      }
-
-      return newMap;
-    });
-
-    // Don't open editor automaticamente - deixa aparecer na lista pra renomear
-    setCurrentFolderId(itemData.parent_id || null);
-
-    console.log(`📝 Created optimistic item:`, optimisticItem);
-
-    // Create directly in API
-    try {
-      const { fileService } = await import("@/lib/services/fileService");
-      const createdFile = await fileService.create(workspaceId, {
-        ...itemData,
-        parent_id: itemData.parent_id || undefined,
-      });
-
-      // Update Zustand store with real file from backend
-      const { syncFiles, files, setFiles } = useWorkspaceStore.getState();
-
-      // Remove temporary file and add real file
-      const updatedFiles = files
-        .filter((f) => f.id !== tempId)
-        .concat(createdFile);
-      setFiles(updatedFiles);
-
-      console.log(`🔄 [CREATE] Replaced temp file in store:`, {
-        tempId,
-        realId: createdFile.id,
-        filesBefore: files.length,
-        filesAfter: updatedFiles.length,
-        removedTemp: files.filter((f) => f.id === tempId).length,
-      });
-
-      // Update pendingItems to use real ID
-      setPendingItems((prev) => {
-        const newMap = new Map();
-        const pendingItem = prev.get(tempId);
-        if (pendingItem) {
-          newMap.set(createdFile.id, {
-            item: { ...pendingItem.item, id: createdFile.id },
-            data: pendingItem.data,
-          });
-        }
-        prev.forEach((value, key) => {
-          if (key !== tempId) {
-            newMap.set(key, value);
-          }
+        const createdFile = await fileService.create(workspaceId, {
+          ...itemData,
+          parent_id: itemData.parent_id || undefined,
+          order_index: nextOrderIndex,
         });
-        return newMap;
-      });
 
-      // Sync files to refresh all data
-      if (!useWorkspaceStore.getState().isSyncing) {
-        await syncFiles();
+        // Sync files to refresh all data and show the new file
+        const { syncFiles } = useWorkspaceStore.getState();
+        if (!useWorkspaceStore.getState().isSyncing) {
+          await syncFiles();
+        }
+
+        // Navigate to the parent folder to show the new file
+        setCurrentFolderId(itemData.parent_id || null);
+
+        console.log(`✅ [CREATE] File created successfully: ${createdFile.id}`);
+      } catch (error) {
+        console.error(`❌ [CREATE] Failed to create file:`, error);
       }
+    },
+    [workspaceId, setCurrentFolderId]
+  );
 
-      console.log(
-        `✅ [CREATE] File created successfully: ${tempId} -> ${createdFile.id}`
-      );
-    } catch (error) {
-      console.error(`❌ [CREATE] Failed to create file:`, error);
-      // On error, remove optimistic file from store
-      const { files, setFiles } = useWorkspaceStore.getState();
-      setFiles(files.filter((f) => f.id !== tempId));
-      setPendingItems((prev) => {
-        const newMap = new Map(prev);
-        newMap.delete(tempId);
-        return newMap;
-      });
-    }
-
-    // Note: The item will be added to context in HomeContent via useEffect
-    // The item will appear in the list and can be renamed inline
-  };
+  // Update handleAddItemRef when handleAddItem is defined
+  useEffect(() => {
+    handleAddItemRef.current = handleAddItem;
+  }, [handleAddItem]);
 
   // Helper function to add optimistic item to items list
   const addOptimisticItemToContext = useCallback(
@@ -1102,7 +955,7 @@ export default function WorkspaceView({
   // Helper function to remove optimistic item from items list
   const removeOptimisticItemFromContext = useCallback(
     (itemId: string, itemsList: HierarchicalFile[]): HierarchicalFile[] => {
-      // Remove both pending (temp-*) and existing items
+      // Remove items
       const removeFromList = (list: HierarchicalFile[]): HierarchicalFile[] => {
         return list
           .filter((item) => item.id !== itemId)
@@ -1118,33 +971,6 @@ export default function WorkspaceView({
       };
 
       return removeFromList(itemsList);
-    },
-    []
-  );
-
-  // Helper function to replace optimistic item with real item
-  const replaceOptimisticItemInContext = useCallback(
-    (
-      tempId: string,
-      realItem: HierarchicalFile,
-      itemsList: HierarchicalFile[]
-    ): HierarchicalFile[] => {
-      const replaceInList = (list: HierarchicalFile[]): HierarchicalFile[] => {
-        return list.map((item) => {
-          if (item.id === tempId) {
-            return realItem;
-          }
-          if (item.children) {
-            return {
-              ...item,
-              children: replaceInList(item.children),
-            };
-          }
-          return item;
-        });
-      };
-
-      return replaceInList(itemsList);
     },
     []
   );
@@ -1188,7 +1014,6 @@ export default function WorkspaceView({
         onClose={() => setIsSearchOpen(false)}
         workspaceId={workspaceId}
       />
-
       {/* Add Item Icons and Search Hint - appears when user types */}
       {!isSearchOpen && currentView === "explorer" && (
         <div className="fixed bottom-6 right-6 z-10 animate-in fade-in slide-in-from-bottom-4 duration-200">
@@ -1204,11 +1029,14 @@ export default function WorkspaceView({
                     parent_id: currentFolderId || undefined,
                   });
                 }}
-                className="p-2 rounded-lg transition-all hover:scale-110"
+                className="p-2 rounded-lg transition-all hover:scale-110 flex flex-col items-center justify-center gap-5  "
                 title="Adicionar Pasta"
                 style={{ color: "#a78bfa" }}
               >
                 <FolderIcon size={32} />
+                <kbd className="px-2.5 py-1 rounded-lg text-sm text-foreground/70 font-semibold bg-foreground/5">
+                  Ctrl + F
+                </kbd>
               </button>
 
               {/* Note Icon */}
@@ -1220,28 +1048,33 @@ export default function WorkspaceView({
                     parent_id: currentFolderId || undefined,
                   });
                 }}
-                className="p-2 rounded-lg transition-all hover:scale-110"
+                className="p-2 rounded-lg transition-all hover:scale-110 flex flex-col items-center justify-center gap-5"
                 title="Adicionar Bloco de Notas"
                 style={{ color: "#60a5fa" }}
               >
                 <NoteIcon size={32} />
+                <kbd className="px-2.5 py-1 rounded-lg text-sm text-foreground/70 font-semibold bg-foreground/5">
+                  Ctrl + Y
+                </kbd>
               </button>
-
               {/* Video Icon - opens modal */}
               <button
                 onClick={() => {
                   window.dispatchEvent(new CustomEvent("openAddItemModal"));
                 }}
-                className="p-2 rounded-lg transition-all hover:scale-110"
+                className="p-2 rounded-lg transition-all hover:scale-110 flex flex-col items-center justify-center gap-5"
                 title="Adicionar Vídeo"
                 style={{ color: "#f87171" }}
               >
                 <VideoIcon size={32} />
+                <kbd className="px-2.5 py-1 rounded-lg text-sm text-foreground/70 font-semibold bg-foreground/5">
+                  Ctrl + Shift + V
+                </kbd>
               </button>
             </div>
 
             {/* Search Hint */}
-            <div className="p-2.5 rounded-xl flex items-center gap-2 text-foreground bg-background/80 backdrop-blur-sm">
+            <div className="p-2.5 rounded-xl flex items-center justify-center gap-2 text-foreground bg-background/80 backdrop-blur-sm">
               <span className="text-sm font-medium">Pressione</span>
               <kbd className="px-2.5 py-1 rounded-lg text-sm text-foreground/70 font-semibold bg-foreground/5">
                 Ctrl + K
@@ -1411,8 +1244,7 @@ function HomeContent({
         return (
           itemParentId === optimisticParentId &&
           item.type === optimisticItem.type &&
-          item.title === currentTitle &&
-          !item.id.startsWith("temp-")
+          item.title === currentTitle
         );
       });
 
@@ -1550,7 +1382,6 @@ function HomeContent({
         ) : currentView === "trash" ? (
           <TrashWorkspace
             topicId={workspaceId}
-            workspaces={workspacesItems}
             onRestore={() => {
               // React Query will automatically refetch
             }}

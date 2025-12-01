@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import {
   ArrowUp,
   Loader2,
@@ -13,6 +13,7 @@ import {
   Trash2,
   Airplay,
   FolderPlus,
+  Folder,
   X,
   FileText,
 } from "lucide-react";
@@ -26,8 +27,14 @@ import {
 } from "@/lib/hooks/querys/useAIChats";
 import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
 import { fileService } from "@/lib/services/fileService";
-import type { CreateFileDto } from "@/lib/types";
+import type { CreateFileDto, HierarchicalFile } from "@/lib/types";
 import { WorkspaceSelector } from "@/components/WorkspaceSelector";
+import { buildHierarchy } from "@/lib/utils/hierarchy";
+import {
+  AIModelSelector,
+  AI_MODELS,
+  type AIModelValue,
+} from "@/components/AIModelSelector";
 
 interface Message {
   id: string;
@@ -46,6 +53,9 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  const [selectedModel, setSelectedModel] = useState<AIModelValue>(
+    AI_MODELS[0].value
+  );
 
   // React Query mutation for AI generation
   const generateAIMutation = useGenerateAI();
@@ -56,9 +66,9 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
   >(null);
   const [isIndexing, setIsIndexing] = useState(false);
   const [selectedText, setSelectedText] = useState("");
-  const [selectionPosition, setSelectionPosition] = useState({ x: 0, y: 0 });
-  const [showCreateNoteButton, setShowCreateNoteButton] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
+  const [folderSearchQuery, setFolderSearchQuery] = useState("");
+  const folderSearchInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -201,7 +211,13 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
         parent_id: folderId || undefined,
       };
 
-      await fileService.create(activeWorkspaceId, noteData);
+      const { getNextOrderIndex } = useWorkspaceStore.getState();
+      const nextOrderIndex = getNextOrderIndex(activeWorkspaceId, folderId);
+
+      await fileService.create(activeWorkspaceId, {
+        ...noteData,
+        order_index: nextOrderIndex,
+      });
 
       // Sync files to update the store
       await syncFiles();
@@ -243,6 +259,7 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
         topic: userMessage.content,
         workspaceId,
         userId,
+        model: selectedModel,
       },
       {
         onSuccess: (data) => {
@@ -284,46 +301,18 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
     }
   };
 
-  // Handle text selection in assistant messages
-  useEffect(() => {
-    const handleSelection = () => {
-      const selection = window.getSelection();
-      if (selection && selection.toString().trim().length > 0) {
-        const range = selection.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
-        setSelectedText(selection.toString().trim());
-        setSelectionPosition({
-          x: rect.left + rect.width / 2,
-          y: rect.top - 10,
-        });
-        setShowCreateNoteButton(true);
-      } else {
-        setShowCreateNoteButton(false);
-        setSelectedText("");
-      }
-    };
-
-    document.addEventListener("selectionchange", handleSelection);
-    return () => {
-      document.removeEventListener("selectionchange", handleSelection);
-    };
-  }, []);
-
-  const handleCreateNoteFromSelection = () => {
-    if (selectedText.trim()) {
-      setShowNoteModal(true);
-      setShowCreateNoteButton(false);
-      // Clear selection
-      window.getSelection()?.removeAllRanges();
-    }
-  };
-
   const handleCreateNote = async (folderId: string | null) => {
     if (!selectedText.trim()) return;
 
     setIsIndexing(true);
     try {
-      const noteTitle = selectedText.substring(0, 50) || "Nota da IA";
+      // Extract title from first line or first 50 chars
+      const firstLine = selectedText.split("\n")[0].trim();
+      const noteTitle =
+        firstLine.length > 0 && firstLine.length <= 100
+          ? firstLine.replace(/^#+\s*/, "") // Remove markdown headers
+          : selectedText.substring(0, 50).trim() || "Nota da IA";
+
       const noteContent = selectedText;
 
       const noteData: CreateFileDto = {
@@ -333,7 +322,13 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
         parent_id: folderId || undefined,
       };
 
-      await fileService.create(activeWorkspaceId, noteData);
+      const { getNextOrderIndex } = useWorkspaceStore.getState();
+      const nextOrderIndex = getNextOrderIndex(activeWorkspaceId, folderId);
+
+      await fileService.create(activeWorkspaceId, {
+        ...noteData,
+        order_index: nextOrderIndex,
+      });
       await syncFiles();
 
       setShowNoteModal(false);
@@ -346,6 +341,68 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
       setIsIndexing(false);
     }
   };
+
+  // Build hierarchy and filtered folders with paths
+  const workspaceFiles = getFilesByWorkspace(activeWorkspaceId);
+  const hierarchicalFiles = useMemo(
+    () => buildHierarchy(workspaceFiles as HierarchicalFile[]),
+    [workspaceFiles]
+  );
+
+  // Helper function to build folder path
+  const buildFolderPath = (
+    files: HierarchicalFile[],
+    targetId: string,
+    currentPath: string[] = []
+  ): string[] | null => {
+    for (const file of files) {
+      if (file.id === targetId) {
+        return [...currentPath, file.title];
+      }
+      if (file.children) {
+        const found = buildFolderPath(file.children, targetId, [
+          ...currentPath,
+          file.title,
+        ]);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  const foldersWithPaths = useMemo(() => {
+    const folders = workspaceFiles.filter(
+      (file) => file.type === "folder" && file.active !== false
+    );
+
+    return folders
+      .map((folder) => {
+        const path = buildFolderPath(hierarchicalFiles, folder.id);
+        return {
+          ...folder,
+          path: path || [folder.title],
+        };
+      })
+      .filter((folder) => {
+        if (!folderSearchQuery) return true;
+        const query = folderSearchQuery.toLowerCase();
+        const titleMatch = folder.title.toLowerCase().includes(query);
+        const pathMatch = folder.path.some((p) =>
+          p.toLowerCase().includes(query)
+        );
+        return titleMatch || pathMatch;
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceFiles, hierarchicalFiles, folderSearchQuery]);
+
+  // Reset search when modal opens/closes
+  useEffect(() => {
+    if (showNoteModal) {
+      setTimeout(() => folderSearchInputRef.current?.focus(), 100);
+    } else {
+      setFolderSearchQuery("");
+    }
+  }, [showNoteModal]);
 
   return (
     <div className="h-full flex bg-background">
@@ -415,7 +472,7 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={(e) => handleIndexChat(chat.id, e)}
-                          className="p-1.5 hover:bg-foreground/10 rounded transition-colors"
+                          className="p-1.5  rounded transition-colors"
                           title="Indexar como nota"
                         >
                           <FolderPlus className="w-4 h-4 text-foreground/40" />
@@ -440,6 +497,12 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
         {/* Top Header */}
         <div className="border-b border-border p-4 flex items-center justify-between bg-background/95 backdrop-blur-sm sticky top-0 z-10">
           <div className="flex items-center gap-6 text-base text-foreground/60">
+            <AIModelSelector
+              selectedModel={selectedModel}
+              onModelChange={setSelectedModel}
+              disabled={generateAIMutation.isPending}
+              compact={true}
+            />
             <button className="text-foreground font-medium">Bate-papo</button>
             <button className="hover:text-foreground transition-colors">
               Como fazer
@@ -450,8 +513,10 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
         <div className="flex-1 overflow-y-auto">
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center p-8">
-              <div className="text-center font-medium text-foreground/40 text-xl">
-                Comece uma nova conversa.
+              <div className="text-center max-w-2xl space-y-4">
+                <div className="font-medium text-foreground/40 text-xl mb-6">
+                  Comece uma nova conversa
+                </div>
               </div>
             </div>
           ) : (
@@ -459,25 +524,45 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
               {messages.map((message) => (
                 <div
                   key={message.id}
-                  className={`flex gap-3 ${
+                  className={`flex gap-3 group ${
                     message.role === "user"
                       ? "justify-end items-start"
                       : "justify-start items-start"
                   }`}
                 >
                   {message.role === "assistant" && (
-                    <Airplay className="w-5 h-5 text-foreground/50" />
+                    <div className="flex flex-col items-center">
+                      <Airplay className="w-5 h-5 text-foreground/50" />
+                      <div className="p-2 mt-4 flex flex-col items-center border-l border-border/30 bg-accent rounded-lg transition-colors pt-3 pb-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setSelectedText(message.content);
+                            setShowNoteModal(true);
+                          }}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                          }}
+                          className="p-1 flex items-center gap-2 rounded-md transition-all opacity-70 group-hover:opacity-100 cursor-pointer"
+                          title="Criar nota com este conteúdo"
+                        >
+                          <FileText className="w-5 h-5 text-black mb-0.5" />
+                        </button>
+                      </div>
+                    </div>
                   )}
                   <div
-                    className={`flex-1 max-w-[75%] ${
+                    className={`flex-1 max-w-[75%] relative ${
                       message.role === "user" ? "order-first" : ""
                     }`}
                   >
                     <div
-                      className={`${
+                      className={`relative ${
                         message.role === "user"
                           ? "text-foreground"
-                          : "bg-foreground/5 text-foreground border border-border/50 rounded-lg p-5"
+                          : "bg-foreground/5 text-foreground border border-border/50 rounded-lg"
                       }`}
                     >
                       {message.role === "user" ? (
@@ -485,19 +570,24 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
                           {message.content}
                         </div>
                       ) : (
-                        <div
-                          className="selectable-content"
-                          style={{
-                            userSelect: "text",
-                            WebkitUserSelect: "text",
-                            MozUserSelect: "text",
-                            msUserSelect: "text",
-                          }}
-                        >
-                          <MarkdownRenderer
-                            content={message.content}
-                            className="text-base leading-relaxed"
-                          />
+                        <div className="flex items-start">
+                          {/* Conteúdo principal */}
+                          <div className="flex-1 p-5">
+                            <div
+                              className="selectable-content"
+                              style={{
+                                userSelect: "text",
+                                WebkitUserSelect: "text",
+                                MozUserSelect: "text",
+                                msUserSelect: "text",
+                              }}
+                            >
+                              <MarkdownRenderer
+                                content={message.content}
+                                className="text-base leading-relaxed"
+                              />
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -570,7 +660,7 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
               {/* Input Controls */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <button className="p-2.5 hover:bg-foreground/10 rounded-lg transition-colors">
+                  <button className="p-2.5  rounded-lg transition-colors">
                     <Settings className="w-5 h-5 text-foreground/50" />
                   </button>
                   <button className="p-2.5 hover:bg-foreground/10 rounded-lg transition-colors">
@@ -586,7 +676,7 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
                 <button
                   onClick={handleSend}
                   disabled={!input.trim() || generateAIMutation.isPending}
-                  className="w-12 h-12 rounded-lg bg-foreground/10 hover:bg-foreground/15 disabled:bg-foreground/5 disabled:cursor-not-allowed text-foreground/70 hover:text-foreground flex items-center justify-center transition-all shrink-0 border border-border/50"
+                  className="w-12 h-12 rounded-lg bg-foreground/10  disabled:bg-foreground/5 disabled:cursor-not-allowed text-foreground/70 hover:text-foreground flex items-center justify-center transition-all shrink-0 border border-border/50"
                 >
                   {generateAIMutation.isPending ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
@@ -601,140 +691,660 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
       </div>
 
       {/* Create Note Button (floating when text is selected) */}
-      {showCreateNoteButton && selectedText && (
-        <div
-          className="fixed z-50"
-          style={{
-            left: `${selectionPosition.x}px`,
-            top: `${selectionPosition.y}px`,
-            transform: "translateX(-50%)",
-          }}
-        >
-          <button
-            onClick={handleCreateNoteFromSelection}
-            className="flex items-center gap-2 px-4 py-2 bg-foreground text-background rounded-lg shadow-lg hover:bg-foreground/90 transition-colors text-sm font-medium"
-          >
-            <FileText className="w-4 h-4" />
-            Criar Nota
-          </button>
-        </div>
-      )}
 
       {/* Note Creation Modal */}
       {showNoteModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-sidebar rounded-lg p-6 w-full max-w-md border border-border">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Criar Nota</h2>
-              <button
-                onClick={() => {
-                  setShowNoteModal(false);
-                  setSelectedText("");
+        <div className="fixed inset-0 z-100 flex items-center justify-center px-4">
+          {/* Backdrop with blur - Glass effect */}
+          <div
+            className="fixed inset-0 transition-opacity duration-500"
+            onClick={() => {
+              setShowNoteModal(false);
+              setSelectedText("");
+            }}
+            style={{
+              backgroundColor:
+                typeof window !== "undefined" &&
+                window.matchMedia("(prefers-color-scheme: dark)").matches
+                  ? "rgba(0, 0, 0, 0.2)"
+                  : "rgba(255, 255, 255, 0.6)",
+              backdropFilter: "blur(1px) saturate(120%)",
+              WebkitBackdropFilter: "blur(1px) saturate(120%)",
+            }}
+          />
+          {/* Modal Container - Glass effect Style */}
+          <div
+            className="w-full max-w-[700px] relative z-10 animate-in fade-in zoom-in-95 duration-200"
+            style={{
+              animation: "spotlight-in 0.1s cubic-bezier(0.16, 1, 0.3, 1)",
+            }}
+          >
+            <div
+              className="rounded-3xl overflow-hidden shadow-2xl border"
+              style={{
+                backgroundColor:
+                  typeof window !== "undefined" &&
+                  window.matchMedia("(prefers-color-scheme: dark)").matches
+                    ? "rgba(0, 0, 0, 0.92)"
+                    : "rgba(255, 255, 255, 0.772)",
+                backdropFilter: "blur(80px) saturate(180%)",
+                WebkitBackdropFilter: "blur(80px) saturate(180%)",
+                border:
+                  typeof window !== "undefined" &&
+                  window.matchMedia("(prefers-color-scheme: dark)").matches
+                    ? "1px solid rgba(255, 255, 255, 0.15)"
+                    : "1px solid rgba(255, 255, 255, 0.5)",
+                boxShadow:
+                  typeof window !== "undefined" &&
+                  window.matchMedia("(prefers-color-scheme: dark)").matches
+                    ? "0 20px 60px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.15), inset 0 -1px 0 rgba(255, 255, 255, 0.05)"
+                    : "0 20px 60px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(255, 255, 255, 0.3)",
+              }}
+            >
+              {/* Header */}
+              <div
+                className="flex items-center justify-between px-8 py-6 border-b"
+                style={{
+                  borderColor:
+                    typeof window !== "undefined" &&
+                    window.matchMedia("(prefers-color-scheme: dark)").matches
+                      ? "rgba(255, 255, 255, 0.023)"
+                      : "rgba(255, 255, 255, 0.12)",
+                  backgroundColor:
+                    typeof window !== "undefined" &&
+                    window.matchMedia("(prefers-color-scheme: dark)").matches
+                      ? "rgba(255, 255, 255, 0.12)"
+                      : "rgba(255, 255, 255, 0.5)",
+                  backdropFilter: "blur(20px) saturate(180%)",
+                  WebkitBackdropFilter: "blur(20px) saturate(180%)",
                 }}
-                className="text-foreground/60 hover:text-foreground transition-colors"
               >
-                <X size={20} />
-              </button>
-            </div>
-
-            <p className="text-sm text-foreground/70 mb-2">
-              Workspace:{" "}
-              <strong>
-                {workspaces.find((w) => w.id === activeWorkspaceId)?.title}
-              </strong>
-            </p>
-
-            <p className="text-sm text-foreground/70 mb-4">
-              Selecione a pasta onde deseja salvar a nota. Deixe vazio para
-              salvar na raiz.
-            </p>
-
-            <div className="space-y-2 max-h-64 overflow-y-auto mb-4">
-              <button
-                onClick={() => handleCreateNote(null)}
-                disabled={isIndexing}
-                className="w-full text-left px-4 py-2 rounded-lg hover:bg-foreground/5 transition-colors border border-border disabled:opacity-50"
-              >
-                📁 Raiz (sem pasta)
-              </button>
-              {getFilesByWorkspace(activeWorkspaceId)
-                .filter(
-                  (file) => file.type === "folder" && file.active !== false
-                )
-                .map((folder) => (
-                  <button
-                    key={folder.id}
-                    onClick={() => handleCreateNote(folder.id)}
-                    disabled={isIndexing}
-                    className="w-full text-left px-4 py-2 rounded-lg hover:bg-foreground/5 transition-colors border border-border disabled:opacity-50"
-                  >
-                    📂 {folder.title}
-                  </button>
-                ))}
-            </div>
-
-            {isIndexing && (
-              <div className="flex items-center justify-center gap-2 text-sm text-foreground/60">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Criando nota...
+                <h2
+                  className="text-2xl font-semibold"
+                  style={{
+                    color:
+                      typeof window !== "undefined" &&
+                      window.matchMedia("(prefers-color-scheme: dark)").matches
+                        ? "rgba(255, 255, 255, 0.9)"
+                        : "rgba(0, 0, 0, 0.9)",
+                  }}
+                >
+                  Criar Nota
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowNoteModal(false);
+                    setSelectedText("");
+                  }}
+                  className="p-2 rounded-lg transition-colors"
+                  style={{
+                    color:
+                      typeof window !== "undefined" &&
+                      window.matchMedia("(prefers-color-scheme: dark)").matches
+                        ? "rgba(255, 255, 255, 0.5)"
+                        : "rgba(0, 0, 0, 0.5)",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor =
+                      typeof window !== "undefined" &&
+                      window.matchMedia("(prefers-color-scheme: dark)").matches
+                        ? "rgba(255, 255, 255, 0.15)"
+                        : "rgba(0, 0, 0, 0.1)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "transparent";
+                  }}
+                >
+                  <X size={20} />
+                </button>
               </div>
-            )}
+
+              {/* Content */}
+              <div
+                className="px-6 py-5"
+                style={{
+                  backgroundColor:
+                    typeof window !== "undefined" &&
+                    window.matchMedia("(prefers-color-scheme: dark)").matches
+                      ? "rgba(255, 255, 255, 0.12)"
+                      : "rgba(255, 255, 255, 0.5)",
+                  backdropFilter: "blur(20px) saturate(180%)",
+                  WebkitBackdropFilter: "blur(20px) saturate(180%)",
+                }}
+              >
+                <p
+                  className="text-base mb-3"
+                  style={{
+                    color:
+                      typeof window !== "undefined" &&
+                      window.matchMedia("(prefers-color-scheme: dark)").matches
+                        ? "rgba(255, 255, 255, 0.7)"
+                        : "rgba(0, 0, 0, 0.7)",
+                  }}
+                >
+                  Workspace:{" "}
+                  <strong>
+                    {workspaces.find((w) => w.id === activeWorkspaceId)?.title}
+                  </strong>
+                </p>
+
+                <p
+                  className="text-base mb-4"
+                  style={{
+                    color:
+                      typeof window !== "undefined" &&
+                      window.matchMedia("(prefers-color-scheme: dark)").matches
+                        ? "rgba(255, 255, 255, 0.6)"
+                        : "rgba(0, 0, 0, 0.6)",
+                  }}
+                >
+                  Selecione a pasta onde deseja salvar a nota. Deixe vazio para
+                  salvar na raiz.
+                </p>
+
+                {/* Search Bar */}
+                <div
+                  className="mb-4 flex items-center px-4 py-3 rounded-xl border"
+                  style={{
+                    backgroundColor:
+                      typeof window !== "undefined" &&
+                      window.matchMedia("(prefers-color-scheme: dark)").matches
+                        ? "rgba(255, 255, 255, 0.05)"
+                        : "rgba(0, 0, 0, 0.05)",
+                    borderColor:
+                      typeof window !== "undefined" &&
+                      window.matchMedia("(prefers-color-scheme: dark)").matches
+                        ? "rgba(255, 255, 255, 0.1)"
+                        : "rgba(0, 0, 0, 0.1)",
+                  }}
+                >
+                  <Search
+                    size={18}
+                    style={{
+                      color:
+                        typeof window !== "undefined" &&
+                        window.matchMedia("(prefers-color-scheme: dark)")
+                          .matches
+                          ? "rgba(255, 255, 255, 0.5)"
+                          : "rgba(0, 0, 0, 0.5)",
+                      marginRight: "12px",
+                    }}
+                  />
+                  <input
+                    ref={folderSearchInputRef}
+                    value={folderSearchQuery}
+                    onChange={(e) => setFolderSearchQuery(e.target.value)}
+                    placeholder="Buscar pasta..."
+                    className="flex-1 bg-transparent border-none outline-none text-base"
+                    style={{
+                      color:
+                        typeof window !== "undefined" &&
+                        window.matchMedia("(prefers-color-scheme: dark)")
+                          .matches
+                          ? "rgba(255, 255, 255, 0.9)"
+                          : "rgba(0, 0, 0, 0.9)",
+                      caretColor: "#007AFF",
+                    }}
+                  />
+                  {folderSearchQuery && (
+                    <button
+                      onClick={() => setFolderSearchQuery("")}
+                      className="ml-2 p-1 rounded transition-colors"
+                      style={{
+                        color:
+                          typeof window !== "undefined" &&
+                          window.matchMedia("(prefers-color-scheme: dark)")
+                            .matches
+                            ? "rgba(255, 255, 255, 0.5)"
+                            : "rgba(0, 0, 0, 0.5)",
+                      }}
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
+
+                <div
+                  className="space-y-3 max-h-96 overflow-y-auto mb-6"
+                  style={{
+                    scrollbarWidth: "thin",
+                    scrollbarColor:
+                      typeof window !== "undefined" &&
+                      window.matchMedia("(prefers-color-scheme: dark)").matches
+                        ? "rgba(255, 255, 255, 0.2) transparent"
+                        : "rgba(0, 0, 0, 0.2) transparent",
+                  }}
+                >
+                  {!folderSearchQuery && (
+                    <button
+                      onClick={() => handleCreateNote(null)}
+                      disabled={isIndexing}
+                      className="w-full flex flex-row items-center text-left px-6 py-4 rounded-xl transition-all duration-150 disabled:opacity-50"
+                      style={{
+                        backgroundColor:
+                          typeof window !== "undefined" &&
+                          window.matchMedia("(prefers-color-scheme: dark)")
+                            .matches
+                            ? "rgba(255, 255, 255, 0.05)"
+                            : "rgba(0, 0, 0, 0.05)",
+                        color:
+                          typeof window !== "undefined" &&
+                          window.matchMedia("(prefers-color-scheme: dark)")
+                            .matches
+                            ? "rgba(255, 255, 255, 0.9)"
+                            : "rgba(0, 0, 0, 0.9)",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isIndexing) {
+                          e.currentTarget.style.backgroundColor =
+                            typeof window !== "undefined" &&
+                            window.matchMedia("(prefers-color-scheme: dark)")
+                              .matches
+                              ? "rgba(255, 255, 255, 0.1)"
+                              : "rgba(0, 0, 0, 0.1)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor =
+                          typeof window !== "undefined" &&
+                          window.matchMedia("(prefers-color-scheme: dark)")
+                            .matches
+                            ? "rgba(255, 255, 255, 0.05)"
+                            : "rgba(0, 0, 0, 0.05)";
+                      }}
+                    >
+                      <Folder
+                        size={20}
+                        className="inline mr-3"
+                        style={{ color: "#3b82f6" }}
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-base font-medium">
+                          {workspaces.find((w) => w.id === activeWorkspaceId)
+                            ?.title || "Workspace"}
+                        </span>
+                      </div>
+                    </button>
+                  )}
+                  {foldersWithPaths.map((folder) => (
+                    <button
+                      key={folder.id}
+                      onClick={() => handleCreateNote(folder.id)}
+                      disabled={isIndexing}
+                      className="w-full flex flex-row items-center text-left px-6 py-4 rounded-xl transition-all duration-150 disabled:opacity-50"
+                      style={{
+                        backgroundColor:
+                          typeof window !== "undefined" &&
+                          window.matchMedia("(prefers-color-scheme: dark)")
+                            .matches
+                            ? "rgba(255, 255, 255, 0.05)"
+                            : "rgba(0, 0, 0, 0.05)",
+                        color:
+                          typeof window !== "undefined" &&
+                          window.matchMedia("(prefers-color-scheme: dark)")
+                            .matches
+                            ? "rgba(255, 255, 255, 0.9)"
+                            : "rgba(0, 0, 0, 0.9)",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isIndexing) {
+                          e.currentTarget.style.backgroundColor =
+                            typeof window !== "undefined" &&
+                            window.matchMedia("(prefers-color-scheme: dark)")
+                              .matches
+                              ? "rgba(255, 255, 255, 0.1)"
+                              : "rgba(0, 0, 0, 0.1)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor =
+                          typeof window !== "undefined" &&
+                          window.matchMedia("(prefers-color-scheme: dark)")
+                            .matches
+                            ? "rgba(255, 255, 255, 0.05)"
+                            : "rgba(0, 0, 0, 0.05)";
+                      }}
+                    >
+                      <Folder
+                        size={20}
+                        className="inline mr-3 align-top"
+                        style={{ color: "#3b82f6", marginTop: "2px" }}
+                      />
+                      <div className="flex flex-col flex-1">
+                        <span className="text-base font-medium">
+                          {folder.title}
+                        </span>
+                        <span
+                          className="text-sm mt-1 truncate font-semibold"
+                          style={{
+                            color:
+                              typeof window !== "undefined" &&
+                              window.matchMedia("(prefers-color-scheme: dark)")
+                                .matches
+                                ? "rgba(255, 255, 255, 0.5)"
+                                : "rgba(0, 0, 0, 0.5)",
+                          }}
+                        >
+                          {(() => {
+                            const workspaceName =
+                              workspaces.find((w) => w.id === activeWorkspaceId)
+                                ?.title || "Workspace";
+                            return `${workspaceName} / ${folder.path.join(
+                              " / "
+                            )}`;
+                          })()}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                  {folderSearchQuery && foldersWithPaths.length === 0 && (
+                    <div
+                      className="py-8 text-center"
+                      style={{
+                        color:
+                          typeof window !== "undefined" &&
+                          window.matchMedia("(prefers-color-scheme: dark)")
+                            .matches
+                            ? "rgba(255, 255, 255, 0.5)"
+                            : "rgba(0, 0, 0, 0.5)",
+                      }}
+                    >
+                      Nenhuma pasta encontrada
+                    </div>
+                  )}
+                </div>
+
+                {isIndexing && (
+                  <div
+                    className="flex items-center justify-center gap-2 text-sm"
+                    style={{
+                      color:
+                        typeof window !== "undefined" &&
+                        window.matchMedia("(prefers-color-scheme: dark)")
+                          .matches
+                          ? "rgba(255, 255, 255, 0.6)"
+                          : "rgba(0, 0, 0, 0.6)",
+                    }}
+                  >
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Criando nota...
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
+
+          <style jsx global>{`
+            @keyframes spotlight-in {
+              from {
+                opacity: 0;
+                transform: scale(0.96) translateY(-10px);
+              }
+              to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+              }
+            }
+          `}</style>
         </div>
       )}
 
       {/* Folder Selection Modal */}
       {showFolderModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-sidebar rounded-lg p-6 w-full max-w-md border border-border">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Escolher Pasta</h2>
-              <button
-                onClick={() => {
-                  setShowFolderModal(false);
-                  setSelectedChatForIndex(null);
+        <div className="fixed inset-0 z-100 flex items-center justify-center px-4">
+          {/* Backdrop with blur - Glass effect */}
+          <div
+            className="fixed inset-0 transition-opacity duration-500"
+            onClick={() => {
+              setShowFolderModal(false);
+              setSelectedChatForIndex(null);
+            }}
+            style={{
+              backgroundColor:
+                typeof window !== "undefined" &&
+                window.matchMedia("(prefers-color-scheme: dark)").matches
+                  ? "rgba(0, 0, 0, 0.2)"
+                  : "rgba(255, 255, 255, 0.6)",
+              backdropFilter: "blur(1px) saturate(120%)",
+              WebkitBackdropFilter: "blur(1px) saturate(120%)",
+            }}
+          />
+
+          {/* Modal Container - Glass effect Style */}
+          <div
+            className="w-full max-w-[500px] relative z-10 animate-in fade-in zoom-in-95 duration-200"
+            style={{
+              animation: "spotlight-in 0.1s cubic-bezier(0.16, 1, 0.3, 1)",
+            }}
+          >
+            <div
+              className="rounded-3xl overflow-hidden shadow-2xl border"
+              style={{
+                backgroundColor:
+                  typeof window !== "undefined" &&
+                  window.matchMedia("(prefers-color-scheme: dark)").matches
+                    ? "rgba(0, 0, 0, 0.775)"
+                    : "rgba(255, 255, 255, 0.6)",
+                boxShadow:
+                  typeof window !== "undefined" &&
+                  window.matchMedia("(prefers-color-scheme: dark)").matches
+                    ? "0 20px 60px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15), inset 0 -1px 0 rgba(255, 255, 255, 0.05)"
+                    : "0 20px 60px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(255, 255, 255, 0.3)",
+              }}
+            >
+              {/* Header */}
+              <div
+                className="flex items-center justify-between px-6 py-5 border-b"
+                style={{
+                  borderColor:
+                    typeof window !== "undefined" &&
+                    window.matchMedia("(prefers-color-scheme: dark)").matches
+                      ? "rgba(255, 255, 255, 0.12)"
+                      : "rgba(255, 255, 255, 0.3)",
+                  backgroundColor:
+                    typeof window !== "undefined" &&
+                    window.matchMedia("(prefers-color-scheme: dark)").matches
+                      ? "rgba(255, 255, 255, 0.12)"
+                      : "rgba(255, 255, 255, 0.5)",
+                  backdropFilter: "blur(20px) saturate(180%)",
+                  WebkitBackdropFilter: "blur(20px) saturate(180%)",
                 }}
-                className="text-foreground/60 hover:text-foreground transition-colors"
               >
-                <X size={20} />
-              </button>
-            </div>
-
-            <p className="text-sm text-foreground/70 mb-4">
-              Selecione a pasta onde deseja salvar a nota do chat. Deixe vazio
-              para salvar na raiz.
-            </p>
-
-            <div className="space-y-2 max-h-64 overflow-y-auto mb-4">
-              <button
-                onClick={() => handleCreateNoteFromChat(null)}
-                disabled={isIndexing}
-                className="w-full text-left px-4 py-2 rounded-lg hover:bg-foreground/5 transition-colors border border-border disabled:opacity-50"
-              >
-                📁 Raiz (sem pasta)
-              </button>
-              {getFilesByWorkspace(workspaceId)
-                .filter(
-                  (file) => file.type === "folder" && file.active !== false
-                )
-                .map((folder) => (
-                  <button
-                    key={folder.id}
-                    onClick={() => handleCreateNoteFromChat(folder.id)}
-                    disabled={isIndexing}
-                    className="w-full text-left px-4 py-2 rounded-lg hover:bg-foreground/5 transition-colors border border-border disabled:opacity-50"
-                  >
-                    📂 {folder.title}
-                  </button>
-                ))}
-            </div>
-
-            {isIndexing && (
-              <div className="flex items-center justify-center gap-2 text-sm text-foreground/60">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Criando nota...
+                <h2
+                  className="text-xl font-semibold"
+                  style={{
+                    color:
+                      typeof window !== "undefined" &&
+                      window.matchMedia("(prefers-color-scheme: dark)").matches
+                        ? "rgba(255, 255, 255, 0.742)"
+                        : "rgba(0, 0, 0, 0.622)",
+                  }}
+                >
+                  Escolher Pasta
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowFolderModal(false);
+                    setSelectedChatForIndex(null);
+                  }}
+                  className="p-2 rounded-lg transition-colors"
+                  style={{
+                    color:
+                      typeof window !== "undefined" &&
+                      window.matchMedia("(prefers-color-scheme: dark)").matches
+                        ? "rgba(255, 255, 255, 0.5)"
+                        : "rgba(0, 0, 0, 0.5)",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor =
+                      typeof window !== "undefined" &&
+                      window.matchMedia("(prefers-color-scheme: dark)").matches
+                        ? "rgba(255, 255, 255, 0.15)"
+                        : "rgba(0, 0, 0, 0.1)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "transparent";
+                  }}
+                >
+                  <X size={20} />
+                </button>
               </div>
-            )}
+
+              {/* Content */}
+              <div
+                className="px-6 py-5"
+                style={{
+                  backgroundColor:
+                    typeof window !== "undefined" &&
+                    window.matchMedia("(prefers-color-scheme: dark)").matches
+                      ? "rgba(255, 255, 255, 0.12)"
+                      : "rgba(255, 255, 255, 0.5)",
+                  backdropFilter: "blur(20px) saturate(180%)",
+                  WebkitBackdropFilter: "blur(20px) saturate(180%)",
+                }}
+              >
+                <p
+                  className="text-sm mb-4"
+                  style={{
+                    color:
+                      typeof window !== "undefined" &&
+                      window.matchMedia("(prefers-color-scheme: dark)").matches
+                        ? "rgba(255, 255, 255, 0.6)"
+                        : "rgba(0, 0, 0, 0.6)",
+                  }}
+                >
+                  Selecione a pasta onde deseja salvar a nota do chat. Deixe
+                  vazio para salvar na raiz.
+                </p>
+
+                <div
+                  className="space-y-2 max-h-64 overflow-y-auto mb-4"
+                  style={{
+                    scrollbarWidth: "thin",
+                    scrollbarColor:
+                      typeof window !== "undefined" &&
+                      window.matchMedia("(prefers-color-scheme: dark)").matches
+                        ? "rgba(255, 255, 255, 0.2) transparent"
+                        : "rgba(0, 0, 0, 0.2) transparent",
+                  }}
+                >
+                  <button
+                    onClick={() => handleCreateNoteFromChat(null)}
+                    disabled={isIndexing}
+                    className="w-full text-left px-4 py-3 rounded-xl transition-all duration-150 disabled:opacity-50"
+                    style={{
+                      backgroundColor:
+                        typeof window !== "undefined" &&
+                        window.matchMedia("(prefers-color-scheme: dark)")
+                          .matches
+                          ? "rgba(255, 255, 255, 0.05)"
+                          : "rgba(0, 0, 0, 0.05)",
+                      color:
+                        typeof window !== "undefined" &&
+                        window.matchMedia("(prefers-color-scheme: dark)")
+                          .matches
+                          ? "rgba(255, 255, 255, 0.9)"
+                          : "rgba(0, 0, 0, 0.9)",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isIndexing) {
+                        e.currentTarget.style.backgroundColor =
+                          typeof window !== "undefined" &&
+                          window.matchMedia("(prefers-color-scheme: dark)")
+                            .matches
+                            ? "rgba(255, 255, 255, 0.1)"
+                            : "rgba(0, 0, 0, 0.1)";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor =
+                        typeof window !== "undefined" &&
+                        window.matchMedia("(prefers-color-scheme: dark)")
+                          .matches
+                          ? "rgba(255, 255, 255, 0.05)"
+                          : "rgba(0, 0, 0, 0.05)";
+                    }}
+                  >
+                    <Folder
+                      size={18}
+                      className="inline mr-2"
+                      style={{ color: "#3b82f6" }}
+                    />
+                    Raiz (sem pasta)
+                  </button>
+                  {getFilesByWorkspace(workspaceId)
+                    .filter(
+                      (file) => file.type === "folder" && file.active !== false
+                    )
+                    .map((folder) => (
+                      <button
+                        key={folder.id}
+                        onClick={() => handleCreateNoteFromChat(folder.id)}
+                        disabled={isIndexing}
+                        className="w-full flex flex-row text-left px-4 py-3 rounded-xl transition-all duration-150 disabled:opacity-50"
+                        style={{
+                          backgroundColor:
+                            typeof window !== "undefined" &&
+                            window.matchMedia("(prefers-color-scheme: dark)")
+                              .matches
+                              ? "rgba(255, 255, 255, 0.05)"
+                              : "rgba(0, 0, 0, 0.05)",
+                          color:
+                            typeof window !== "undefined" &&
+                            window.matchMedia("(prefers-color-scheme: dark)")
+                              .matches
+                              ? "rgba(255, 255, 255, 0.9)"
+                              : "rgba(0, 0, 0, 0.9)",
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isIndexing) {
+                            e.currentTarget.style.backgroundColor =
+                              typeof window !== "undefined" &&
+                              window.matchMedia("(prefers-color-scheme: dark)")
+                                .matches
+                                ? "rgba(255, 255, 255, 0.1)"
+                                : "rgba(0, 0, 0, 0.1)";
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor =
+                            typeof window !== "undefined" &&
+                            window.matchMedia("(prefers-color-scheme: dark)")
+                              .matches
+                              ? "rgba(255, 255, 255, 0.05)"
+                              : "rgba(0, 0, 0, 0.05)";
+                        }}
+                      >
+                        <Folder
+                          size={18}
+                          className="inline mr-2"
+                          style={{ color: "#3b82f6" }}
+                        />
+                        <span className="text-base font-medium">
+                          {folder.title}
+                        </span>
+                      </button>
+                    ))}
+                </div>
+
+                {isIndexing && (
+                  <div
+                    className="flex items-center justify-center gap-2 text-sm"
+                    style={{
+                      color:
+                        typeof window !== "undefined" &&
+                        window.matchMedia("(prefers-color-scheme: dark)")
+                          .matches
+                          ? "rgba(255, 255, 255, 0.6)"
+                          : "rgba(0, 0, 0, 0.6)",
+                    }}
+                  >
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Criando nota...
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

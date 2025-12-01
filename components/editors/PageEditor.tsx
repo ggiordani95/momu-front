@@ -16,6 +16,7 @@ import {
   Link,
   Type,
   Image as ImageIcon,
+  FileText,
 } from "lucide-react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -24,8 +25,9 @@ import TiptapLink from "@tiptap/extension-link";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { Extension } from "@tiptap/core";
 import Image from "@tiptap/extension-image";
-import type { HierarchicalFile } from "@/lib/types";
+import type { HierarchicalFile, File } from "@/lib/types";
 import { markdownToHtml } from "@/lib/utils/markdownToHtml";
+import { FileLinkPicker } from "@/components/FileLinkPicker";
 
 // Custom FontSize extension
 const FontSize = Extension.create({
@@ -100,6 +102,7 @@ export default function PageEditor({
   const blockMenuRef = useRef<HTMLDivElement>(null);
   const [showFontSizeMenu, setShowFontSizeMenu] = useState(false);
   const fontSizeMenuRef = useRef<HTMLDivElement>(null);
+  const [showFileLinkPicker, setShowFileLinkPicker] = useState(false);
 
   // Helper function to convert markdown or \n to HTML breaks
   const convertNewlinesToHTML = (content: string): string => {
@@ -1001,6 +1004,24 @@ export default function PageEditor({
             <ImageIcon size={21} />
           </button>
 
+          {/* File Link */}
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (editor) {
+                if (!editor.isFocused) {
+                  editor.commands.focus();
+                }
+                setShowFileLinkPicker(true);
+              }
+            }}
+            className="p-1.5 rounded transition-colors hover:bg-hover/50"
+            title="Linkar Arquivo"
+          >
+            <FileText size={21} />
+          </button>
+
           <div
             className="w-px h-4 mx-0.5"
             style={{ backgroundColor: "var(--border-color)" }}
@@ -1095,6 +1116,36 @@ export default function PageEditor({
           </div>
         </div>
       </div>
+
+      {/* File Link Picker */}
+      {showFileLinkPicker && file.workspace_id && (
+        <FileLinkPicker
+          workspaceId={file.workspace_id}
+          currentFileId={file.id}
+          onSelect={(selectedFile: File) => {
+            if (editor) {
+              // Create internal link URL
+              const linkUrl = `/${file.workspace_id}/${selectedFile.id}`;
+
+              // Get current selection or use file title as default text
+              const { from, to } = editor.state.selection;
+              const selectedText = editor.state.doc.textBetween(from, to);
+              const linkText = selectedText || selectedFile.title;
+
+              // Insert or replace with link
+              editor
+                .chain()
+                .focus()
+                .insertContent(
+                  `<a href="${linkUrl}" data-file-id="${selectedFile.id}" class="file-link">${linkText}</a>`
+                )
+                .run();
+            }
+            setShowFileLinkPicker(false);
+          }}
+          onClose={() => setShowFileLinkPicker(false)}
+        />
+      )}
     </div>
   );
 }
