@@ -204,8 +204,8 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
     window.matchMedia("(prefers-color-scheme: dark)").matches;
 
   const darkModeBackground = isDarkMode
-    ? "rgba(0, 0, 0, 0.2)"
-    : "rgba(0, 0, 0, 0.25)";
+    ? "rgba(255, 255, 255, 0.08)"
+    : "rgba(255, 255, 255, 0.4)";
   const darkModeText = isDarkMode
     ? "rgba(255, 255, 255, 0.9)"
     : "rgba(0, 0, 0, 0.9)";
@@ -218,10 +218,10 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
         onClick={onClose}
         style={{
           backgroundColor: isDarkMode
-            ? "rgba(0, 0, 0, 0.4)"
-            : "rgba(0, 0, 0, 0.25)",
-          backdropFilter: "blur(30px) saturate(200%)",
-          WebkitBackdropFilter: "blur(30px) saturate(200%)",
+            ? "rgba(0, 0, 0, 0.3)"
+            : "rgba(255, 255, 255, 0.5)",
+          backdropFilter: "blur(80px) saturate(180%)",
+          WebkitBackdropFilter: "blur(80px) saturate(180%)",
         }}
       />
 
@@ -235,17 +235,14 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
         <div
           className="rounded-3xl overflow-hidden shadow-2xl border"
           style={{
-            backgroundColor: isDarkMode
-              ? "rgba(0, 0, 0, 0.4)"
-              : "rgba(255, 255, 255, 0.6)",
-            backdropFilter: "blur(50px) saturate(200%)",
-            WebkitBackdropFilter: "blur(50px) saturate(200%)",
+            backdropFilter: "blur(80px) saturate(180%)",
+            WebkitBackdropFilter: "blur(80px) saturate(180%)",
             border: isDarkMode
-              ? "1px solid rgba(255, 255, 255, 0.1)"
-              : "1px solid rgba(255, 255, 255, 0.4)",
+              ? "1px solid rgba(255, 255, 255, 0.15)"
+              : "1px solid rgba(255, 255, 255, 0.5)",
             boxShadow: isDarkMode
-              ? "0 20px 60px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)"
-              : "0 20px 60px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.6)",
+              ? "0 20px 60px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15), inset 0 -1px 0 rgba(255, 255, 255, 0.05)"
+              : "0 20px 60px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(255, 255, 255, 0.3)",
           }}
         >
           {/* Search Input */}
@@ -253,29 +250,20 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
             className="flex items-center px-6 py-5 border-b"
             style={{
               borderColor: isDarkMode
-                ? "rgba(255, 255, 255, 0.1)"
-                : "rgba(255, 255, 255, 0.2)",
-              backgroundColor: isDarkMode
-                ? "rgba(255, 255, 255, 0.05)"
-                : "rgba(255, 255, 255, 0.1)",
+                ? "rgba(255, 255, 255, 0.12)"
+                : "rgba(255, 255, 255, 0.3)",
+              backgroundColor: darkModeBackground,
+              backdropFilter: "blur(20px) saturate(180%)",
+              WebkitBackdropFilter: "blur(20px) saturate(180%)",
             }}
           >
-            <Search
-              size={20}
-              className="mr-4 shrink-0"
-              style={{
-                color: isDarkMode
-                  ? "rgba(255, 255, 255, 0.7)"
-                  : "rgba(0, 0, 0, 0.7)",
-              }}
-            />
             <input
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Search files and folders..."
-              className="flex-1 bg-transparent border-none outline-none text-base placeholder:opacity-50 font-normal"
+              placeholder="Buscar arquivos e pastas..."
+              className="flex-1 bg-transparent border-none outline-none text-lg placeholder:opacity-50 font-normal"
               style={{
                 color: isDarkMode
                   ? "rgba(255, 255, 255, 0.9)"
@@ -291,9 +279,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                   color: isDarkMode
                     ? "rgba(255, 255, 255, 0.5)"
                     : "rgba(0, 0, 0, 0.5)",
-                  backgroundColor: isDarkMode
-                    ? "rgba(255, 255, 255, 0.1)"
-                    : "rgba(0, 0, 0, 0.05)",
+                  backgroundColor: darkModeBackground,
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = isDarkMode
@@ -313,7 +299,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
 
           {/* Results List */}
           <div
-            className="max-h-[500px] overflow-y-auto bg-background/60"
+            className="max-h-[500px] overflow-y-auto"
             style={{
               scrollbarWidth: "thin",
               scrollbarColor: isDarkMode
@@ -322,7 +308,14 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
             }}
           >
             {query && filteredItems.length === 0 ? (
-              <div className="py-16 text-center bg-background/60">
+              <div
+                className="py-16 text-center"
+                style={{
+                  backgroundColor: darkModeBackground,
+                  backdropFilter: "blur(20px) saturate(180%)",
+                  WebkitBackdropFilter: "blur(20px) saturate(180%)",
+                }}
+              >
                 <div
                   className="text-sm"
                   style={{
@@ -335,12 +328,15 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                 </div>
               </div>
             ) : query ? (
-              <div className="py-2 ">
+              <div
+                className="py-2"
+                style={{ backgroundColor: darkModeBackground }}
+              >
                 {filteredItems.map((item, index) => (
                   <div
                     key={item.id}
                     onClick={() => handleSelect(item)}
-                    className="flex items-center bg-background/60 gap-4 px-6 py-4 cursor-pointer transition-all duration-150"
+                    className="flex items-center  gap-4 px-6 py-4 cursor-pointer transition-all duration-150"
                   >
                     {/* Icon */}
                     <div
@@ -371,6 +367,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                       >
                         {item.title}
                       </div>
+
                       <div className="flex items-center gap-2">
                         <div
                           className="text-sm truncate"
@@ -432,10 +429,11 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
               </div>
             ) : (
               <div
-                className="py-16 text-center bg-background/60"
+                className="py-16 text-center"
                 style={{
-                  backdropFilter: "blur(50px) saturate(200%)",
-                  WebkitBackdropFilter: "blur(50px) saturate(200%)",
+                  backgroundColor: darkModeBackground,
+                  backdropFilter: "blur(20px) saturate(180%)",
+                  WebkitBackdropFilter: "blur(20px) saturate(180%)",
                 }}
               >
                 <Search
@@ -455,7 +453,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                       : "rgba(0, 0, 0, 0.6)",
                   }}
                 >
-                  Start typing to search
+                  Comece a digitar para buscar
                 </div>
                 <div
                   className="text-sm"
@@ -465,7 +463,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                       : "rgba(0, 0, 0, 0.4)",
                   }}
                 >
-                  Files, folders, and more
+                  Arquivos, pastas e mais
                 </div>
               </div>
             )}
@@ -592,7 +590,7 @@ export function FloatingSearchButton({ onClick }: { onClick: () => void }) {
         backdropFilter: "blur(20px) saturate(200%)",
         WebkitBackdropFilter: "blur(20px) saturate(200%)",
       }}
-      title="Search files and folders (Ctrl+K)"
+      title="Buscar arquivos e pastas (Ctrl+K)"
     >
       <Search size={20} style={{ color: "rgba(116, 116, 116, 0.7)" }} />
     </button>

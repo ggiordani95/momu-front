@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, Home } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import type { HierarchicalFile } from "@/lib/types";
 import { ReactNode, useMemo } from "react";
 import { findItemById } from "@/lib/utils/hierarchy";
@@ -70,12 +70,15 @@ export default function Breadcrumb({
         {/* Workspace */}
         <button
           onClick={() => onNavigate(null)}
-          className="flex items-center p-2 rounded-lg text-sm font-medium transition-all hover:bg-hover/50 shrink-0"
+          className={`flex items-center p-2 rounded-lg text-sm font-medium transition-all hover:bg-hover/50 shrink-0 ${
+            currentFolderId === null ? "bg-foreground/5" : ""
+          }`}
           style={{
             color:
               currentFolderId === null
                 ? "var(--foreground)"
                 : "var(--foreground)/70",
+            fontWeight: currentFolderId === null ? "600" : "500",
           }}
         >
           {currentWorkspace?.title && (
@@ -92,26 +95,34 @@ export default function Breadcrumb({
         {/* Folder Path */}
         {breadcrumbPath.length > 0 && (
           <>
-            {breadcrumbPath.map((folder, index) => (
-              <div key={folder.id} className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => onNavigate(folder.id)}
-                  className="p-2 rounded-lg text-sm font-medium transition-all hover:bg-hover/50 truncate max-w-[200px]"
-                  style={{
-                    color:
-                      index === breadcrumbPath.length - 1
+            {breadcrumbPath.map((folder, index) => {
+              const isSelected = index === breadcrumbPath.length - 1;
+              return (
+                <div
+                  key={folder.id}
+                  className="flex items-center gap-2 shrink-0"
+                >
+                  <button
+                    onClick={() => onNavigate(folder.id)}
+                    className={`p-2 rounded-lg text-sm font-medium transition-all hover:bg-hover/50 truncate max-w-[200px] ${
+                      isSelected ? "bg-foreground/5" : ""
+                    }`}
+                    style={{
+                      color: isSelected
                         ? "var(--foreground)"
                         : "var(--foreground)/70",
-                  }}
-                  title={folder.title}
-                >
-                  {folder.title}
-                </button>
-                {index < breadcrumbPath.length - 1 && (
-                  <ChevronRight size={16} className="text-foreground/40" />
-                )}
-              </div>
-            ))}
+                      fontWeight: isSelected ? "600" : "500",
+                    }}
+                    title={folder.title}
+                  >
+                    {folder.title}
+                  </button>
+                  {index < breadcrumbPath.length - 1 && (
+                    <ChevronRight size={16} className="text-foreground/40" />
+                  )}
+                </div>
+              );
+            })}
           </>
         )}
       </div>
