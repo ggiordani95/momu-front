@@ -411,14 +411,6 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
         ref={sidebarRef}
         className="w-64 border-r border-border bg-background flex flex-col"
       >
-        {/* Workspace Selector */}
-        <div className="p-3 border-b border-border">
-          <WorkspaceSelector
-            currentWorkspaceId={workspaceId}
-            currentView="ai"
-          />
-        </div>
-
         {/* New Chat Button */}
         <div className="p-3 border-b border-border">
           <button
@@ -497,17 +489,17 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
         {/* Top Header */}
         <div className="border-b border-border p-4 flex items-center justify-between bg-background/95 backdrop-blur-sm sticky top-0 z-10">
           <div className="flex items-center gap-6 text-base text-foreground/60">
-            <AIModelSelector
-              selectedModel={selectedModel}
-              onModelChange={setSelectedModel}
-              disabled={generateAIMutation.isPending}
-              compact={true}
-            />
             <button className="text-foreground font-medium">Bate-papo</button>
             <button className="hover:text-foreground transition-colors">
               Como fazer
             </button>
           </div>
+          <AIModelSelector
+            selectedModel={selectedModel}
+            onModelChange={setSelectedModel}
+            disabled={generateAIMutation.isPending}
+            compact={true}
+          />
         </div>
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto">

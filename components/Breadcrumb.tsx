@@ -54,17 +54,6 @@ export default function Breadcrumb({
 
   return (
     <div className="px-6 py-3 flex items-center gap-3 border-b border-border bg-background/50 backdrop-blur-sm relative z-10">
-      {/* Workspace Selector */}
-      <div
-        className="shrink-0 w-48 relative z-20"
-        style={{ pointerEvents: "auto" }}
-      >
-        <WorkspaceSelector
-          currentWorkspaceId={currentWorkspace?.id}
-          currentView="explorer"
-        />
-      </div>
-
       {/* Breadcrumb Path */}
       <div className="flex-1 flex items-center overflow-x-auto min-w-0">
         {/* Workspace */}

@@ -222,8 +222,6 @@ export default function CurrentWorkspace({
 
   const handleAddItem = async (itemData: CreateFileDto) => {
     try {
-      console.log(`📝 Creating item:`, { ...itemData, workspaceId });
-
       // Create item in backend - React Query will invalidate and refetch
       const newItem = await createItemMutation.mutateAsync(itemData);
 
@@ -234,8 +232,6 @@ export default function CurrentWorkspace({
         alert(`Erro ao criar item: ${errorMessage}`);
         return;
       }
-
-      console.log(`✅ Item created successfully:`, newItem);
     } catch (error) {
       console.error("❌ Error adding item:", error);
       const errorMessage =

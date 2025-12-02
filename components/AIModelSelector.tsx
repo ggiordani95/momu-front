@@ -121,11 +121,11 @@ export function AIModelSelector({
           disabled={disabled}
           className="flex items-center gap-2 px-3 py-1.5 bg-background border border-border rounded-md text-sm text-foreground hover:bg-hover/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[240px]"
         >
-          <div className="w-8 h-8 shrink-0 flex items-center justify-center overflow-hidden rounded">
+          <div className="w-6 h-6 shrink-0 flex items-center justify-center overflow-hidden rounded-lg">
             {selectedModelData && (
               <AIProviderLogo
                 provider={selectedModelData.provider}
-                size={32}
+                size={24}
                 className="w-full h-full"
               />
             )}
@@ -154,10 +154,10 @@ export function AIModelSelector({
                   selectedModel === model.value ? "bg-hover/30" : ""
                 }`}
               >
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
+                <div className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
                   <AIProviderLogo
                     provider={model.provider}
-                    size={32}
+                    size={24}
                     className="w-full h-full"
                   />
                 </div>

@@ -143,13 +143,16 @@ export default function WorkspaceView({
       }
 
       // Add folder with Ctrl+F or Cmd+F (only in explorer view)
+      // Note: Ctrl+F is also used by browser for search, so we need to prevent default
       if (
         (e.metaKey || e.ctrlKey) &&
-        e.key === "f" &&
+        (e.key === "f" || e.key === "F") &&
+        !e.shiftKey &&
         !isTypingInInput &&
         currentView === "explorer"
       ) {
         e.preventDefault();
+        e.stopPropagation();
         if (handleAddItemRef.current) {
           handleAddItemRef.current({
             type: "folder",
@@ -832,6 +835,7 @@ export default function WorkspaceView({
   };
 
   const handleItemDelete = async (id: string) => {
+    console.log("[handleItemDelete] Deleting file:", id);
     // Always get the latest state from the store to avoid race conditions
     // This is especially important when deleting multiple files at once
     const { files, markFileAsDeleted } = useWorkspaceStore.getState();
@@ -839,30 +843,47 @@ export default function WorkspaceView({
       (f) => f.id === id && f.workspace_id === workspaceId
     );
 
+    console.log("[handleItemDelete] File found:", {
+      fileId: id,
+      fileExists: !!file,
+      fileActive: file?.active,
+      totalFilesInStore: files.length,
+    });
+
     if (file && file.active === false) {
+      console.log("[handleItemDelete] File already deleted, skipping");
       return;
     }
 
     // If item exists and is still active, mark it as deleted in the store first
     // This ensures the UI updates immediately
     if (file && file.active !== false) {
+      console.log("[handleItemDelete] Marking file as deleted in store");
       markFileAsDeleted(id);
     } else if (!file) {
+      console.log("[handleItemDelete] File not found in store");
       // File not found in store - might be a pending item or already deleted
     }
 
     // Delete directly in API
     if (file) {
       try {
+        console.log("[handleItemDelete] Calling API to delete file");
         const { fileService } = await import("@/lib/services/fileService");
         await fileService.delete(id);
+        console.log("[handleItemDelete] File deleted successfully, syncing...");
 
-        // Sync files to refresh state
+        // Sync files to refresh state and include deleted files
         const { syncFiles } = useWorkspaceStore.getState();
         if (!useWorkspaceStore.getState().isSyncing) {
+          console.log("[handleItemDelete] Starting sync...");
           await syncFiles();
+          console.log("[handleItemDelete] Sync completed");
+        } else {
+          console.log("[handleItemDelete] Sync already in progress, skipping");
         }
       } catch (error) {
+        console.error("[handleItemDelete] Error deleting file:", error);
         // On error, restore file in store
         const { markFileAsRestored } = useWorkspaceStore.getState();
         markFileAsRestored(id);
@@ -924,27 +945,59 @@ export default function WorkspaceView({
     async (itemData: CreateFileDto) => {
       // Create directly in API - no temporary files
       try {
+        console.log("[handleAddItem] Creating item:", itemData);
         const { fileService } = await import("@/lib/services/fileService");
-        const { getNextOrderIndex } = useWorkspaceStore.getState();
+        const { getNextOrderIndex, addOptimisticFile } =
+          useWorkspaceStore.getState();
 
         const parentId = itemData.parent_id || null;
         const nextOrderIndex = getNextOrderIndex(workspaceId, parentId);
 
+        // Generate ID on frontend for optimistic update
+        const fileId = crypto.randomUUID();
+
+        // Create optimistic file object for immediate UI update
+        const optimisticFile: import("@/lib/types").File = {
+          id: fileId,
+          workspace_id: workspaceId,
+          type: itemData.type,
+          title: itemData.title,
+          content: itemData.content,
+          youtube_url: itemData.youtube_url,
+          parent_id: itemData.parent_id || null,
+          order_index: nextOrderIndex,
+          active: itemData.active !== false,
+          created_at: new Date().toISOString(),
+        };
+
+        // Add file to store immediately for optimistic update
+        addOptimisticFile(optimisticFile);
+
+        // Create file in API with the ID generated on frontend
         const createdFile = await fileService.create(workspaceId, {
+          id: fileId,
           ...itemData,
           parent_id: itemData.parent_id || undefined,
           order_index: nextOrderIndex,
-        });
+        } as CreateFileDto & { id: string });
 
-        // Sync files to refresh all data and show the new file
+        console.log("[handleAddItem] File created:", createdFile);
+
+        // Sync files to refresh all data and ensure consistency
         const { syncFiles } = useWorkspaceStore.getState();
         if (!useWorkspaceStore.getState().isSyncing) {
+          console.log("[handleAddItem] Syncing files...");
           await syncFiles();
+          console.log("[handleAddItem] Files synced");
         }
 
         // Navigate to the parent folder to show the new file
         setCurrentFolderId(itemData.parent_id || null);
-      } catch (error) {}
+      } catch (error) {
+        console.error("[handleAddItem] Error creating item:", error);
+        // On error, remove the optimistic file from store
+        // The sync will restore the correct state
+      }
     },
     [workspaceId, setCurrentFolderId]
   );
@@ -1083,75 +1136,77 @@ export default function WorkspaceView({
         workspaceId={workspaceId}
       />
       {/* Add Item Icons and Search Hint - appears when user types */}
-      {!isSearchOpen && currentView === "explorer" && (
-        <div className="fixed bottom-6 right-6 z-10 animate-in fade-in slide-in-from-bottom-4 duration-200">
-          <div className="flex flex-col gap-3">
-            {/* Add Item Icons */}
-            <div className="flex items-center justify-evenly gap-2 p-2 rounded-xl bg-background/80 backdrop-blur-sm">
-              {/* Folder Icon */}
-              <button
-                onClick={() => {
-                  handleAddItem({
-                    type: "folder",
-                    title: "Nova Pasta",
-                    parent_id: currentFolderId || undefined,
-                  });
-                }}
-                className="p-2 rounded-lg transition-all hover:scale-110 flex flex-col items-center justify-center gap-5  "
-                title="Adicionar Pasta"
-                style={{ color: "#a78bfa" }}
-              >
-                <FolderIcon size={32} />
-                <kbd className="px-2.5 py-1 rounded-lg text-sm text-foreground/70 font-semibold bg-foreground/5">
-                  Ctrl + F
-                </kbd>
-              </button>
+      {!isSearchOpen &&
+        currentView === "explorer" &&
+        !(selectedItem && selectedItem.type === "note") && (
+          <div className="fixed bottom-6 right-6 z-10 animate-in fade-in slide-in-from-bottom-4 duration-200">
+            <div className="flex flex-col gap-3">
+              {/* Add Item Icons */}
+              <div className="flex items-center justify-evenly gap-2 p-2 rounded-xl bg-background/80 backdrop-blur-sm">
+                {/* Folder Icon */}
+                <button
+                  onClick={() => {
+                    handleAddItem({
+                      type: "folder",
+                      title: "Nova Pasta",
+                      parent_id: currentFolderId || undefined,
+                    });
+                  }}
+                  className="p-2 rounded-lg transition-all hover:scale-110 flex flex-col items-center justify-center gap-5  "
+                  title="Adicionar Pasta"
+                  style={{ color: "#a78bfa" }}
+                >
+                  <FolderIcon size={32} />
+                  <kbd className="px-2.5 py-1 rounded-lg text-sm text-foreground/70 font-semibold bg-foreground/5">
+                    Ctrl + F
+                  </kbd>
+                </button>
 
-              {/* Note Icon */}
-              <button
-                onClick={() => {
-                  handleAddItem({
-                    type: "note",
-                    title: "Novo Bloco de Notas",
-                    parent_id: currentFolderId || undefined,
-                  });
-                }}
-                className="p-2 rounded-lg transition-all hover:scale-110 flex flex-col items-center justify-center gap-5"
-                title="Adicionar Bloco de Notas"
-                style={{ color: "#60a5fa" }}
-              >
-                <NoteIcon size={32} />
-                <kbd className="px-2.5 py-1 rounded-lg text-sm text-foreground/70 font-semibold bg-foreground/5">
-                  Ctrl + Y
-                </kbd>
-              </button>
-              {/* Video Icon - opens modal */}
-              <button
-                onClick={() => {
-                  window.dispatchEvent(new CustomEvent("openAddItemModal"));
-                }}
-                className="p-2 rounded-lg transition-all hover:scale-110 flex flex-col items-center justify-center gap-5"
-                title="Adicionar Vídeo"
-                style={{ color: "#f87171" }}
-              >
-                <VideoIcon size={32} />
-                <kbd className="px-2.5 py-1 rounded-lg text-sm text-foreground/70 font-semibold bg-foreground/5">
-                  Ctrl + Shift + V
-                </kbd>
-              </button>
-            </div>
+                {/* Note Icon */}
+                <button
+                  onClick={() => {
+                    handleAddItem({
+                      type: "note",
+                      title: "Novo Bloco de Notas",
+                      parent_id: currentFolderId || undefined,
+                    });
+                  }}
+                  className="p-2 rounded-lg transition-all hover:scale-110 flex flex-col items-center justify-center gap-5"
+                  title="Adicionar Bloco de Notas"
+                  style={{ color: "#60a5fa" }}
+                >
+                  <NoteIcon size={32} />
+                  <kbd className="px-2.5 py-1 rounded-lg text-sm text-foreground/70 font-semibold bg-foreground/5">
+                    Ctrl + Y
+                  </kbd>
+                </button>
+                {/* Video Icon - opens modal */}
+                <button
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent("openAddItemModal"));
+                  }}
+                  className="p-2 rounded-lg transition-all hover:scale-110 flex flex-col items-center justify-center gap-5"
+                  title="Adicionar Vídeo"
+                  style={{ color: "#f87171" }}
+                >
+                  <VideoIcon size={32} />
+                  <kbd className="px-2.5 py-1 rounded-lg text-sm text-foreground/70 font-semibold bg-foreground/5">
+                    Ctrl + Shift + V
+                  </kbd>
+                </button>
+              </div>
 
-            {/* Search Hint */}
-            <div className="p-2.5 rounded-xl flex items-center justify-center gap-2 text-foreground bg-background/80 backdrop-blur-sm">
-              <span className="text-sm font-medium">Pressione</span>
-              <kbd className="px-2.5 py-1 rounded-lg text-sm text-foreground/70 font-semibold bg-foreground/5">
-                Ctrl + K
-              </kbd>
-              <span className="text-sm font-medium">para buscar</span>
+              {/* Search Hint */}
+              <div className="p-2.5 rounded-xl flex items-center justify-center gap-2 text-foreground bg-background/80 backdrop-blur-sm">
+                <span className="text-sm font-medium">Pressione</span>
+                <kbd className="px-2.5 py-1 rounded-lg text-sm text-foreground/70 font-semibold bg-foreground/5">
+                  Ctrl + K
+                </kbd>
+                <span className="text-sm font-medium">para buscar</span>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
     </>
   );
 }

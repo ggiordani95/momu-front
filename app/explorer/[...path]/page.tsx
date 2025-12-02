@@ -10,8 +10,7 @@ export default function ExplorerPathPage() {
   const params = useParams();
   const pathname = usePathname();
   const { workspaces } = useWorkspaceData();
-  const { currentWorkspace, setCurrentWorkspace, currentView } =
-    useWorkspaceStore();
+  const { currentWorkspace, setCurrentWorkspace } = useWorkspaceStore();
   const path = params?.path as string[] | undefined;
 
   // Parse path: first segment should be workspaceId, rest are folder/file IDs
@@ -71,12 +70,30 @@ export default function ExplorerPathPage() {
       ? firstSegment
       : null;
 
+    // Get current view from pathname (preserve the current view)
+    const viewFromPath = pathname.split("/")[1] as
+      | "explorer"
+      | "settings"
+      | "trash"
+      | "social"
+      | "planner"
+      | "ai"
+      | undefined;
+    const currentViewFromPath = viewFromPath || "explorer";
+
     // Update URL if store workspace is different from URL workspace
     // This ensures that when user selects a workspace in the selector, the URL updates
+    // IMPORTANT: Preserve the current view (explorer, trash, etc.) when changing workspace
     if (currentUrlWorkspaceId !== currentWorkspace.id) {
-      // Update URL using window.history for smooth client-side update (no re-render)
-      const view = currentView || pathname.split("/")[1] || "explorer";
-      const newPath = `/${view}/${currentWorkspace.id}`;
+      // Use the view from the current pathname, not from store, to preserve the user's current view
+      const newPath = `/${currentViewFromPath}/${currentWorkspace.id}`;
+
+      console.log("[ExplorerPathPage] Updating URL for workspace change:", {
+        oldWorkspaceId: currentUrlWorkspaceId,
+        newWorkspaceId: currentWorkspace.id,
+        currentView: currentViewFromPath,
+        newPath,
+      });
 
       // Update the ref to track what we're setting in the URL
       lastUrlWorkspaceIdRef.current = currentWorkspace.id;
@@ -106,13 +123,7 @@ export default function ExplorerPathPage() {
         lastUrlWorkspaceIdRef.current = currentUrlWorkspaceId;
       }
     }
-  }, [
-    currentWorkspace?.id,
-    pathname,
-    currentView,
-    isFirstSegmentWorkspaceId,
-    firstSegment,
-  ]);
+  }, [currentWorkspace?.id, pathname, isFirstSegmentWorkspaceId, firstSegment]);
 
   // Sync workspace from URL to store when URL contains a workspace ID
   // This ensures the store reflects the URL workspace (for direct URL access)

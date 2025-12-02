@@ -34,7 +34,7 @@ export const fileService = {
    */
   async create(
     workspaceId: string,
-    data: CreateFileDto
+    data: CreateFileDto & { id?: string }
   ): Promise<HierarchicalFile> {
     return apiRequest<HierarchicalFile>(`/workspaces/${workspaceId}/files`, {
       method: "POST",

@@ -4,7 +4,6 @@ import { Folder } from "lucide-react";
 import { useMemo, useEffect, useCallback } from "react";
 import FileCard from "../../files/FileCard";
 import FolderSkeleton from "../../files/FolderSkeleton";
-import { WorkspaceSelector } from "@/components/WorkspaceSelector";
 import {
   useRestoreItem,
   usePermanentDeleteItem,
@@ -26,12 +25,23 @@ export function TrashWorkspace({
 }: TrashWorkspaceProps) {
   // Use Zustand store - use getDeletedFilesByWorkspace for better performance
   // This ensures we get files with active === false
-  const { getDeletedFilesByWorkspace } = useWorkspaceStore();
+  const { getDeletedFilesByWorkspace, files } = useWorkspaceStore();
   const deletedFiles = useMemo(() => {
     // Use the getter function which filters by workspace and active === false
     const filtered = getDeletedFilesByWorkspace(topicId);
+    console.log("[TrashWorkspace] Deleted files:", {
+      workspaceId: topicId,
+      totalFilesInStore: files.length,
+      deletedFilesCount: filtered.length,
+      deletedFileIds: filtered.map((f) => f.id),
+      allFilesInWorkspace: files.filter((f) => f.workspace_id === topicId)
+        .length,
+      activeFilesInWorkspace: files.filter(
+        (f) => f.workspace_id === topicId && f.active !== false
+      ).length,
+    });
     return filtered;
-  }, [getDeletedFilesByWorkspace, topicId]);
+  }, [getDeletedFilesByWorkspace, topicId, files]);
 
   const { isSyncing } = useWorkspaceStore();
   const loading = isSyncing;
@@ -228,10 +238,6 @@ export function TrashWorkspace({
 
   return (
     <div className="h-full flex flex-col">
-      {/* Workspace Selector */}
-      <div className="p-4 border-b border-border">
-        <WorkspaceSelector currentWorkspaceId={topicId} currentView="trash" />
-      </div>
       {/* File Grid - same layout as FileExplorer */}
       <div
         ref={containerRef}

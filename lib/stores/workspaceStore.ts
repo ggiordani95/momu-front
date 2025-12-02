@@ -223,9 +223,21 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             };
           }
 
+          const syncedFiles = data.files || [];
+          console.log("[workspaceStore] syncFiles completed:", {
+            totalFiles: syncedFiles.length,
+            activeFiles: syncedFiles.filter((f: File) => f.active !== false)
+              .length,
+            deletedFiles: syncedFiles.filter((f: File) => f.active === false)
+              .length,
+            deletedFileIds: syncedFiles
+              .filter((f: File) => f.active === false)
+              .map((f: File) => f.id),
+          });
+
           set({
             workspaces: data.workspaces || [],
-            files: data.files || [],
+            files: syncedFiles,
             lastSyncAt: new Date(),
             isSyncing: false,
             error: data.error || null,
