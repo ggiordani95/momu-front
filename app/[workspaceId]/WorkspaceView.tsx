@@ -14,7 +14,7 @@ import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
 import { buildHierarchy } from "@/lib/utils/hierarchy";
 import type { HierarchicalFile, CreateFileDto, Workspace } from "@/lib/types";
 import SimpleSidebar from "@/components/SimpleSidebar";
-import PageEditor from "@/components/editors/PageEditor";
+import NotionBlockEditor from "@/components/editors/NotionBlockEditor";
 import { TrashWorkspace } from "@/components/views/trash/TrashWorkspace";
 import { SettingsWorkspace } from "@/components/views/settings/SettingsWorkspace";
 import { ExplorerWorkspace } from "@/components/views/explorer/ExplorerWorkspace";
@@ -22,7 +22,7 @@ import { SocialWorkspace } from "@/components/views/social/SocialWorkspace";
 import { PlannerWorkspace } from "@/components/views/planner/PlannerWorkspace";
 import { AIWorkspace } from "@/components/views/ai/AIWorkspace";
 import { GlobalSearch } from "@/components/GlobalSearch";
-import { Search, Plus } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { FolderIcon, NoteIcon, VideoIcon } from "@/components/icons/ItemIcons";
 
 interface WorkspaceViewProps {
@@ -1457,12 +1457,40 @@ function HomeContent({
       <main className="flex-1 overflow-hidden relative z-10">
         {currentView === "explorer" ? (
           selectedItem && selectedItem.type === "note" ? (
-            <PageEditor
-              file={selectedItem}
-              onBack={handleCloseEditor}
-              onUpdate={handleItemUpdate}
-              isNew={pendingItems.has(selectedItem.id)}
-            />
+            <div className="h-full flex flex-col">
+              {/* Header with back button and title */}
+              <div className="flex items-center gap-4 p-4 border-b border-border">
+                <button
+                  onClick={handleCloseEditor}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-foreground/5 transition-colors text-sm text-foreground/70 hover:text-foreground"
+                >
+                  <ArrowLeft size={18} />
+                  Voltar
+                </button>
+                <input
+                  type="text"
+                  value={selectedItem.title}
+                  onChange={(e) => {
+                    handleItemUpdate(selectedItem.id, "title", e.target.value);
+                  }}
+                  className="flex-1 text-lg font-semibold bg-transparent border-none outline-none text-foreground placeholder:text-foreground/40"
+                  placeholder="Sem título"
+                />
+              </div>
+              {/* Notion Block Editor - Centered */}
+              <div className="flex-1 overflow-auto">
+                <div className="w-full max-w-4xl mx-auto px-8 py-12">
+                  <NotionBlockEditor
+                    content={selectedItem.content || ""}
+                    onSave={(content) => {
+                      handleItemUpdate(selectedItem.id, "content", content);
+                    }}
+                    placeholder="Pressione '/' para comandos"
+                    autoFocus={pendingItems.has(selectedItem.id)}
+                  />
+                </div>
+              </div>
+            </div>
           ) : (
             <ExplorerWorkspace
               currentFolderId={currentFolderId || undefined}

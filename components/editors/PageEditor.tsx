@@ -504,7 +504,6 @@ export default function PageEditor({
       // Convert newlines to HTML before setting content
       const originalContent = file.content || "";
       const htmlContent = convertNewlinesToHTML(originalContent);
-
       editor.commands.setContent(htmlContent);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
