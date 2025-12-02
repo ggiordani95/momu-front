@@ -35,23 +35,6 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
 
   // Filter active files from all workspaces - search directly in flat array
   const activeFiles = useMemo(() => {
-    console.log("[GlobalSearch] All files from store:", {
-      total: allFilesFromStore.length,
-      byWorkspace: allFilesFromStore.reduce((acc, f) => {
-        const wsId = f.workspace_id || "no-workspace";
-        acc[wsId] = (acc[wsId] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>),
-      sample: allFilesFromStore.slice(0, 10).map((f) => ({
-        id: f.id,
-        title: f.title,
-        type: f.type,
-        active: f.active,
-        workspace_id: f.workspace_id,
-        isTemp: f.id.startsWith("temp-"),
-      })),
-    });
-
     const filtered = allFilesFromStore.filter((file) => {
       // Filter out temporary/optimistic files that haven't been created yet
       const isTemporary = file.id.startsWith("temp-");
@@ -66,21 +49,6 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
         !isTemporary && isActive && hasWorkspace && hasValidTimestamp;
 
       return shouldInclude;
-    });
-
-    console.log("[GlobalSearch] Filtered active files:", {
-      count: filtered.length,
-      byWorkspace: filtered.reduce((acc, f) => {
-        const wsId = f.workspace_id || "no-workspace";
-        acc[wsId] = (acc[wsId] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>),
-      sample: filtered.slice(0, 10).map((f) => ({
-        id: f.id,
-        title: f.title,
-        type: f.type,
-        workspace_id: f.workspace_id,
-      })),
     });
 
     return filtered;
@@ -119,13 +87,6 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
           workspaceId: file.workspace_id,
         } as SearchFile;
       });
-
-    console.log("[GlobalSearch] Query:", query);
-    console.log("[GlobalSearch] Filtered items count:", filtered.length);
-    console.log(
-      "[GlobalSearch] Filtered items:",
-      filtered.map((f) => ({ id: f.id, title: f.title, type: f.type }))
-    );
 
     return filtered;
   }, [activeFiles, query, getWorkspaceById]);

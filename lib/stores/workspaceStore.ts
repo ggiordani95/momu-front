@@ -95,10 +95,13 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       setFiles: (files) => set({ files }),
 
-      setSelectedWorkspaceId: (workspaceId) =>
-        set({ selectedWorkspaceId: workspaceId }),
+      setSelectedWorkspaceId: (workspaceId) => {
+        set({ selectedWorkspaceId: workspaceId });
+      },
 
-      setCurrentWorkspace: (workspace) => set({ currentWorkspace: workspace }),
+      setCurrentWorkspace: (workspace) => {
+        set({ currentWorkspace: workspace });
+      },
 
       setCurrentView: (view) => set({ currentView: view }),
 
@@ -139,7 +142,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
         // Evitar múltiplas chamadas simultâneas
         if (state.isSyncing) {
-          console.log("⏭️ Sync já em andamento, ignorando chamada duplicada");
           return;
         }
 
@@ -160,7 +162,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             error: data.error || null,
           });
         } catch (error: unknown) {
-          console.error("Error syncing files:", error);
           set({
             isSyncing: false,
             error: (error as Error)?.message || "Failed to sync files",
@@ -174,18 +175,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         // Check if file already exists
         const existingFile = state.files.find((f) => f.id === file.id);
         if (existingFile) {
-          console.warn(
-            `⚠️ [Zustand] File ${file.id} already exists in store, skipping add`
-          );
           return;
         }
         const updatedFiles = [...state.files, file];
         set({ files: updatedFiles });
-        console.log(`➕ [Zustand] Added optimistic file: ${file.id}`, {
-          type: file.type,
-          title: file.title,
-          totalFiles: updatedFiles.length,
-        });
       },
 
       // Mark file as deleted (optimistic update)
@@ -194,9 +187,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         const fileIndex = state.files.findIndex((file) => file.id === fileId);
 
         if (fileIndex === -1) {
-          console.warn(
-            `⚠️ [Zustand] File ${fileId} not found in store, cannot mark as deleted`
-          );
           return;
         }
 
@@ -205,13 +195,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         );
 
         set({ files: updatedFiles });
-        console.log(`🗑️ [Zustand] Marked file as deleted: ${fileId}`, {
-          totalFiles: updatedFiles.length,
-          deletedFiles: updatedFiles.filter((f) => f.active === false).length,
-          deletedFileIds: updatedFiles
-            .filter((f) => f.active === false)
-            .map((f) => f.id),
-        });
       },
 
       // Mark multiple files as deleted (optimistic update) - more efficient for batch deletes
@@ -230,11 +213,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         ).length;
 
         set({ files: updatedFiles });
-        console.log(`🗑️ [Zustand] Marked ${deletedCount} files as deleted:`, {
-          fileIds,
-          totalFiles: updatedFiles.length,
-          deletedFiles: updatedFiles.filter((f) => f.active === false).length,
-        });
       },
 
       // Mark file as restored (optimistic update)
@@ -244,7 +222,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           file.id === fileId ? { ...file, active: true } : file
         );
         set({ files: updatedFiles });
-        console.log(`♻️ [Zustand] Marked file as restored: ${fileId}`);
       },
 
       // Remove file permanently from store
@@ -252,9 +229,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         const state = get();
         const updatedFiles = state.files.filter((file) => file.id !== fileId);
         set({ files: updatedFiles });
-        console.log(`🗑️ [Zustand] Permanently removed file: ${fileId}`, {
-          totalFiles: updatedFiles.length,
-        });
       },
 
       // Update file in store (optimistic update)

@@ -505,12 +505,6 @@ export default function PageEditor({
       const originalContent = file.content || "";
       const htmlContent = convertNewlinesToHTML(originalContent);
 
-      // Debug: log if content contains \n
-      if (originalContent.includes("\\n") || originalContent.includes("\n")) {
-        console.log("Original content:", JSON.stringify(originalContent));
-        console.log("Converted HTML:", htmlContent);
-      }
-
       editor.commands.setContent(htmlContent);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

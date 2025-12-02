@@ -26,21 +26,12 @@ export function TrashWorkspace({
 }: TrashWorkspaceProps) {
   // Use Zustand store - use getDeletedFilesByWorkspace for better performance
   // This ensures we get files with active === false
-  const { getDeletedFilesByWorkspace, files: allFiles } = useWorkspaceStore();
+  const { getDeletedFilesByWorkspace } = useWorkspaceStore();
   const deletedFiles = useMemo(() => {
     // Use the getter function which filters by workspace and active === false
     const filtered = getDeletedFilesByWorkspace(topicId);
-    console.log(`🗑️ [TrashWorkspace] Filtered deleted files:`, {
-      topicId,
-      totalFiles: allFiles.length,
-      deletedFilesCount: filtered.length,
-      deletedFileIds: filtered.map((f) => f.id),
-      allFilesActiveStatus: allFiles
-        .filter((f) => f.workspace_id === topicId)
-        .map((f) => ({ id: f.id, active: f.active })),
-    });
     return filtered;
-  }, [getDeletedFilesByWorkspace, topicId, allFiles]);
+  }, [getDeletedFilesByWorkspace, topicId]);
 
   const { isSyncing } = useWorkspaceStore();
   const loading = isSyncing;
@@ -79,9 +70,6 @@ export function TrashWorkspace({
               (apiError as { status?: number }).status === 404);
 
           if (isNotFound) {
-            console.log(
-              `ℹ️ File ${id} not found in backend, may have already been deleted`
-            );
             // File already deleted, restore it in store (it was removed optimistically)
             const { markFileAsRestored } = useWorkspaceStore.getState();
             markFileAsRestored(id);
@@ -130,9 +118,6 @@ export function TrashWorkspace({
         const result = await fileService.permanentDeleteBatch(existingIds);
 
         if (result.success) {
-          console.log(
-            `✅ [Permanent Delete Batch] Successfully deleted ${result.deleted} file(s) from database`
-          );
         } else {
           throw new Error("Permanent delete batch failed");
         }
@@ -147,9 +132,6 @@ export function TrashWorkspace({
             (apiError as { status?: number }).status === 404);
 
         if (isNotFound) {
-          console.log(
-            `ℹ️ Some files not found in backend, may have already been deleted`
-          );
           return;
         }
         // On error, restore files in store (they were removed optimistically)

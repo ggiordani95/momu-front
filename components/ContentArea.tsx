@@ -137,17 +137,17 @@ export default function ContentArea({
 
     const updateData: UpdateFileDto = {};
     if (field === "completed") {
-        updateData.completed = value as boolean;
-        if (value) {
-            updateData.completed_at = new Date().toISOString();
-        } else {
-            updateData.completed_at = undefined; // Or null, depending on backend
-        }
+      updateData.completed = value as boolean;
+      if (value) {
+        updateData.completed_at = new Date().toISOString();
+      } else {
+        updateData.completed_at = undefined; // Or null, depending on backend
+      }
     } else if (field === "video_watched_seconds") {
-        updateData.video_watched_seconds = value as number;
+      updateData.video_watched_seconds = value as number;
     } else {
-        // title or content
-        (updateData as any)[field] = value;
+      // title or content
+      (updateData as any)[field] = value;
     }
 
     updateFileMutation.mutate(
@@ -387,16 +387,11 @@ export default function ContentArea({
     const targetItem = findItemById(items, targetItemId);
 
     if (!draggedItem || !targetItem || draggedItem.id === targetItem.id) {
-      console.log("Invalid move: same item or item not found", {
-        draggedItem,
-        targetItem,
-      });
       return;
     }
 
     // Don't allow dropping item into itself or its own children
     if (isDescendant(draggedItem, targetItem.id)) {
-      console.log("Invalid move: cannot drop into own children");
       return;
     }
 
@@ -409,7 +404,6 @@ export default function ContentArea({
       // Find target position in the hierarchy BEFORE removing the dragged item
       const targetPath = findItemPath(items, targetItem.id);
       if (!targetPath) {
-        console.log("Invalid move: target path not found");
         return;
       }
 
@@ -418,7 +412,6 @@ export default function ContentArea({
       // Find dragged item path to adjust target index if needed
       const draggedPath = findItemPath(items, draggedItemId);
       if (!draggedPath) {
-        console.log("Invalid move: dragged path not found");
         return;
       }
 
@@ -428,15 +421,6 @@ export default function ContentArea({
       const sameLevel =
         draggedPath.parentIds.length === parentIds.length &&
         JSON.stringify(draggedPath.parentIds) === JSON.stringify(parentIds);
-
-      console.log("Move item:", {
-        draggedItemId,
-        targetItemId,
-        position,
-        draggedPath,
-        targetPath,
-        sameLevel,
-      });
 
       if (sameLevel) {
         const draggedIndex = draggedPath.targetIndex;
@@ -481,7 +465,6 @@ export default function ContentArea({
     // Only update if items actually changed
     const itemsChanged = JSON.stringify(items) !== JSON.stringify(newItems);
     if (itemsChanged) {
-      console.log("Items changed, updating...");
       setItems(newItems);
 
       // Update backend
@@ -490,8 +473,6 @@ export default function ContentArea({
       } catch (error) {
         console.error("Error updating item order:", error);
       }
-    } else {
-      console.log("Items did not change, skipping update");
     }
 
     // Always clear drag states after move attempt (successful or not)

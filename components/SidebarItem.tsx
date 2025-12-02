@@ -62,25 +62,19 @@ export default function SidebarItem({
     {
       label: "Copiar",
       icon: <Copy size={14} />,
-      onClick: () => {
-        console.log("Copy", item.id);
-      },
+      onClick: () => {},
     },
     {
       label: "Cortar",
       icon: <Scissors size={14} />,
-      onClick: () => {
-        console.log("Cut", item.id);
-      },
+      onClick: () => {},
     },
     { separator: true },
     {
       label: "Nova Pasta",
       icon: <FolderPlus size={14} />,
-      onClick: () => {
-        console.log("New folder in", item.id);
-      },
-      disabled: item.type !== "section",
+      onClick: () => {},
+      disabled: item.type !== "folder",
     },
     { separator: true },
     {
@@ -93,7 +87,7 @@ export default function SidebarItem({
   ];
 
   const handleItemClick = () => {
-    if (item.type === "section") {
+    if (item.type === "folder") {
       // For sections, navigate to the module
       window.location.hash = item.id;
     } else {
@@ -160,7 +154,11 @@ export default function SidebarItem({
             );
           })()}
         </span>
-        <span className={`flex-1 min-w-0 truncate block ${item.completed ? "line-through text-muted-foreground" : ""}`}>
+        <span
+          className={`flex-1 min-w-0 truncate block ${
+            item.completed ? "line-through text-muted-foreground" : ""
+          }`}
+        >
           {item.title || "Sem título..."}
         </span>
       </div>

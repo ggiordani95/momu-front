@@ -61,36 +61,8 @@ export function ProgressSection({ workspaceId }: ProgressSectionProps) {
               {progress.completed_files} / {progress.total_files}
             </span>
           </div>
-
-          {/* Detailed stats */}
-          <div className="grid grid-cols-3 gap-2 pt-1">
-            {/* Videos */}
-            <div className="flex flex-col items-center gap-0.5 p-1.5 rounded bg-hover/50">
-              <Video size={12} className="text-red-500" />
-              <span className="text-[10px] font-semibold text-foreground">
-                {progress.completed_videos}
-              </span>
-            </div>
-
-            {/* Notes */}
-            <div className="flex flex-col items-center gap-0.5 p-1.5 rounded bg-hover/50">
-              <FileText size={12} className="text-yellow-500" />
-              <span className="text-[10px] font-semibold text-foreground">
-                {progress.completed_notes}
-              </span>
-            </div>
-
-            {/* Folders */}
-            <div className="flex flex-col items-center gap-0.5 p-1.5 rounded bg-hover/50">
-              <Folder size={12} className="text-blue-500" />
-              <span className="text-[10px] font-semibold text-foreground">
-                {progress.completed_folders}
-              </span>
-            </div>
-          </div>
         </div>
       </div>
     </div>
   );
 }
-

@@ -100,12 +100,7 @@ export default function SimpleSidebar({
       if (!useWorkspaceStore.getState().isSyncing) {
         syncFiles();
       }
-
-      console.log(
-        `✅ [DELETE ALL] Permanently deleted ${trashItems.length} item(s) from trash`
-      );
-    } catch (error) {
-      console.error("Error deleting all items:", error);
+    } catch (_error) {
       // On error, re-sync to get correct state
       const { syncFiles } = useWorkspaceStore.getState();
       if (!useWorkspaceStore.getState().isSyncing) {
@@ -210,7 +205,7 @@ export default function SimpleSidebar({
           </button>
         </div>
       </nav>
-      
+
       {/* Context Menu for Trash */}
       {trashContextMenu && (
         <ContextMenu

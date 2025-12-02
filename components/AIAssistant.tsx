@@ -71,8 +71,6 @@ export function AIAssistant({
         throw new Error("No files were generated");
       }
 
-      console.log(`✅ [AI] Generated ${data.files.length} file(s)`);
-
       // Create files in the backend
       // We need to create files in order, handling parent-child relationships
       const createdFiles: CreateFileDto[] = [];
@@ -114,9 +112,6 @@ export function AIAssistant({
         });
         idMap.set(tempId, createdFile.id);
         createdFiles.push(createdFile as CreateFileDto);
-        console.log(
-          `✅ [AI] Created file: ${createdFile.id} - ${createdFile.title}`
-        );
         return createdFile;
       };
 
@@ -135,8 +130,7 @@ export function AIAssistant({
 
           // Create file in backend
           await createFileWithMapping(fileData, tempId);
-        } catch (fileError) {
-          console.error(`❌ [AI] Error creating file:`, fileError);
+        } catch (_fileError) {
           // Continue with other files even if one fails
         }
       }
@@ -149,7 +143,6 @@ export function AIAssistant({
       onFilesCreated?.();
       onClose();
     } catch (err) {
-      console.error("❌ [AI] Error:", err);
       setError(err instanceof Error ? err.message : "Erro ao gerar conteúdo");
     } finally {
       setIsGenerating(false);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { ChevronDown } from "lucide-react";
 import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
 
@@ -22,6 +22,7 @@ export function WorkspaceSelector({
     workspaces,
     selectedWorkspaceId,
     setSelectedWorkspaceId,
+    currentWorkspace,
     setCurrentWorkspace,
   } = useWorkspaceStore();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -35,9 +36,17 @@ export function WorkspaceSelector({
     }
   }, [selectedWorkspaceId, currentWorkspaceId, setSelectedWorkspaceId]);
 
-  // Use selectedWorkspaceId from store if available, otherwise use currentWorkspaceId
-  const activeWorkspaceId = selectedWorkspaceId || currentWorkspaceId;
-  const currentWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
+  // Use currentWorkspace from store as source of truth, fallback to selectedWorkspaceId
+  const activeWorkspaceId =
+    currentWorkspace?.id || selectedWorkspaceId || currentWorkspaceId;
+  const displayedWorkspace = useMemo(
+    () =>
+      workspaces.find((w) => w.id === activeWorkspaceId) ||
+      (currentWorkspace
+        ? { id: currentWorkspace.id, title: currentWorkspace.title }
+        : null),
+    [workspaces, activeWorkspaceId, currentWorkspace]
+  );
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -62,22 +71,24 @@ export function WorkspaceSelector({
 
   const handleWorkspaceSelect = (workspaceId: string) => {
     setIsDropdownOpen(false);
-    setSelectedWorkspaceId(workspaceId);
 
-    // Update currentWorkspace in store
+    // Find workspace object
     const workspace = workspaces.find((w) => w.id === workspaceId);
-    if (workspace) {
-      setCurrentWorkspace({
-        id: workspace.id,
-        title: workspace.title,
-      });
+    if (!workspace) {
+      return;
     }
 
-    // Call custom handler if provided, but don't navigate (client-side only)
+    // Update both selectedWorkspaceId and currentWorkspace atomically
+    setSelectedWorkspaceId(workspaceId);
+    setCurrentWorkspace({
+      id: workspace.id,
+      title: workspace.title,
+    });
+
+    // Call custom handler if provided
     if (onWorkspaceChange) {
       onWorkspaceChange(workspaceId);
     }
-    // No router.push - stays client-side only, URL doesn't change
   };
 
   if (workspaces.length === 0) {
@@ -98,7 +109,7 @@ export function WorkspaceSelector({
         style={{ pointerEvents: "auto" }}
       >
         <span className="text-base font-medium text-foreground truncate">
-          {currentWorkspace?.title || "Selecionar workspace"}
+          {displayedWorkspace?.title || "Selecionar workspace"}
         </span>
         <ChevronDown className="w-4 h-4 text-foreground/40 shrink-0" />
       </button>

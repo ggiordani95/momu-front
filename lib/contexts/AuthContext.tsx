@@ -26,10 +26,6 @@ function getInitialUserId(): string {
 
   // Migração: se encontrar o UUID antigo, atualizar para o novo ID
   if (storedUserId === "00000000-0000-0000-0000-000000000001") {
-    console.log(
-      "[AuthContext] Migrating old UUID to new user ID:",
-      TEST_USER_ID
-    );
     localStorage.setItem("userId", TEST_USER_ID);
     return TEST_USER_ID;
   }

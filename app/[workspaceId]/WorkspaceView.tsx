@@ -210,12 +210,6 @@ export default function WorkspaceView({
         /^[a-zA-Z0-9]$/.test(e.key);
 
       if (!isTypingInInput && isPrintableChar) {
-        console.log(
-          "Showing search hint - key:",
-          e.key,
-          "target:",
-          target?.tagName
-        );
         setShowSearchHint(true);
 
         // Clear existing timeout
@@ -267,14 +261,21 @@ export default function WorkspaceView({
   // This will automatically re-render when files array changes (e.g., when markFileAsDeleted updates it)
   const workspaceFiles = useMemo(() => {
     if (!isMounted) return [];
-    return allFiles.filter(
+    const filtered = allFiles.filter(
       (file) => file.workspace_id === workspaceId && file.active !== false
     );
+
+    return filtered;
   }, [allFiles, workspaceId, isMounted]);
   const files = useMemo(() => buildHierarchy(workspaceFiles), [workspaceFiles]);
   const loading = isMounted ? isSyncing : true;
   const itemsError = null;
-  const workspacesItems = isMounted ? workspaces : [];
+  const workspacesItems = useMemo(() => {
+    if (isMounted) {
+      return workspaces;
+    }
+    return [];
+  }, [workspaces, isMounted]);
 
   // Update currentWorkspace in store when workspaceId changes
   useEffect(() => {
@@ -289,6 +290,22 @@ export default function WorkspaceView({
     }
   }, [workspaceId, workspacesItems, isMounted, setCurrentWorkspace]);
 
+  // Reset navigation state when workspace changes
+  const prevWorkspaceIdRef = useRef<string | undefined>(workspaceId);
+  useEffect(() => {
+    if (
+      prevWorkspaceIdRef.current !== workspaceId &&
+      prevWorkspaceIdRef.current
+    ) {
+      // Workspace changed - reset navigation to root
+      setCurrentFolderId(null);
+      setSelectedItem(null);
+      prevWorkspaceIdRef.current = workspaceId;
+    } else if (!prevWorkspaceIdRef.current) {
+      prevWorkspaceIdRef.current = workspaceId;
+    }
+  }, [workspaceId, setCurrentFolderId]);
+
   useEffect(() => {
     if (
       !loading &&
@@ -298,9 +315,6 @@ export default function WorkspaceView({
     ) {
       const workspaceExists = workspacesItems.some((f) => f.id === workspaceId);
       if (!workspaceExists) {
-        console.warn(
-          `⚠️ Workspace ${workspaceId} não existe, redirecionando para /explorer`
-        );
         // Only redirect if we're not in trash view (trash view can have empty files)
         const view = currentView || "explorer";
         if (view !== "trash") {
@@ -657,10 +671,7 @@ export default function WorkspaceView({
         try {
           const { fileService } = await import("@/lib/services/fileService");
           await fileService.update(id, { [field]: value });
-          console.log(`✅ [UPDATE] Updated pending item in backend: ${id}`);
-        } catch (error) {
-          console.error(`❌ [UPDATE] Failed to update pending item:`, error);
-        }
+        } catch (error) {}
       }
       return;
     }
@@ -684,12 +695,8 @@ export default function WorkspaceView({
           updated_at: updatedFile.updated_at,
         });
 
-        console.log(
-          `✅ [UPDATE] File updated in backend: ${id} ${field} = "${value}"`
-        );
         return;
       } catch (error) {
-        console.error(`❌ [UPDATE] Failed to update in backend:`, error);
         // Fall through to save in localStorage as fallback
       }
     }
@@ -700,9 +707,6 @@ export default function WorkspaceView({
     if (originalFile) {
       revertUpdate(id, { [field]: originalFile[field] });
     }
-    console.error(
-      `❌ [UPDATE] Failed to update file, reverted optimistic update: ${id}`
-    );
   };
 
   const handleNavigateToWorkspaceRoot = () => {
@@ -785,11 +789,6 @@ export default function WorkspaceView({
   };
 
   const handleItemDeleteBatch = async (ids: string[]) => {
-    console.log(
-      "🗑️ [WorkspaceView] handleItemDeleteBatch called with ids:",
-      ids
-    );
-
     // Get the latest state from the store once for all files
     const { files, markFilesAsDeleted } = useWorkspaceStore.getState();
 
@@ -802,7 +801,6 @@ export default function WorkspaceView({
     );
 
     if (filesToDelete.length === 0) {
-      console.warn("⚠️ No active files found to delete");
       return;
     }
 
@@ -810,9 +808,6 @@ export default function WorkspaceView({
 
     // Mark all files as deleted in the store at once (optimistic update)
     markFilesAsDeleted(fileIdsToDelete);
-    console.log(
-      `✅ [Delete] Updated Zustand store for ${fileIdsToDelete.length} files`
-    );
 
     // Check if online to call API immediately
     const isOnline = typeof navigator !== "undefined" && navigator.onLine;
@@ -824,10 +819,6 @@ export default function WorkspaceView({
         const result = await fileService.deleteBatch(fileIdsToDelete);
 
         if (result.success) {
-          console.log(
-            `✅ [Delete Batch] Successfully deleted ${result.deleted} file(s) via API`
-          );
-
           // Sync files to get latest state from backend
           const { syncFiles } = useWorkspaceStore.getState();
           if (!useWorkspaceStore.getState().isSyncing) {
@@ -836,20 +827,11 @@ export default function WorkspaceView({
         } else {
           throw new Error("Delete batch failed");
         }
-      } catch (error) {
-        console.error(
-          `❌ [Delete Batch] Failed to delete via API, saving to localStorage:`,
-          error
-        );
-
-        console.error(`❌ [Delete Batch] Failed to delete:`, error);
-      }
+      } catch (error) {}
     }
   };
 
   const handleItemDelete = async (id: string) => {
-    console.log("🗑️ [WorkspaceView] handleItemDelete called with id:", id);
-
     // Always get the latest state from the store to avoid race conditions
     // This is especially important when deleting multiple files at once
     const { files, markFileAsDeleted } = useWorkspaceStore.getState();
@@ -858,9 +840,6 @@ export default function WorkspaceView({
     );
 
     if (file && file.active === false) {
-      console.warn(
-        `⚠️ Item ${id} is already deleted (active = false), skipping duplicate delete`
-      );
       return;
     }
 
@@ -868,12 +847,8 @@ export default function WorkspaceView({
     // This ensures the UI updates immediately
     if (file && file.active !== false) {
       markFileAsDeleted(id);
-      console.log(`✅ [Delete] Updated Zustand store for file: ${id}`);
     } else if (!file) {
       // File not found in store - might be a pending item or already deleted
-      console.warn(
-        `⚠️ File ${id} not found in store, checking if it's pending...`
-      );
     }
 
     // Delete directly in API
@@ -881,7 +856,6 @@ export default function WorkspaceView({
       try {
         const { fileService } = await import("@/lib/services/fileService");
         await fileService.delete(id);
-        console.log(`✅ [Delete] File deleted in backend: ${id}`);
 
         // Sync files to refresh state
         const { syncFiles } = useWorkspaceStore.getState();
@@ -889,30 +863,23 @@ export default function WorkspaceView({
           await syncFiles();
         }
       } catch (error) {
-        console.error(`❌ [Delete] Failed to delete file:`, error);
         // On error, restore file in store
         const { markFileAsRestored } = useWorkspaceStore.getState();
         markFileAsRestored(id);
       }
     } else {
-      console.warn(`⚠️ File ${id} not found in store, skipping delete`);
     }
     // The UI update happens via removeOptimisticItem in HomeContent
   };
 
   const handleItemComplete = useCallback(
     async (id: string, completed: boolean) => {
-      console.log(
-        `🔄 [COMPLETE] Starting update for file ${id}, completed: ${completed}`
-      );
-
       // For existing items, optimistically update
       const { updateFileInStore } = useWorkspaceStore.getState();
       const { files: currentFiles } = useWorkspaceStore.getState();
       const originalFile = currentFiles.find((f) => f.id === id);
 
       if (!originalFile) {
-        console.warn(`⚠️ [COMPLETE] File not found in store: ${id}`);
         return;
       }
 
@@ -923,42 +890,20 @@ export default function WorkspaceView({
       });
 
       const isOnline = typeof navigator !== "undefined" && navigator.onLine;
-      console.log(`🌐 [COMPLETE] Online status: ${isOnline}`);
 
       if (isOnline) {
         try {
-          console.log(
-            `📡 [COMPLETE] Making API request to update file ${id}...`
-          );
           const { fileService } = await import("@/lib/services/fileService");
           const updateData = {
             completed,
             completed_at: completed ? new Date().toISOString() : undefined,
           };
 
-          console.log(`📤 [COMPLETE] Update data:`, updateData);
-
           const updatedFile = await fileService.update(id, updateData);
-
-          console.log(`📥 [COMPLETE] Received response:`, updatedFile);
-          console.log(
-            `📥 [COMPLETE] Response completed field:`,
-            updatedFile.completed
-          );
-          console.log(
-            `📥 [COMPLETE] Response completed_at field:`,
-            updatedFile.completed_at
-          );
 
           // Use the values from the backend response instead of the local values
           // This ensures we're using what was actually saved in the database
           const backendCompleted = updatedFile.completed === true;
-
-          console.log(
-            `🔄 [COMPLETE] Using backend completed value: ${backendCompleted} (from backend: ${
-              updatedFile.completed
-            }, type: ${typeof updatedFile.completed})`
-          );
 
           // Update store with response from backend
           updateFileInStore(id, {
@@ -967,40 +912,12 @@ export default function WorkspaceView({
             updated_at: updatedFile.updated_at,
           });
 
-          console.log(
-            `✅ [COMPLETE] File marked as ${
-              completed ? "completed" : "incomplete"
-            }: ${id}`
-          );
           return;
-        } catch (error: unknown) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          const errorStack = error instanceof Error ? error.stack : undefined;
-          console.error(`❌ [COMPLETE] Failed to update in backend:`, error);
-          console.error(`❌ [COMPLETE] Error details:`, {
-            message: errorMessage,
-            stack: errorStack,
-          });
-
-          // Revert optimistic update
-          if (originalFile) {
-            updateFileInStore(id, {
-              completed: originalFile.completed,
-              completed_at: originalFile.completed_at,
-            });
-            console.log(
-              `🔄 [COMPLETE] Reverted optimistic update for file ${id}`
-            );
-          }
-        }
+        } catch (error: unknown) {}
       } else {
-        console.warn(
-          `⚠️ [COMPLETE] Offline - update will be synced when online`
-        );
       }
     },
-    [workspaceId]
+    []
   );
 
   const handleAddItem = useCallback(
@@ -1027,11 +944,7 @@ export default function WorkspaceView({
 
         // Navigate to the parent folder to show the new file
         setCurrentFolderId(itemData.parent_id || null);
-
-        console.log(`✅ [CREATE] File created successfully: ${createdFile.id}`);
-      } catch (error) {
-        console.error(`❌ [CREATE] Failed to create file:`, error);
-      }
+      } catch (error) {}
     },
     [workspaceId, setCurrentFolderId]
   );
@@ -1343,16 +1256,6 @@ function HomeContent({
           // Find matching item in context (by ID) - recursively searches all levels
           const contextItem = findItemById(contextItems, item.id);
           if (contextItem && contextItem.id === item.id) {
-            // Check if context has different values (optimistic update)
-            const hasUpdate =
-              contextItem.title !== item.title ||
-              contextItem.content !== item.content;
-            if (hasUpdate) {
-              console.log(
-                `🔄 [mergedItems] Applying context update for ${item.id}: "${item.title}" -> "${contextItem.title}"`
-              );
-            }
-
             // Merge children: use context children if they exist, otherwise use backend children
             const mergedChildren =
               contextItem.children && contextItem.children.length > 0
@@ -1411,9 +1314,6 @@ function HomeContent({
       if (realItem) {
         // Item was synchronized, remove from pendingItems
         itemsToRemove.push(tempId);
-        console.log(
-          `✅ Found synchronized item: ${realItem.id} matches temp ${tempId} (title: "${currentTitle}", parent: ${optimisticParentId})`
-        );
       }
     });
 
@@ -1424,9 +1324,6 @@ function HomeContent({
           newMap.delete(id);
         });
         if (newMap.size !== prev.size) {
-          console.log(
-            `🧹 Removed ${itemsToRemove.length} synchronized items from pendingItems (${prev.size} -> ${newMap.size})`
-          );
         }
         return newMap;
       });
@@ -1462,10 +1359,6 @@ function HomeContent({
     // Only update context if mergedItems actually changed
     // But check if context already has optimistic updates that we should preserve
     if (prevData !== currentData) {
-      console.log(
-        `🔄 [SYNC] mergedFiles changed, checking for optimistic updates...`
-      );
-
       // Check if context has newer updates than mergedFiles
       const contextHasUpdates = itemsContext.data?.some((contextItem) => {
         const mergedItem = findItemById(mergedFiles, contextItem.id);
@@ -1474,23 +1367,14 @@ function HomeContent({
         const hasUpdate =
           contextItem.title !== mergedItem.title ||
           contextItem.content !== mergedItem.content;
-        if (hasUpdate) {
-          console.log(
-            `🔄 [SYNC] Context has optimistic update for ${contextItem.id}: "${mergedItem.title}" -> "${contextItem.title}"`
-          );
-        }
+
         return hasUpdate;
       });
 
       // Only update if context doesn't have newer optimistic updates
       if (!contextHasUpdates) {
-        console.log(
-          `✅ [SYNC] No optimistic updates, syncing mergedFiles to context`
-        );
         prevMergedItemsRef.current = mergedFiles;
         itemsContext.data = mergedFiles;
-      } else {
-        console.log(`⏭️ [SYNC] Skipping sync - context has optimistic updates`);
       }
     }
   }, [itemsContext, mergedFiles]);

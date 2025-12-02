@@ -286,26 +286,17 @@ export default function FileCard({
           type="text"
           value={renameValue}
           onChange={(e) => {
-            console.log(`⌨️ [FileCard] Input changed: "${e.target.value}"`);
             setRenameValue(e.target.value);
           }}
           onBlur={() => {
-            console.log(`👋 [FileCard] Input onBlur triggered`);
             handleRenameSave();
           }}
           onKeyDown={(e) => {
-            console.log(`⌨️ [FileCard] Key pressed: ${e.key}`);
             if (e.key === "Enter") {
               e.preventDefault();
-              console.log(
-                `⌨️ [FileCard] Enter pressed, calling handleRenameSave`
-              );
               handleRenameSave();
             } else if (e.key === "Escape") {
               e.preventDefault();
-              console.log(
-                `⌨️ [FileCard] Escape pressed, calling handleRenameCancel`
-              );
               handleRenameCancel();
             }
           }}
@@ -365,22 +356,8 @@ export default function FileCard({
                     label: "Excluir",
                     icon: <Trash2 size={16} />,
                     onClick: () => {
-                      console.log(
-                        "🗑️ [FileCard] Delete clicked for file:",
-                        file.id
-                      );
-                      console.log(
-                        "🗑️ [FileCard] onDelete function exists:",
-                        !!onDelete
-                      );
                       if (onDelete) {
-                        console.log(
-                          "🗑️ [FileCard] Calling onDelete with id:",
-                          file.id
-                        );
                         onDelete(file.id);
-                      } else {
-                        console.warn("⚠️ [FileCard] onDelete is not defined!");
                       }
                       setContextMenu(null);
                     },
