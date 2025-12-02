@@ -217,7 +217,7 @@ export function ExplorerWorkspace({
             }}
           />
         )}
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,2fr))] gap-6 w-full">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,2fr))] gap-6 w-full">
           {isLoading ? (
             <>
               {/* Loading Skeletons */}

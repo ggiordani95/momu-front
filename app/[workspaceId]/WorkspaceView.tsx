@@ -22,8 +22,9 @@ import { SocialWorkspace } from "@/components/views/social/SocialWorkspace";
 import { PlannerWorkspace } from "@/components/views/planner/PlannerWorkspace";
 import { AIWorkspace } from "@/components/views/ai/AIWorkspace";
 import { GlobalSearch } from "@/components/GlobalSearch";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, X } from "lucide-react";
 import { FolderIcon, NoteIcon, VideoIcon } from "@/components/icons/ItemIcons";
+import { createPortal } from "react-dom";
 
 interface WorkspaceViewProps {
   workspaceId: string;
@@ -122,7 +123,24 @@ export default function WorkspaceView({
   }, []);
 
   const [showSearchHint, setShowSearchHint] = useState(false);
+  const [showYouTubeModal, setShowYouTubeModal] = useState(false);
   const searchHintTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Detect OS for keyboard shortcuts display
+  const [isMac, setIsMac] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const platform = navigator.platform.toLowerCase();
+      const userAgent = navigator.userAgent.toLowerCase();
+      const isMacOS =
+        platform.includes("mac") ||
+        platform.includes("iphone") ||
+        platform.includes("ipad") ||
+        userAgent.includes("mac os x");
+      setIsMac(isMacOS);
+    }
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -181,17 +199,16 @@ export default function WorkspaceView({
         return;
       }
 
-      // Add video with Ctrl+Shift+V or Cmd+Shift+V (only in explorer view)
-      // Using V for "Video" to avoid browser conflicts
+      // Add video with Ctrl+L or Cmd+L (only in explorer view)
       if (
         (e.metaKey || e.ctrlKey) &&
-        e.shiftKey &&
-        (e.key === "V" || e.key === "v") &&
+        (e.key === "l" || e.key === "L") &&
+        !e.shiftKey &&
         !isTypingInInput &&
         currentView === "explorer"
       ) {
         e.preventDefault();
-        window.dispatchEvent(new CustomEvent("openAddItemModal"));
+        setShowYouTubeModal(true);
         return;
       }
 
@@ -1158,7 +1175,7 @@ export default function WorkspaceView({
                 >
                   <FolderIcon size={32} />
                   <kbd className="px-2.5 py-1 rounded-lg text-sm text-foreground/70 font-semibold bg-foreground/5">
-                    Ctrl + F
+                    {isMac ? "Cmd" : "Ctrl"} + F
                   </kbd>
                 </button>
 
@@ -1177,13 +1194,13 @@ export default function WorkspaceView({
                 >
                   <NoteIcon size={32} />
                   <kbd className="px-2.5 py-1 rounded-lg text-sm text-foreground/70 font-semibold bg-foreground/5">
-                    Ctrl + Y
+                    {isMac ? "Cmd" : "Ctrl"} + Y
                   </kbd>
                 </button>
-                {/* Video Icon - opens modal */}
+                {/* Video Icon - opens YouTube modal */}
                 <button
                   onClick={() => {
-                    window.dispatchEvent(new CustomEvent("openAddItemModal"));
+                    setShowYouTubeModal(true);
                   }}
                   className="p-2 rounded-lg transition-all hover:scale-110 flex flex-col items-center justify-center gap-5"
                   title="Adicionar Vídeo"
@@ -1191,24 +1208,173 @@ export default function WorkspaceView({
                 >
                   <VideoIcon size={32} />
                   <kbd className="px-2.5 py-1 rounded-lg text-sm text-foreground/70 font-semibold bg-foreground/5">
-                    Ctrl + Shift + V
+                    {isMac ? "Cmd" : "Ctrl"} + L
                   </kbd>
                 </button>
               </div>
-
               {/* Search Hint */}
               <div className="p-2.5 rounded-xl flex items-center justify-center gap-2 text-foreground bg-background/80 backdrop-blur-sm">
                 <span className="text-sm font-medium">Pressione</span>
                 <kbd className="px-2.5 py-1 rounded-lg text-sm text-foreground/70 font-semibold bg-foreground/5">
-                  Ctrl + K
+                  {isMac ? "Cmd" : "Ctrl"} + K
                 </kbd>
                 <span className="text-sm font-medium">para buscar</span>
               </div>
             </div>
           </div>
         )}
+      {/* YouTube URL Modal */}
+      {showYouTubeModal && (
+        <YouTubeUrlModal
+          onConfirm={async (url: string) => {
+            await handleAddItem({
+              type: "video",
+              title: "Novo Vídeo",
+              youtube_url: url,
+              parent_id: currentFolderId || undefined,
+            });
+            setShowYouTubeModal(false);
+          }}
+          onCancel={() => {
+            setShowYouTubeModal(false);
+          }}
+        />
+      )}
     </>
   );
+}
+
+// YouTube URL Modal Component
+interface YouTubeUrlModalProps {
+  onConfirm: (url: string) => void;
+  onCancel: () => void;
+}
+
+function YouTubeUrlModal({ onConfirm, onCancel }: YouTubeUrlModalProps) {
+  const [url, setUrl] = useState<string>("");
+  const [isMounted, setIsMounted] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsMounted(true);
+      inputRef.current?.focus();
+    }, 10);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleCancel = useCallback(() => {
+    setIsMounted(false);
+    setTimeout(() => {
+      onCancel();
+    }, 200);
+  }, [onCancel]);
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        handleCancel();
+      }
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [handleCancel]);
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmedUrl = (url || "").trim();
+    if (!trimmedUrl) return;
+    onConfirm(trimmedUrl);
+    handleCancel();
+  };
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      handleCancel();
+    }
+  };
+
+  if (typeof window === "undefined") return null;
+
+  const modalContent = (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center"
+      onClick={handleBackdropClick}
+      style={{
+        backgroundColor: "rgba(0, 0, 0, 0.4)",
+        backdropFilter: "blur(8px)",
+        opacity: isMounted ? 1 : 0,
+        transition: "opacity 0.2s ease-out",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-background border border-border rounded-xl shadow-2xl p-6 w-full max-w-md mx-4"
+        style={{
+          transform: isMounted ? "scale(1)" : "scale(0.95)",
+          opacity: isMounted ? 1 : 0,
+          transition: "all 0.2s ease-out",
+        }}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-foreground">
+            Inserir Vídeo do YouTube
+          </h3>
+          <button
+            onClick={handleCancel}
+            className="p-1.5 rounded-md hover:bg-foreground/5 transition-colors text-foreground/60 hover:text-foreground"
+            aria-label="Fechar"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label
+              htmlFor="youtube-url-input"
+              className="block text-sm font-medium text-foreground/70 mb-2"
+            >
+              URL do YouTube
+            </label>
+            <input
+              ref={inputRef}
+              id="youtube-url-input"
+              type="url"
+              value={url || ""}
+              onChange={(e) => setUrl(e.target.value || "")}
+              placeholder="https://youtube.com/watch?v=... ou https://youtu.be/..."
+              className="w-full px-4 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  handleCancel();
+                }
+              }}
+            />
+          </div>
+
+          <div className="flex gap-3 justify-end">
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="px-4 py-2 rounded-lg text-sm font-medium text-foreground/70 hover:text-foreground hover:bg-foreground/5 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={!url.trim()}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Adicionar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+
+  return createPortal(modalContent, document.body);
 }
 
 function HomeContent({

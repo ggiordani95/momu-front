@@ -8,6 +8,8 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
 import TextAlign from "@tiptap/extension-text-align";
 import TiptapLink from "@tiptap/extension-link";
+import Image from "@tiptap/extension-image";
+import { Node } from "@tiptap/core";
 import {
   DndContext,
   closestCenter,
@@ -42,7 +44,11 @@ import {
   Quote,
   Code2,
   Minus,
+  Image as ImageIcon,
+  Youtube,
+  X,
 } from "lucide-react";
+import { createPortal } from "react-dom";
 
 interface Block {
   id: string;
@@ -63,6 +69,273 @@ interface NotionBlockEditorProps {
   onSave: (content: string) => void;
   placeholder?: string;
   autoFocus?: boolean;
+}
+
+interface UrlInputModalProps {
+  type: "image" | "youtube";
+  onConfirm: (url: string) => void;
+  onCancel: () => void;
+}
+
+// URL Input Modal Component
+function UrlInputModal({ type, onConfirm, onCancel }: UrlInputModalProps) {
+  const [url, setUrl] = useState<string>("");
+  const [isMounted, setIsMounted] = useState(false);
+  const [inputMode, setInputMode] = useState<"url" | "upload">("url");
+  const [isUploading, setIsUploading] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsMounted(true);
+      if (inputMode === "url" && inputRef.current) {
+        inputRef.current.focus();
+      }
+    }, 10);
+    return () => clearTimeout(timer);
+  }, [inputMode]);
+
+  const handleCancel = useCallback(() => {
+    setIsMounted(false);
+    setUrl("");
+    setInputMode("url");
+    setIsUploading(false);
+    setTimeout(() => {
+      onCancel();
+    }, 200);
+  }, [onCancel]);
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        handleCancel();
+      }
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [handleCancel]);
+
+  const handleFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      // Only allow image files
+      if (!file.type.startsWith("image/")) {
+        alert("Por favor, selecione um arquivo de imagem válido.");
+        return;
+      }
+
+      // Check file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        alert(
+          "O arquivo é muito grande. Por favor, selecione uma imagem menor que 10MB."
+        );
+        return;
+      }
+
+      setIsUploading(true);
+
+      try {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const base64 = event.target?.result as string;
+          if (base64) {
+            onConfirm(base64);
+            handleCancel();
+          }
+        };
+        reader.onerror = () => {
+          alert("Erro ao ler o arquivo. Por favor, tente novamente.");
+          setIsUploading(false);
+        };
+        reader.readAsDataURL(file);
+      } catch {
+        alert("Erro ao processar o arquivo. Por favor, tente novamente.");
+        setIsUploading(false);
+      }
+    },
+    [onConfirm, handleCancel]
+  );
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!url.trim()) return;
+    onConfirm(url.trim());
+    handleCancel();
+  };
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      handleCancel();
+    }
+  };
+
+  if (typeof window === "undefined") return null;
+
+  const modalContent = (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center"
+      onClick={handleBackdropClick}
+      style={{
+        backgroundColor: "rgba(0, 0, 0, 0.4)",
+        backdropFilter: "blur(8px)",
+        opacity: isMounted ? 1 : 0,
+        transition: "opacity 0.2s ease-out",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-background border border-border rounded-xl shadow-2xl p-6 w-full max-w-md mx-4"
+        style={{
+          transform: isMounted ? "scale(1)" : "scale(0.95)",
+          opacity: isMounted ? 1 : 0,
+          transition: "all 0.2s ease-out",
+        }}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-foreground">
+            {type === "image" ? "Inserir Imagem" : "Inserir Vídeo do YouTube"}
+          </h3>
+          <button
+            onClick={handleCancel}
+            className="p-1.5 rounded-md hover:bg-foreground/5 transition-colors text-foreground/60 hover:text-foreground"
+            aria-label="Fechar"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {type === "image" && (
+            <div className="flex gap-2 mb-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setInputMode("url");
+                  setUrl("");
+                  setTimeout(() => inputRef.current?.focus(), 50);
+                }}
+                className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  inputMode === "url"
+                    ? "bg-blue-600 text-white"
+                    : "bg-foreground/5 text-foreground/70 hover:bg-foreground/10"
+                }`}
+              >
+                URL
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setInputMode("upload");
+                  setUrl("");
+                  setTimeout(() => fileInputRef.current?.click(), 50);
+                }}
+                className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  inputMode === "upload"
+                    ? "bg-blue-600 text-white"
+                    : "bg-foreground/5 text-foreground/70 hover:bg-foreground/10"
+                }`}
+              >
+                Upload
+              </button>
+            </div>
+          )}
+
+          {inputMode === "url" ? (
+            <div>
+              <label
+                htmlFor="url-input"
+                className="block text-sm font-medium text-foreground/70 mb-2"
+              >
+                URL
+              </label>
+              <input
+                ref={inputRef}
+                id="url-input"
+                type="url"
+                value={url || ""}
+                onChange={(e) => setUrl(e.target.value || "")}
+                placeholder={
+                  type === "image"
+                    ? "https://exemplo.com/imagem.jpg"
+                    : "https://youtube.com/watch?v=..."
+                }
+                className="w-full px-4 py-2.5 rounded-lg border border-border bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    handleCancel();
+                  }
+                }}
+              />
+            </div>
+          ) : (
+            <div>
+              <label
+                htmlFor="file-input"
+                className="block text-sm font-medium text-foreground/70 mb-2"
+              >
+                Selecionar Imagem
+              </label>
+              <input
+                ref={fileInputRef}
+                id="file-input"
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full px-4 py-8 rounded-lg border-2 border-dashed border-border bg-background/50 hover:bg-background hover:border-blue-500/50 transition-all cursor-pointer flex flex-col items-center justify-center gap-2"
+              >
+                {isUploading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <span className="text-sm text-foreground/70">
+                      Processando...
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon size={32} className="text-foreground/40" />
+                    <span className="text-sm text-foreground/70">
+                      Clique para selecionar ou arraste uma imagem aqui
+                    </span>
+                    <span className="text-xs text-foreground/50">
+                      Máximo 10MB
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {inputMode === "url" && (
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-foreground/70 hover:text-foreground hover:bg-foreground/5 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={!url.trim()}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Inserir
+              </button>
+            </div>
+          )}
+        </form>
+      </div>
+    </div>
+  );
+
+  return createPortal(modalContent, document.body);
 }
 
 // Parse content - support both JSON array and HTML
@@ -95,8 +368,132 @@ function serializeBlocks(blocks: Block[]): string {
   return JSON.stringify(blocks);
 }
 
+// Extract YouTube video ID from URL
+function extractYouTubeId(url: string): string | null {
+  if (!url) return null;
+
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+    /^([a-zA-Z0-9_-]{11})$/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match && match[1]) {
+      return match[1];
+    }
+  }
+
+  return null;
+}
+
+// YouTube Video Extension
+const YouTubeExtension = Node.create({
+  name: "youtube",
+  group: "block",
+  atom: true,
+  addAttributes() {
+    return {
+      src: {
+        default: null,
+      },
+      width: {
+        default: 640,
+      },
+      height: {
+        default: 360,
+      },
+    };
+  },
+  parseHTML() {
+    return [
+      {
+        tag: "div[data-type='youtube']",
+        getAttrs: (node: string | HTMLElement) => {
+          if (typeof node === "string") return false;
+          const iframe = node.querySelector("iframe");
+          return {
+            src: iframe?.getAttribute("src") || "",
+          };
+        },
+      },
+    ];
+  },
+  renderHTML({ HTMLAttributes }: { HTMLAttributes: Record<string, string> }) {
+    const videoId = extractYouTubeId(HTMLAttributes.src);
+    if (!videoId) return ["div"];
+
+    return [
+      "div",
+      { "data-type": "youtube", class: "youtube-wrapper" },
+      [
+        "iframe",
+        {
+          src: `https://www.youtube.com/embed/${videoId}`,
+          width: HTMLAttributes.width || 640,
+          height: HTMLAttributes.height || 360,
+          frameborder: "0",
+          allow:
+            "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture",
+          allowfullscreen: "true",
+          class: "rounded-lg w-full max-w-4xl",
+        },
+      ],
+    ];
+  },
+  addNodeView() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return ({ node }: any) => {
+      const dom = document.createElement("div");
+      dom.className = "youtube-wrapper my-4";
+
+      const iframe = document.createElement("iframe");
+      const videoId = extractYouTubeId(node.attrs.src);
+      if (videoId) {
+        iframe.src = `https://www.youtube.com/embed/${videoId}`;
+        iframe.width = node.attrs.width || "100%";
+        iframe.height = node.attrs.height || "360";
+        iframe.frameBorder = "0";
+        iframe.allow =
+          "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+        iframe.allowFullscreen = true;
+        iframe.className = "rounded-lg w-full max-w-4xl";
+
+        dom.appendChild(iframe);
+      }
+      return { dom };
+    };
+  },
+  addCommands() {
+    return {
+      setYouTubeVideo:
+        (options: { src: string; width?: number; height?: number }) =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ({ commands }: any) => {
+          const videoId = extractYouTubeId(options.src);
+          if (!videoId) return false;
+
+          return commands.insertContent({
+            type: this.name,
+            attrs: {
+              src: `https://www.youtube.com/embed/${videoId}`,
+              width: options.width || 640,
+              height: options.height || 360,
+            },
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          } as any);
+        },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+  },
+});
+
 // Command menu items
-function getCommandItems(): CommandItem[] {
+function getCommandItems(
+  onOpenImageModal: () => void,
+  onOpenYouTubeModal: () => void,
+  setCurrentEditor: (ed: Editor) => void
+): CommandItem[] {
   return [
     {
       id: "heading1",
@@ -184,6 +581,30 @@ function getCommandItems(): CommandItem[] {
         }
       },
     },
+    {
+      id: "image",
+      label: "Imagem",
+      description: "Inserir imagem por URL",
+      icon: <ImageIcon size={18} />,
+      action: (ed) => {
+        if (ed) {
+          setCurrentEditor(ed);
+          onOpenImageModal();
+        }
+      },
+    },
+    {
+      id: "youtube",
+      label: "Vídeo do YouTube",
+      description: "Inserir vídeo do YouTube",
+      icon: <Youtube size={18} />,
+      action: (ed) => {
+        if (ed) {
+          setCurrentEditor(ed);
+          onOpenYouTubeModal();
+        }
+      },
+    },
   ];
 }
 
@@ -205,6 +626,14 @@ const blockExtensions = [
       class: "text-blue-600 underline cursor-pointer",
     },
   }),
+  Image.configure({
+    inline: false,
+    allowBase64: true,
+    HTMLAttributes: {
+      class: "max-w-full rounded-lg my-4",
+    },
+  }),
+  YouTubeExtension,
 ];
 
 export default function NotionBlockEditor({
@@ -216,8 +645,45 @@ export default function NotionBlockEditor({
   const [blocks, setBlocks] = useState<Block[]>(() => parseContent(content));
   const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [urlModalType, setUrlModalType] = useState<"image" | "youtube" | null>(
+    null
+  );
+  const [currentEditor, setCurrentEditor] = useState<Editor | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastContentRef = useRef(content);
+
+  // Modal handlers
+  const handleOpenImageModal = useCallback(() => {
+    setUrlModalType("image");
+  }, []);
+
+  const handleOpenYouTubeModal = useCallback(() => {
+    setUrlModalType("youtube");
+  }, []);
+
+  const handleUrlConfirm = useCallback(
+    (url: string) => {
+      if (!currentEditor) return;
+
+      if (urlModalType === "image") {
+        currentEditor.chain().focus().setImage({ src: url }).run();
+      } else if (urlModalType === "youtube") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (currentEditor.chain().focus() as any)
+          .setYouTubeVideo({ src: url })
+          .run();
+      }
+
+      setUrlModalType(null);
+      setCurrentEditor(null);
+    },
+    [currentEditor, urlModalType]
+  );
+
+  const handleUrlCancel = useCallback(() => {
+    setUrlModalType(null);
+    setCurrentEditor(null);
+  }, []);
 
   // Drag and drop sensors
   const sensors = useSensors(
@@ -368,69 +834,83 @@ export default function NotionBlockEditor({
   }, []);
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-    >
-      <SortableContext
-        items={blocks.map((b) => b.id)}
-        strategy={verticalListSortingStrategy}
+    <>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
       >
-        <div className="space-y-0.5">
-          {blocks.map((block, index) => (
-            <SortableBlockItem
-              key={block.id}
-              block={block}
-              onUpdate={updateBlock}
-              onAddAfter={addBlockAfter}
-              onDelete={deleteBlock}
-              placeholder={placeholder}
-              autoFocus={
-                autoFocus && (index === 0 || focusedBlockId === block.id)
-              }
-              isFirst={index === 0}
-            />
-          ))}
-          <button
-            onClick={addBlockAtEnd}
-            className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-hover/30 transition-colors opacity-0 group-hover:opacity-100 text-sm text-foreground/50"
-            title="Adicionar bloco"
-          >
-            <Plus size={14} />
-            <span>Adicionar bloco</span>
-          </button>
-        </div>
-      </SortableContext>
-      <DragOverlay>
-        {activeId ? (
-          <div className="w-full max-w-4xl opacity-90 shadow-2xl bg-background border border-border rounded p-2">
-            <div className="flex items-start gap-2">
-              <div className="shrink-0 pt-1.5">
-                <GripVertical size={16} className="text-foreground/30" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="prose prose-sm max-w-none text-foreground line-clamp-3">
-                  {(() => {
-                    const activeBlock = blocks.find((b) => b.id === activeId);
-                    return activeBlock?.content ? (
-                      <div
-                        dangerouslySetInnerHTML={{
-                          __html: activeBlock.content,
-                        }}
-                      />
-                    ) : (
-                      <span className="text-foreground/40">{placeholder}</span>
-                    );
-                  })()}
+        <SortableContext
+          items={blocks.map((b) => b.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <div className="space-y-0.5">
+            {blocks.map((block, index) => (
+              <SortableBlockItem
+                key={block.id}
+                block={block}
+                onUpdate={updateBlock}
+                onAddAfter={addBlockAfter}
+                onDelete={deleteBlock}
+                placeholder={placeholder}
+                autoFocus={
+                  autoFocus && (index === 0 || focusedBlockId === block.id)
+                }
+                isFirst={index === 0}
+                onOpenImageModal={handleOpenImageModal}
+                onOpenYouTubeModal={handleOpenYouTubeModal}
+                setCurrentEditor={setCurrentEditor}
+              />
+            ))}
+            <button
+              onClick={addBlockAtEnd}
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-hover/30 transition-colors opacity-0 group-hover:opacity-100 text-sm text-foreground/50"
+              title="Adicionar bloco"
+            >
+              <Plus size={14} />
+              <span>Adicionar bloco</span>
+            </button>
+          </div>
+        </SortableContext>
+        <DragOverlay>
+          {activeId ? (
+            <div className="w-full max-w-4xl opacity-90 shadow-2xl bg-background border border-border rounded p-2">
+              <div className="flex items-start gap-2">
+                <div className="shrink-0 pt-1.5">
+                  <GripVertical size={16} className="text-foreground/30" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="prose prose-sm max-w-none text-foreground line-clamp-3">
+                    {(() => {
+                      const activeBlock = blocks.find((b) => b.id === activeId);
+                      return activeBlock?.content ? (
+                        <div
+                          dangerouslySetInnerHTML={{
+                            __html: activeBlock.content,
+                          }}
+                        />
+                      ) : (
+                        <span className="text-foreground/40">
+                          {placeholder}
+                        </span>
+                      );
+                    })()}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ) : null}
-      </DragOverlay>
-    </DndContext>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+      {urlModalType && (
+        <UrlInputModal
+          type={urlModalType as "image" | "youtube"}
+          onConfirm={handleUrlConfirm}
+          onCancel={handleUrlCancel}
+        />
+      )}
+    </>
   );
 }
 
@@ -443,6 +923,9 @@ function SortableBlockItem({
   placeholder,
   autoFocus,
   isFirst,
+  onOpenImageModal,
+  onOpenYouTubeModal,
+  setCurrentEditor,
 }: {
   block: Block;
   onUpdate: (id: string, content: string) => void;
@@ -451,6 +934,9 @@ function SortableBlockItem({
   placeholder: string;
   autoFocus: boolean;
   isFirst: boolean;
+  onOpenImageModal: () => void;
+  onOpenYouTubeModal: () => void;
+  setCurrentEditor: (ed: Editor) => void;
 }) {
   const {
     attributes,
@@ -486,6 +972,9 @@ function SortableBlockItem({
         autoFocus={autoFocus}
         isFirst={isFirst}
         dragHandleProps={{ ...attributes, ...listeners }}
+        onOpenImageModal={onOpenImageModal}
+        onOpenYouTubeModal={onOpenYouTubeModal}
+        setCurrentEditor={setCurrentEditor}
       />
     </div>
   );
@@ -501,6 +990,9 @@ function BlockItem({
   autoFocus,
   isFirst,
   dragHandleProps,
+  onOpenImageModal,
+  onOpenYouTubeModal,
+  setCurrentEditor,
 }: {
   block: Block;
   onUpdate: (id: string, content: string) => void;
@@ -512,6 +1004,9 @@ function BlockItem({
   dragHandleProps?: {
     [key: string]: unknown;
   };
+  onOpenImageModal: () => void;
+  onOpenYouTubeModal: () => void;
+  setCurrentEditor: (ed: Editor) => void;
 }) {
   const [showToolbar, setShowToolbar] = useState(false);
   const [toolbarPos, setToolbarPos] = useState({ top: 0, left: 0 });
@@ -522,6 +1017,163 @@ function BlockItem({
   const toolbarRef = useRef<HTMLDivElement>(null);
   const commandMenuRef = useRef<HTMLDivElement>(null);
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const editorRef = useRef<Editor | null>(null);
+  const setCurrentEditorRef = useRef(setCurrentEditor);
+
+  // Update ref when setCurrentEditor changes
+  useEffect(() => {
+    setCurrentEditorRef.current = setCurrentEditor;
+  }, [setCurrentEditor]);
+
+  // Create handleKeyDown with proper closure
+  const handleKeyDown = useCallback(
+    (
+      view: {
+        state: {
+          selection: {
+            $from: {
+              parent: { textContent: string; content: { size: number } };
+              parentOffset: number;
+            };
+            from: number;
+          };
+        };
+        coordsAtPos: (pos: number) => { top: number; left: number };
+      },
+      event: KeyboardEvent
+    ) => {
+      const editor = editorRef.current;
+      if (!editor) return false;
+
+      const { state } = view;
+      const { selection } = state;
+      const { $from } = selection;
+      const textBeforeCursor = $from.parent.textContent.slice(
+        0,
+        $from.parentOffset
+      );
+
+      // Command menu navigation
+      if (showCommandMenu) {
+        if (setCurrentEditorRef.current) {
+          setCurrentEditorRef.current(editor);
+        }
+        const commands = getCommandItems(
+          onOpenImageModal,
+          onOpenYouTubeModal,
+          (ed: Editor) => {
+            if (setCurrentEditorRef.current) {
+              setCurrentEditorRef.current(ed);
+            }
+          }
+        );
+
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          setSelectedCommandIndex((prev) =>
+            prev < commands.length - 1 ? prev + 1 : prev
+          );
+          return true;
+        }
+
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          setSelectedCommandIndex((prev) => (prev > 0 ? prev - 1 : 0));
+          return true;
+        }
+
+        if (event.key === "Enter") {
+          event.preventDefault();
+          const selectedCommand = commands[selectedCommandIndex];
+          if (selectedCommand) {
+            setShowCommandMenu(false);
+            // Clear the "/" from the editor first if it exists
+            const currentText = editor.getText();
+            if (currentText.includes("/")) {
+              const { from } = selection;
+              editor.commands.setTextSelection({
+                from: Math.max(0, from - 1),
+                to: from,
+              });
+              editor.commands.deleteSelection();
+            }
+            // Apply the command
+            requestAnimationFrame(() => {
+              selectedCommand.action(editor);
+            });
+          }
+          return true;
+        }
+
+        if (event.key === "Escape") {
+          event.preventDefault();
+          setShowCommandMenu(false);
+          // Clear the "/" from the editor
+          const { from } = selection;
+          editor.commands.setTextSelection({ from: from - 1, to: from });
+          editor.commands.deleteSelection();
+          return true;
+        }
+      }
+
+      // Detect "/" command trigger
+      if (event.key === "/" && textBeforeCursor.trim() === "") {
+        event.preventDefault();
+        const coords = view.coordsAtPos(selection.from);
+        setCommandMenuPos({
+          top: coords.top + window.scrollY,
+          left: coords.left + window.scrollX,
+        });
+        setShowCommandMenu(true);
+        setSelectedCommandIndex(0);
+        return true;
+      }
+
+      // Enter at end creates new block (only if not in a list)
+      if (event.key === "Enter" && !event.shiftKey) {
+        const isAtEnd =
+          $from.parentOffset === $from.parent.content.size &&
+          $from.parent.textContent.trim() !== "";
+
+        // Check if we're inside a list (bulletList or orderedList)
+        const isInList =
+          editor.isActive("bulletList") || editor.isActive("orderedList");
+
+        // Only create new block if at end AND not in a list
+        // If in a list, let Tiptap handle it (creates new list item)
+        if (isAtEnd && !isInList) {
+          event.preventDefault();
+          onAddAfter(block.id);
+          return true;
+        }
+        // If in a list, don't prevent default - let Tiptap handle Enter normally
+      }
+
+      // Backspace at start of empty block deletes it
+      if (event.key === "Backspace") {
+        const isEmpty = $from.parent.textContent.trim() === "";
+        const isAtStart = $from.parentOffset === 0;
+
+        if (isEmpty && isAtStart && !isFirst) {
+          event.preventDefault();
+          onDelete(block.id);
+          return true;
+        }
+      }
+
+      return false;
+    },
+    [
+      showCommandMenu,
+      selectedCommandIndex,
+      onOpenImageModal,
+      onOpenYouTubeModal,
+      onAddAfter,
+      onDelete,
+      block.id,
+      isFirst,
+    ]
+  );
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -530,100 +1182,9 @@ function BlockItem({
     editorProps: {
       attributes: {
         class:
-          "prose prose-sm max-w-none focus:outline-none min-h-[1.5em] py-0.5 px-2 leading-normal [&_p]:my-0 [&_p:last-child]:mb-0 [&_p]:leading-[1.6]",
+          "prose prose-sm max-w-none focus:outline-none min-h-[1.5em] py-0.5 px-2 leading-normal [&_p]:my-0 [&_p:last-child]:mb-0 [&_p]:leading-[1.6] [&_ul]:list-disc [&_ol]:list-decimal [&_li]:list-item",
       },
-      handleKeyDown: (view, event) => {
-        const { state } = view;
-        const { selection } = state;
-        const { $from } = selection;
-        const textBeforeCursor = $from.parent.textContent.slice(
-          0,
-          $from.parentOffset
-        );
-
-        // Command menu navigation
-        if (showCommandMenu && editor) {
-          const commands = getCommandItems();
-
-          if (event.key === "ArrowDown") {
-            event.preventDefault();
-            setSelectedCommandIndex((prev) =>
-              prev < commands.length - 1 ? prev + 1 : prev
-            );
-            return true;
-          }
-
-          if (event.key === "ArrowUp") {
-            event.preventDefault();
-            setSelectedCommandIndex((prev) => (prev > 0 ? prev - 1 : 0));
-            return true;
-          }
-
-          if (event.key === "Enter") {
-            event.preventDefault();
-            const selectedCommand = commands[selectedCommandIndex];
-            if (selectedCommand) {
-              selectedCommand.action(editor);
-              setShowCommandMenu(false);
-              // Clear the "/" from the editor
-              const { from } = selection;
-              editor.commands.setTextSelection({ from: from - 1, to: from });
-              editor.commands.deleteSelection();
-            }
-            return true;
-          }
-
-          if (event.key === "Escape") {
-            event.preventDefault();
-            setShowCommandMenu(false);
-            // Clear the "/" from the editor
-            const { from } = selection;
-            editor.commands.setTextSelection({ from: from - 1, to: from });
-            editor.commands.deleteSelection();
-            return true;
-          }
-        }
-
-        // Detect "/" command trigger
-        if (event.key === "/" && textBeforeCursor.trim() === "" && editor) {
-          event.preventDefault();
-          const coords = view.coordsAtPos($from.pos);
-          setCommandMenuPos({
-            top: coords.top + window.scrollY,
-            left: coords.left + window.scrollX,
-          });
-          setShowCommandMenu(true);
-          setSelectedCommandIndex(0);
-          return true;
-        }
-
-        // Enter at end creates new block
-        if (event.key === "Enter" && !event.shiftKey) {
-          const isAtEnd =
-            $from.parentOffset === $from.parent.content.size &&
-            $from.parent.textContent.trim() !== "";
-
-          if (isAtEnd) {
-            event.preventDefault();
-            onAddAfter(block.id);
-            return true;
-          }
-        }
-
-        // Backspace at start of empty block deletes it
-        if (event.key === "Backspace") {
-          const isEmpty = $from.parent.textContent.trim() === "";
-          const isAtStart = $from.parentOffset === 0;
-
-          if (isEmpty && isAtStart && !isFirst) {
-            event.preventDefault();
-            onDelete(block.id);
-            return true;
-          }
-        }
-
-        return false;
-      },
+      handleKeyDown,
     },
     onUpdate: ({ editor }) => {
       const html = editor.getHTML();
@@ -635,6 +1196,13 @@ function BlockItem({
       }, 300);
     },
   });
+
+  // Update editor ref when editor changes
+  useEffect(() => {
+    if (editor) {
+      editorRef.current = editor;
+    }
+  }, [editor]);
 
   // Auto focus
   useEffect(() => {
@@ -665,6 +1233,32 @@ function BlockItem({
         const hasSelection = from !== to;
 
         if (!hasSelection) {
+          setShowToolbar(false);
+          return;
+        }
+
+        // Don't show toolbar for images or YouTube videos
+        const { state } = editor;
+        const { $from } = state.selection;
+        const node = $from.node();
+        const parent = $from.parent;
+
+        // Check if selection is inside an image or YouTube node
+        const isImageSelected =
+          editor.isActive("image") ||
+          node.type.name === "image" ||
+          parent.type.name === "image" ||
+          $from.nodeAfter?.type.name === "image" ||
+          $from.nodeBefore?.type.name === "image";
+
+        const isYouTubeSelected =
+          editor.isActive("youtube") ||
+          node.type.name === "youtube" ||
+          parent.type.name === "youtube" ||
+          $from.nodeAfter?.type.name === "youtube" ||
+          $from.nodeBefore?.type.name === "youtube";
+
+        if (isImageSelected || isYouTubeSelected) {
           setShowToolbar(false);
           return;
         }
@@ -783,19 +1377,34 @@ function BlockItem({
           >
             <div className="py-1 max-h-80 overflow-y-auto">
               {editor &&
-                getCommandItems().map((command, index) => (
+                getCommandItems(
+                  onOpenImageModal,
+                  onOpenYouTubeModal,
+                  setCurrentEditor
+                ).map((command, index) => (
                   <button
                     key={command.id}
                     onClick={() => {
-                      command.action(editor);
-                      setShowCommandMenu(false);
-                      // Clear the "/" from the editor
-                      const { from } = editor.state.selection;
-                      editor.commands.setTextSelection({
-                        from: from - 1,
-                        to: from,
-                      });
-                      editor.commands.deleteSelection();
+                      if (editor) {
+                        setShowCommandMenu(false);
+                        // Clear the "/" from the editor first if it exists
+                        const currentContent = editor.getText();
+                        if (currentContent.includes("/")) {
+                          const { from } = editor.state.selection;
+                          const slashIndex = currentContent.lastIndexOf("/");
+                          if (slashIndex !== -1) {
+                            editor.commands.setTextSelection({
+                              from: Math.max(0, from - 1),
+                              to: from,
+                            });
+                            editor.commands.deleteSelection();
+                          }
+                        }
+                        // Apply the command
+                        requestAnimationFrame(() => {
+                          command.action(editor);
+                        });
+                      }
                     }}
                     className={`w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-hover/50 transition-colors ${
                       selectedCommandIndex === index ? "bg-hover/30" : ""
@@ -888,18 +1497,11 @@ function BlockItem({
         {/* Editor */}
         <div
           className={`rounded transition-colors ${
-            isEmpty ? "hover:bg-hover/20" : ""
+            isEmpty ? "hover:bg-hover/20 notion-empty-block-wrapper" : ""
           }`}
+          data-placeholder={isEmpty ? placeholder : undefined}
         >
           <EditorContent editor={editor} />
-          {isEmpty && (
-            <div
-              className="absolute pointer-events-none text-sm opacity-40 px-2"
-              style={{ top: "0.5rem", left: "0.5rem" }}
-            >
-              {placeholder}
-            </div>
-          )}
         </div>
       </div>
     </div>

@@ -18,7 +18,7 @@ export function ExplorerIcon({
   type,
   title,
   youtubeId,
-  size = 80,
+  size = 24,
   className = "",
   iconClassName = "",
 }: ExplorerIconProps) {
@@ -45,7 +45,7 @@ export function ExplorerIcon({
           alt="Folder"
           width={size}
           height={size}
-          className={`w-full h-full object-contain rounded-2xl ${iconClassName}`}
+          className={`object-contain rounded-2xl ${iconClassName}`}
           unoptimized
         />
       ) : thumbnailUrl ? (

@@ -61,7 +61,7 @@ export default function ContextMenu({
   const [adjustedPosition] = useState<{
     x: number;
     y: number;
-  }>(() => ({ x: 66, y: 90 }));
+  }>(() => ({ x: 66, y: 68 }));
 
   return (
     <div
@@ -70,7 +70,7 @@ export default function ContextMenu({
       style={{
         left: `${adjustedPosition.x}px`,
         top: `${adjustedPosition.y}px`,
-        backgroundColor: "rgba(32, 32, 32, 0.331)",
+        backgroundColor: "rgba(32, 32, 32, 0.503)",
         backdropFilter: "blur(20px) saturate(180%)",
         WebkitBackdropFilter: "blur(20px) saturate(180%)",
         border: "1px solid rgba(255, 255, 255, 0.1)",

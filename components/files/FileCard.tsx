@@ -190,7 +190,7 @@ export default function FileCard({
         onDragEnd={onDragEnd}
         onClick={onClick}
         onContextMenu={handleContextMenu}
-        className={`flex flex-col h-full justify-center items-center gap-3 p-4 rounded-3xl transition-all bg-hover/50 hover:scale-105 group w-full min-h-[180px] ${
+        className={`flex flex-col h-full justify-center items-center gap-3 p-4 rounded-3xl transition-all hover:bg-hover/50 hover:scale-105 group w-full min-h-[120px] ${
           draggedItemId === file.id ? "opacity-50" : ""
         } ${
           dragOverItemId === file.id
@@ -264,7 +264,7 @@ export default function FileCard({
                   type={file.type}
                   title={file.title}
                   youtubeId={file.youtube_id}
-                  size={48}
+                  size={36}
                 />
               </div>
               {!isRenaming && (
@@ -334,19 +334,23 @@ export default function FileCard({
                   },
                 ]
               : [
-                  {
-                    label: isCompleted
-                      ? "Marcar como não concluído"
-                      : "Marcar como concluído",
-                    icon: <Check size={16} />,
-                    onClick: () => {
-                      if (onComplete) {
-                        onComplete(file.id, !isCompleted);
-                      }
-                      setContextMenu(null);
-                    },
-                    disabled: file.type === "folder",
-                  },
+                  // Only show "Marcar como concluído" if it's not a folder
+                  ...(file.type !== "folder" && onComplete
+                    ? [
+                        {
+                          label: isCompleted
+                            ? "Marcar como não concluído"
+                            : "Marcar como concluído",
+                          icon: <Check size={16} />,
+                          onClick: () => {
+                            if (onComplete) {
+                              onComplete(file.id, !isCompleted);
+                            }
+                            setContextMenu(null);
+                          },
+                        },
+                      ]
+                    : []),
                   {
                     label: "Renomear",
                     icon: <FileEdit size={16} />,
