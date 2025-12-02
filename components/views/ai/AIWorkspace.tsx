@@ -73,9 +73,9 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
-  const { getFilesByWorkspace, syncFiles, selectedWorkspaceId, workspaces } =
+  const { getFilesByWorkspace, syncFiles, currentWorkspace, workspaces } =
     useWorkspaceStore();
-  const activeWorkspaceId = selectedWorkspaceId || workspaceId;
+  const activeWorkspaceId = currentWorkspace?.id || workspaceId;
 
   // Get userId
   const userId =

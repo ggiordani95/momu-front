@@ -30,7 +30,6 @@ interface WorkspaceState {
   // Data
   workspaces: Workspace[];
   files: File[];
-  selectedWorkspaceId: string | null;
   currentWorkspace: CurrentWorkspace | null;
   currentView: ViewType;
 
@@ -44,8 +43,7 @@ interface WorkspaceState {
   setWorkspaces: (workspaces: Workspace[]) => void;
   setFiles: (files: File[]) => void;
   setSyncData: (data: SyncFilesResponse) => void;
-  setSelectedWorkspaceId: (workspaceId: string | null) => void;
-  setCurrentWorkspace: (workspace: CurrentWorkspace | null) => void;
+  setCurrentWorkspace: (workspace: CurrentWorkspace | null | string) => void;
   setCurrentView: (view: ViewType) => void;
   syncFiles: () => Promise<void>;
   addOptimisticFile: (file: File) => void;
@@ -72,7 +70,6 @@ interface WorkspaceState {
 const initialState = {
   workspaces: [],
   files: [],
-  selectedWorkspaceId: null,
   currentWorkspace: null,
   currentView: "explorer" as ViewType,
   isLoading: false,
@@ -95,23 +92,56 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       setFiles: (files) => set({ files }),
 
-      setSelectedWorkspaceId: (workspaceId) => {
-        set({ selectedWorkspaceId: workspaceId });
-      },
-
-      setCurrentWorkspace: (workspace) => {
-        set({ currentWorkspace: workspace });
+      setCurrentWorkspace: (workspaceOrId) => {
+        // Accept both CurrentWorkspace object or just workspaceId (string)
+        if (typeof workspaceOrId === "string") {
+          // If it's just an ID, find the workspace and create CurrentWorkspace object
+          const state = get();
+          const workspace = state.workspaces.find(
+            (w) => w.id === workspaceOrId
+          );
+          if (workspace) {
+            set({
+              currentWorkspace: {
+                id: workspace.id,
+                title: workspace.title,
+              },
+            });
+          } else {
+            // Workspace not found, set to null
+            set({ currentWorkspace: null });
+          }
+        } else {
+          // It's already a CurrentWorkspace object or null
+          set({ currentWorkspace: workspaceOrId });
+        }
       },
 
       setCurrentView: (view) => set({ currentView: view }),
 
       setSyncData: (data) => {
+        const state = get();
         set({
           workspaces: data.workspaces || [],
           files: data.files || [],
           lastSyncAt: new Date(),
           error: data.error || null,
         });
+
+        // Ensure currentWorkspace is set after sync if it's not already set
+        if (
+          !state.currentWorkspace &&
+          data.workspaces &&
+          data.workspaces.length > 0
+        ) {
+          const firstWorkspace = data.workspaces[0];
+          set({
+            currentWorkspace: {
+              id: firstWorkspace.id,
+              title: firstWorkspace.title,
+            },
+          });
+        }
       },
 
       // Calcula o próximo order_index disponível para um workspace + parent_id
@@ -154,12 +184,52 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           );
           const data = await syncService(userId);
 
+          const currentState = get();
+          const currentWorkspaceId = currentState.currentWorkspace?.id;
+
+          // Ensure currentWorkspace still exists after sync
+          let updatedCurrentWorkspace = currentState.currentWorkspace;
+          if (currentWorkspaceId && data.workspaces) {
+            const workspaceStillExists = data.workspaces.some(
+              (w) => w.id === currentWorkspaceId
+            );
+            if (!workspaceStillExists && data.workspaces.length > 0) {
+              // Current workspace was deleted, fallback to first available
+              updatedCurrentWorkspace = {
+                id: data.workspaces[0].id,
+                title: data.workspaces[0].title,
+              };
+            } else if (workspaceStillExists) {
+              // Update title in case it changed
+              const workspace = data.workspaces.find(
+                (w) => w.id === currentWorkspaceId
+              );
+              if (workspace) {
+                updatedCurrentWorkspace = {
+                  id: workspace.id,
+                  title: workspace.title,
+                };
+              }
+            }
+          } else if (
+            !updatedCurrentWorkspace &&
+            data.workspaces &&
+            data.workspaces.length > 0
+          ) {
+            // No current workspace, set to first available
+            updatedCurrentWorkspace = {
+              id: data.workspaces[0].id,
+              title: data.workspaces[0].title,
+            };
+          }
+
           set({
             workspaces: data.workspaces || [],
             files: data.files || [],
             lastSyncAt: new Date(),
             isSyncing: false,
             error: data.error || null,
+            currentWorkspace: updatedCurrentWorkspace,
           });
         } catch (error: unknown) {
           set({
@@ -207,10 +277,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             ? { ...file, active: false }
             : file
         );
-
-        const deletedCount = updatedFiles.filter(
-          (f) => f.active === false && fileIdsSet.has(f.id)
-        ).length;
 
         set({ files: updatedFiles });
       },
@@ -287,7 +353,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         workspaces: state.workspaces,
         files: state.files,
         lastSyncAt: state.lastSyncAt,
-        selectedWorkspaceId: state.selectedWorkspaceId,
         currentWorkspace: state.currentWorkspace,
         currentView: state.currentView,
       }),

@@ -7,23 +7,26 @@ import WorkspaceView from "../[workspaceId]/WorkspaceView";
 
 export default function AIPage() {
   const { workspaces } = useWorkspaceData();
-  const { selectedWorkspaceId, setCurrentView } = useWorkspaceStore();
+  const { currentWorkspace, setCurrentView } = useWorkspaceStore();
 
   useEffect(() => {
     // Initialize view to ai on mount
     setCurrentView("ai");
 
     if (workspaces.length > 0) {
-      // Initialize selectedWorkspaceId if not set
-      if (!selectedWorkspaceId) {
-        const { setSelectedWorkspaceId } = useWorkspaceStore.getState();
-        setSelectedWorkspaceId(workspaces[0].id);
+      // Initialize currentWorkspace if not set
+      if (!currentWorkspace) {
+        const { setCurrentWorkspace } = useWorkspaceStore.getState();
+        setCurrentWorkspace({
+          id: workspaces[0].id,
+          title: workspaces[0].title,
+        });
       }
     }
-  }, [workspaces, selectedWorkspaceId, setCurrentView]);
+  }, [workspaces, currentWorkspace, setCurrentView]);
 
   // Get active workspace from store
-  const activeWorkspaceId = selectedWorkspaceId || workspaces[0]?.id;
+  const activeWorkspaceId = currentWorkspace?.id || workspaces[0]?.id;
 
   if (!activeWorkspaceId) {
     return (

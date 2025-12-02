@@ -122,9 +122,15 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
 
   const handleSelect = (file: SearchFile) => {
     // Switch workspace if needed
-    const { setSelectedWorkspaceId } = useWorkspaceStore.getState();
     if (file.workspaceId) {
-      setSelectedWorkspaceId(file.workspaceId);
+      const { setCurrentWorkspace, workspaces } = useWorkspaceStore.getState();
+      const workspace = workspaces.find((w) => w.id === file.workspaceId);
+      if (workspace) {
+        setCurrentWorkspace({
+          id: workspace.id,
+          title: workspace.title,
+        });
+      }
     }
 
     const path = buildPath(files, file.id);

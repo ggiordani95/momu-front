@@ -8,25 +8,32 @@ import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
 export default function ExplorerPage() {
   const router = useRouter();
   const { workspaces } = useWorkspaceData();
-  const { selectedWorkspaceId, setCurrentView } = useWorkspaceStore();
+  const { currentWorkspace, setCurrentView } = useWorkspaceStore();
 
   useEffect(() => {
     // Initialize view to explorer on mount
     setCurrentView("explorer");
 
     if (workspaces.length > 0) {
-      // Initialize selectedWorkspaceId if not set
-      const activeWorkspaceId = selectedWorkspaceId || workspaces[0].id;
+      // Get active workspace ID
+      const activeWorkspaceId = currentWorkspace?.id || workspaces[0].id;
 
-      if (!selectedWorkspaceId) {
-        const { setSelectedWorkspaceId } = useWorkspaceStore.getState();
-        setSelectedWorkspaceId(activeWorkspaceId);
+      // Initialize currentWorkspace if not set
+      if (!currentWorkspace) {
+        const { setCurrentWorkspace } = useWorkspaceStore.getState();
+        const workspace = workspaces.find((w) => w.id === activeWorkspaceId);
+        if (workspace) {
+          setCurrentWorkspace({
+            id: workspace.id,
+            title: workspace.title,
+          });
+        }
       }
 
       // Redirect to /explorer/{workspaceId} to include workspaceId in URL
       router.replace(`/explorer/${activeWorkspaceId}`, { scroll: false });
     }
-  }, [workspaces, selectedWorkspaceId, setCurrentView, router]);
+  }, [workspaces, currentWorkspace, setCurrentView, router]);
 
   return (
     <div className="flex h-screen items-center justify-center">

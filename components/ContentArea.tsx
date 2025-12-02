@@ -147,7 +147,7 @@ export default function ContentArea({
       updateData.video_watched_seconds = value as number;
     } else {
       // title or content
-      (updateData as any)[field] = value;
+      (updateData as Partial<UpdateFileDto>)[field] = value as string;
     }
 
     updateFileMutation.mutate(

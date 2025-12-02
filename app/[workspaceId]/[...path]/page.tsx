@@ -9,13 +9,22 @@ export default function WorkspacePathPage() {
   const router = useRouter();
   const workspaceId = params?.workspaceId as string;
   const path = params?.path as string[] | undefined;
-  const { setSelectedWorkspaceId } = useWorkspaceStore();
+  const { setCurrentWorkspace, workspaces } = useWorkspaceStore();
 
   // Redirect old workspace routes with paths to /explorer with path
   useEffect(() => {
     if (workspaceId) {
       // Set the workspace in Zustand store
-      setSelectedWorkspaceId(workspaceId);
+      const workspace = workspaces.find((w) => w.id === workspaceId);
+      if (workspace) {
+        setCurrentWorkspace({
+          id: workspace.id,
+          title: workspace.title,
+        });
+      } else {
+        // Workspace not found yet, just set by ID and it will be resolved later
+        setCurrentWorkspace(workspaceId);
+      }
 
       // Build new path for explorer
       const pathSegments = Array.isArray(path) ? path : path ? [path] : [];
@@ -28,7 +37,7 @@ export default function WorkspacePathPage() {
     } else {
       router.replace("/");
     }
-  }, [workspaceId, path, router, setSelectedWorkspaceId]);
+  }, [workspaceId, path, router, setCurrentWorkspace, workspaces]);
 
   return (
     <div className="flex h-screen items-center justify-center">

@@ -10,19 +10,9 @@ export default function ExplorerPathPage() {
   const params = useParams();
   const pathname = usePathname();
   const { workspaces } = useWorkspaceData();
-  const {
-    selectedWorkspaceId,
-    setSelectedWorkspaceId,
-    currentWorkspace,
-    setCurrentWorkspace,
-    currentView,
-  } = useWorkspaceStore();
+  const { currentWorkspace, setCurrentWorkspace, currentView } =
+    useWorkspaceStore();
   const path = params?.path as string[] | undefined;
-
-  // Track previous workspace to detect changes
-  const prevWorkspaceIdRef = useRef<string | undefined>(
-    selectedWorkspaceId || currentWorkspace?.id
-  );
 
   // Parse path: first segment should be workspaceId, rest are folder/file IDs
   const pathSegments = Array.isArray(path) ? path : path ? [path] : [];
@@ -33,27 +23,35 @@ export default function ExplorerPathPage() {
     (w) => w.id === firstSegment
   );
 
-  // Extract workspace ID - prioritize URL workspaceId if present, otherwise use store
-  // This ensures direct URL access (like /explorer/workspace-004/file-id) uses the URL workspace
+  // Track previous workspace to detect changes (initialize with URL workspace if present, otherwise store)
+  const urlWorkspaceId = isFirstSegmentWorkspaceId ? firstSegment : null;
+  const prevWorkspaceIdRef = useRef<string | undefined>(
+    urlWorkspaceId || currentWorkspace?.id
+  );
+  // Track the last workspace ID that was set in the URL to prevent sync loops
+  const lastUrlWorkspaceIdRef = useRef<string | null>(urlWorkspaceId);
+  // Track if we just updated the URL from the store (to prevent sync back)
+  const justUpdatedUrlFromStoreRef = useRef(false);
+
+  // Extract workspace ID - prioritize store workspace (for smooth client-side transitions)
+  // Only use URL workspace if store is not set (for direct URL access)
   const activeWorkspaceId = useMemo(() => {
-    // Priority 1: If URL contains a workspace ID as first segment, use it (direct URL access)
-    if (isFirstSegmentWorkspaceId && firstSegment) {
-      return firstSegment;
+    // Priority 1: Use store workspace (from selector or previous navigation) - smooth transitions
+    if (currentWorkspace?.id) {
+      return currentWorkspace.id;
     }
 
-    // Priority 2: Use store workspace (from selector or previous navigation)
-    const storeWorkspaceId = selectedWorkspaceId || currentWorkspace?.id;
-    if (storeWorkspaceId) {
-      return storeWorkspaceId;
+    // Priority 2: If URL contains a workspace ID as first segment, use it (direct URL access)
+    if (isFirstSegmentWorkspaceId && firstSegment) {
+      return firstSegment;
     }
 
     // Priority 3: Fallback to first available workspace
     return workspaces[0]?.id || null;
   }, [
+    currentWorkspace, // Use full object to ensure reactivity when workspace changes
     isFirstSegmentWorkspaceId,
     firstSegment,
-    selectedWorkspaceId,
-    currentWorkspace?.id,
     workspaces,
   ]);
 
@@ -62,45 +60,63 @@ export default function ExplorerPathPage() {
     : pathSegments;
 
   // Update URL when workspace changes in store (when selected via WorkspaceSelector)
-  // Only update if URL doesn't already have a workspace ID (to preserve direct URL access)
+  // Uses window.history.replaceState for smooth client-side transitions (no flicker)
   useEffect(() => {
-    // Skip if URL already contains a workspace ID - URL takes priority
-    if (isFirstSegmentWorkspaceId) {
+    if (!currentWorkspace?.id || !pathname) {
       return;
     }
 
-    const storeWorkspaceId = selectedWorkspaceId || currentWorkspace?.id;
-    const workspaceChanged = prevWorkspaceIdRef.current !== storeWorkspaceId;
+    // Get current URL workspace ID
+    const currentUrlWorkspaceId = isFirstSegmentWorkspaceId
+      ? firstSegment
+      : null;
 
-    if (workspaceChanged && storeWorkspaceId && pathname) {
-      // Update URL silently using history API - no page reload, no flicker
+    // Update URL if store workspace is different from URL workspace
+    // This ensures that when user selects a workspace in the selector, the URL updates
+    if (currentUrlWorkspaceId !== currentWorkspace.id) {
+      // Update URL using window.history for smooth client-side update (no re-render)
       const view = currentView || pathname.split("/")[1] || "explorer";
-      const newPath = `/${view}/${storeWorkspaceId}`;
+      const newPath = `/${view}/${currentWorkspace.id}`;
 
-      // Use requestAnimationFrame to ensure it happens after React's render
-      // This prevents flicker by updating URL asynchronously
-      requestAnimationFrame(() => {
+      // Update the ref to track what we're setting in the URL
+      lastUrlWorkspaceIdRef.current = currentWorkspace.id;
+      // Mark that we're updating URL from store (prevent sync back)
+      justUpdatedUrlFromStoreRef.current = true;
+      prevWorkspaceIdRef.current = currentWorkspace.id;
+
+      // Use window.history.replaceState for smooth client-side URL update (no re-render)
+      // This prevents flicker by updating URL without triggering server-side navigation
+      if (typeof window !== "undefined") {
         window.history.replaceState(
-          { ...window.history.state, workspaceId: storeWorkspaceId },
+          { ...window.history.state, workspaceId: currentWorkspace.id },
           "",
           newPath
         );
-      });
+      }
 
-      prevWorkspaceIdRef.current = storeWorkspaceId;
-    } else if (!prevWorkspaceIdRef.current && storeWorkspaceId) {
-      prevWorkspaceIdRef.current = storeWorkspaceId;
+      // Reset flag after URL has had time to update
+      setTimeout(() => {
+        justUpdatedUrlFromStoreRef.current = false;
+      }, 200);
+    } else {
+      // Update ref to track current workspace
+      prevWorkspaceIdRef.current = currentWorkspace.id;
+      // Update last URL workspace if it matches
+      if (currentUrlWorkspaceId) {
+        lastUrlWorkspaceIdRef.current = currentUrlWorkspaceId;
+      }
     }
   }, [
-    selectedWorkspaceId,
     currentWorkspace?.id,
     pathname,
     currentView,
     isFirstSegmentWorkspaceId,
+    firstSegment,
   ]);
 
   // Sync workspace from URL to store when URL contains a workspace ID
   // This ensures the store reflects the URL workspace (for direct URL access)
+  // Only sync if the URL workspace is different from what we last set (prevent infinite loop)
   useEffect(() => {
     // If URL contains a workspace ID, sync it to the store
     if (
@@ -109,11 +125,20 @@ export default function ExplorerPathPage() {
       activeWorkspaceId
     ) {
       const workspace = workspaces.find((w) => w.id === activeWorkspaceId);
-      const storeWorkspaceId = selectedWorkspaceId || currentWorkspace?.id;
 
-      // Update store to match URL workspace
-      if (workspace && storeWorkspaceId !== activeWorkspaceId) {
-        setSelectedWorkspaceId(activeWorkspaceId);
+      // Only sync if:
+      // 1. Workspace exists
+      // 2. Store workspace is different from URL workspace
+      // 3. URL workspace is different from what we last set (i.e., user navigated directly to URL)
+      // 4. We didn't just update the URL from the store (prevent loop)
+      if (
+        workspace &&
+        currentWorkspace?.id !== activeWorkspaceId &&
+        lastUrlWorkspaceIdRef.current !== activeWorkspaceId &&
+        !justUpdatedUrlFromStoreRef.current
+      ) {
+        // This is a direct URL navigation, sync to store
+        lastUrlWorkspaceIdRef.current = activeWorkspaceId;
         setCurrentWorkspace({
           id: workspace.id,
           title: workspace.title,
@@ -124,9 +149,7 @@ export default function ExplorerPathPage() {
     isFirstSegmentWorkspaceId,
     workspaces,
     activeWorkspaceId,
-    selectedWorkspaceId,
-    currentWorkspace,
-    setSelectedWorkspaceId,
+    currentWorkspace?.id, // Use id instead of full object for comparison
     setCurrentWorkspace,
   ]);
 

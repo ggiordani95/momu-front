@@ -18,27 +18,27 @@ export function WorkspaceSelector({
   className = "",
   showLabel = false,
 }: WorkspaceSelectorProps) {
-  const {
-    workspaces,
-    selectedWorkspaceId,
-    setSelectedWorkspaceId,
-    currentWorkspace,
-    setCurrentWorkspace,
-  } = useWorkspaceStore();
+  const { workspaces, currentWorkspace, setCurrentWorkspace } =
+    useWorkspaceStore();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  // Initialize selectedWorkspaceId with currentWorkspaceId if not set
+  // Initialize currentWorkspace with currentWorkspaceId if not set
   useEffect(() => {
-    if (!selectedWorkspaceId && currentWorkspaceId) {
-      setSelectedWorkspaceId(currentWorkspaceId);
+    if (!currentWorkspace && currentWorkspaceId) {
+      const workspace = workspaces.find((w) => w.id === currentWorkspaceId);
+      if (workspace) {
+        setCurrentWorkspace({
+          id: workspace.id,
+          title: workspace.title,
+        });
+      }
     }
-  }, [selectedWorkspaceId, currentWorkspaceId, setSelectedWorkspaceId]);
+  }, [currentWorkspace, currentWorkspaceId, workspaces, setCurrentWorkspace]);
 
-  // Use currentWorkspace from store as source of truth, fallback to selectedWorkspaceId
-  const activeWorkspaceId =
-    currentWorkspace?.id || selectedWorkspaceId || currentWorkspaceId;
+  // Use currentWorkspace from store as source of truth
+  const activeWorkspaceId = currentWorkspace?.id || currentWorkspaceId;
   const displayedWorkspace = useMemo(
     () =>
       workspaces.find((w) => w.id === activeWorkspaceId) ||
@@ -78,8 +78,7 @@ export function WorkspaceSelector({
       return;
     }
 
-    // Update both selectedWorkspaceId and currentWorkspace atomically
-    setSelectedWorkspaceId(workspaceId);
+    // Update currentWorkspace
     setCurrentWorkspace({
       id: workspace.id,
       title: workspace.title,
