@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import { FolderTree, Settings, Trash2, Airplay } from "lucide-react";
 import Image from "next/image";
 import ContextMenu from "./editors/ContextMenu";
@@ -21,6 +22,7 @@ export default function SimpleSidebar({
   currentView,
   workspaceId,
 }: SimpleSidebarProps) {
+  const pathname = usePathname();
   const { currentView: storeView, setCurrentView } = useWorkspaceStore();
 
   // Use store view if currentView prop is not provided
@@ -29,6 +31,13 @@ export default function SimpleSidebar({
   const handleNavigate = (
     view: "explorer" | "settings" | "trash" | "social" | "planner" | "ai"
   ) => {
+    // Check if we're already in the target view
+    const currentPathView = pathname?.split("/")[1];
+    if (currentPathView === view && activeView === view) {
+      // Already in the target view, do nothing
+      return;
+    }
+
     // Mark this as internal navigation FIRST to prevent WorkspaceView from re-rendering
     // We'll set a flag in the window object that WorkspaceView can check
     if (typeof window !== "undefined") {
