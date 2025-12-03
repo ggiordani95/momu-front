@@ -54,6 +54,17 @@ h6 {
   line-height: 1.3;
 }
 
+/* Ensure markdown-content styles override global styles */
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+  font-weight: inherit !important;
+  line-height: inherit !important;
+}
+
 a {
   text-decoration: none;
   color: inherit;
@@ -91,30 +102,253 @@ button {
   }
 }
 
+/* Markdown Renderer Styles */
+.markdown-content {
+  color: inherit;
+}
+
+.markdown-content h1 {
+  font-size: 1.875rem !important;
+  font-weight: 700 !important;
+  margin-top: 1.5em !important;
+  margin-bottom: 0.75em !important;
+  line-height: 1.2 !important;
+  color: inherit !important;
+}
+
+.markdown-content h2 {
+  font-size: 1.5rem !important;
+  font-weight: 600 !important;
+  margin-top: 1.25em !important;
+  margin-bottom: 0.625em !important;
+  line-height: 1.3 !important;
+  color: inherit !important;
+}
+
+.markdown-content h3 {
+  font-size: 1.25rem !important;
+  font-weight: 600 !important;
+  margin-top: 1em !important;
+  margin-bottom: 0.5em !important;
+  line-height: 1.4 !important;
+  color: inherit !important;
+}
+
+.markdown-content h4 {
+  font-size: 1.125rem !important;
+  font-weight: 600 !important;
+  margin-top: 0.875em !important;
+  margin-bottom: 0.5em !important;
+  line-height: 1.4 !important;
+  color: inherit !important;
+}
+
+.markdown-content p {
+  margin-top: 0.75em !important;
+  margin-bottom: 0.75em !important;
+  line-height: 1.6 !important;
+  color: inherit !important;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  margin-top: 0.75em !important;
+  margin-bottom: 0.75em !important;
+  padding-left: 1.75em !important;
+  list-style-position: outside !important;
+}
+
+.markdown-content ul {
+  list-style-type: disc !important;
+}
+
+.markdown-content ol {
+  list-style-type: decimal !important;
+}
+
+.markdown-content li {
+  margin-top: 0.375em !important;
+  margin-bottom: 0.375em !important;
+  line-height: 1.6 !important;
+  color: inherit !important;
+}
+
+.markdown-content li p {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+.markdown-content blockquote {
+  border-left: 3px solid currentColor !important;
+  padding-left: 1em !important;
+  margin: 1em 0 !important;
+  opacity: 0.7;
+  font-style: italic;
+  color: inherit !important;
+}
+
+.markdown-content code {
+  background-color: rgba(0, 0, 0, 0.1) !important;
+  padding: 0.2em 0.4em !important;
+  border-radius: 3px !important;
+  font-size: 0.9em !important;
+  font-family: "Courier New", monospace !important;
+  color: inherit !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  .markdown-content code {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+  }
+}
+
+.markdown-content pre {
+  background-color: rgba(0, 0, 0, 0.1) !important;
+  padding: 1em !important;
+  border-radius: 6px !important;
+  overflow-x: auto !important;
+  margin: 1em 0 !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  .markdown-content pre {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+  }
+}
+
+.markdown-content pre code {
+  background-color: transparent !important;
+  padding: 0 !important;
+}
+
+.markdown-content a {
+  color: inherit !important;
+  text-decoration: underline !important;
+  opacity: 0.8;
+}
+
+.markdown-content a:hover {
+  opacity: 1;
+}
+
+.markdown-content strong {
+  font-weight: 700 !important;
+  color: inherit !important;
+}
+
+.markdown-content em {
+  font-style: italic !important;
+  color: inherit !important;
+}
+
+.markdown-content img {
+  max-width: 100% !important;
+  height: auto !important;
+  border-radius: 4px !important;
+  margin: 1em 0 !important;
+}
+
+.markdown-content hr {
+  border: none !important;
+  border-top: 1px solid currentColor !important;
+  opacity: 0.2 !important;
+  margin: 2em 0 !important;
+}
+
+.markdown-content * {
+  font-variant-emoji: emoji;
+}
+
+.markdown-user-message .markdown-content {
+  text-align: right !important;
+}
+
+.markdown-user-message .markdown-content p,
+.markdown-user-message .markdown-content h1,
+.markdown-user-message .markdown-content h2,
+.markdown-user-message .markdown-content h3,
+.markdown-user-message .markdown-content h4,
+.markdown-user-message .markdown-content ul,
+.markdown-user-message .markdown-content ol {
+  text-align: right !important;
+}
+
+.markdown-user-message .markdown-content li {
+  text-align: right !important;
+}
+
 /* TipTap Editor Styles */
 .ProseMirror {
   outline: none;
+  padding-left: 0.5rem !important;
+  padding-right: 0.5rem !important;
 }
 
 .ProseMirror p {
-  margin: 0.5em 0;
+  margin-top: 0.75em !important;
+  margin-bottom: 0.75em !important;
+  line-height: 1.6 !important;
+  color: inherit !important;
+  white-space: pre-wrap !important;
+  word-wrap: break-word !important;
 }
 
-.ProseMirror h1 {
-  font-size: 2em;
-  font-weight: bold;
-  margin: 0.47em 0;
+/* Preserve indentation for paragraphs with leading spaces */
+.ProseMirror p:has(> :first-child[style*="padding-left"]) {
+  padding-left: 0 !important;
 }
 
-.ProseMirror h2 {
-  font-size: 1.5em;
-  font-weight: bold;
-  margin: 0.75em 0;
+/* Support for indented content */
+.ProseMirror p[data-indent] {
+  padding-left: calc(var(--indent-level, 0) * 1.5em) !important;
 }
 
-.ProseMirror h3 {
-  font-size: 1.17em;
-  font-weight: bold;
+.ProseMirror h1,
+.prose .ProseMirror h1,
+.ProseMirror.prose h1 {
+  font-size: 1.875rem !important;
+  font-weight: 700 !important;
+  margin-top: 1.5em !important;
+  margin-bottom: 0.75em !important;
+  line-height: 1.2 !important;
+  color: inherit !important;
+  display: block !important;
+}
+
+.ProseMirror h2,
+.prose .ProseMirror h2,
+.ProseMirror.prose h2 {
+  font-size: 1.5rem !important;
+  font-weight: 600 !important;
+  margin-top: 1.25em !important;
+  margin-bottom: 0.625em !important;
+  line-height: 1.3 !important;
+  color: inherit !important;
+  display: block !important;
+}
+
+.ProseMirror h3,
+.prose .ProseMirror h3,
+.ProseMirror.prose h3 {
+  font-size: 1.25rem !important;
+  font-weight: 600 !important;
+  margin-top: 1em !important;
+  margin-bottom: 0.5em !important;
+  line-height: 1.4 !important;
+  color: inherit !important;
+  display: block !important;
+}
+
+.ProseMirror h4,
+.prose .ProseMirror h4,
+.ProseMirror.prose h4 {
+  font-size: 1.125rem !important;
+  font-weight: 600 !important;
+  margin-top: 0.875em !important;
+  margin-bottom: 0.5em !important;
+  line-height: 1.4 !important;
+  color: inherit !important;
+  display: block !important;
 }
 
 @keyframes card-enter {
@@ -130,43 +364,110 @@ button {
   animation: card-enter 0.3s ease-out;
 }
 
-.ProseMirror h3 {
-  margin: 0.83em 0;
-}
-
 .ProseMirror ul,
 .ProseMirror ol {
-  padding-left: 1.5em;
-  margin: 0.5em 0;
-  list-style-position: outside;
+  margin-top: 0.75em !important;
+  margin-bottom: 0.75em !important;
+  padding-left: 1.75em !important;
+  list-style-position: outside !important;
 }
 
 .ProseMirror ul {
-  list-style-type: disc;
+  list-style-type: disc !important;
 }
 
 .ProseMirror ol {
-  list-style-type: decimal;
+  list-style-type: decimal !important;
 }
 
 .ProseMirror li {
-  margin: 0.25em 0;
+  margin-top: 0.375em !important;
+  margin-bottom: 0.375em !important;
+  line-height: 1.6 !important;
   display: list-item;
+  color: inherit !important;
+}
+
+.ProseMirror li p {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
 }
 
 .ProseMirror blockquote {
-  border-left: 3px solid var(--border-color);
-  padding-left: 1em;
-  margin: 0.5em 0;
-  color: var(--foreground);
+  border-left: 3px solid currentColor !important;
+  padding-left: 1em !important;
+  margin: 1em 0 !important;
+  opacity: 0.7;
   font-style: italic;
+  color: inherit !important;
+}
+
+.ProseMirror strong {
+  font-weight: 700 !important;
+  color: inherit !important;
+}
+
+.ProseMirror em {
+  font-style: italic !important;
+  color: inherit !important;
+}
+
+.ProseMirror code {
+  background-color: rgba(0, 0, 0, 0.1) !important;
+  padding: 0.2em 0.4em !important;
+  border-radius: 3px !important;
+  font-size: 0.9em !important;
+  font-family: "Courier New", monospace !important;
+  color: inherit !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  .ProseMirror code {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+  }
+}
+
+.ProseMirror pre {
+  background-color: rgba(0, 0, 0, 0.1) !important;
+  padding: 1em !important;
+  border-radius: 6px !important;
+  overflow-x: auto !important;
+  margin: 1em 0 !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  .ProseMirror pre {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+  }
+}
+
+.ProseMirror pre code {
+  background-color: transparent !important;
+  padding: 0 !important;
+}
+
+.ProseMirror a {
+  color: inherit !important;
+  text-decoration: underline !important;
+  opacity: 0.8;
+}
+
+.ProseMirror a:hover {
+  opacity: 1;
 }
 
 .ProseMirror img {
-  max-width: 100%;
-  height: auto;
-  border-radius: 0.5rem;
-  margin: 1em 0;
+  max-width: 100% !important;
+  height: auto !important;
+  border-radius: 4px !important;
+  margin: 1em 0 !important;
+}
+
+.ProseMirror hr {
+  border: none !important;
+  border-top: 1px solid currentColor !important;
+  opacity: 0.2 !important;
+  margin: 2em 0 !important;
 }
 
 .youtube-wrapper {
@@ -188,11 +489,8 @@ button {
 }
 
 .ProseMirror strong {
-  font-weight: bold;
-}
-
-.ProseMirror em {
-  font-style: italic;
+  font-weight: 700 !important;
+  color: inherit !important;
 }
 
 .ProseMirror u {

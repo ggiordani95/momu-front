@@ -1685,7 +1685,7 @@ function HomeContent({
               </div>
               {/* Notion Block Editor - Centered */}
               <div className="flex-1 overflow-auto">
-                <div className="w-full max-w-4xl mx-auto px-8 py-12 bg-foreground/5">
+                <div className="w-full max-w-4xl mx-auto px-12 py-12 bg-foreground/5">
                   <NotionBlockEditor
                     content={selectedItem.content || ""}
                     onSave={(content) => {

@@ -10,6 +10,7 @@ import TextAlign from "@tiptap/extension-text-align";
 import TiptapLink from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
 import { Node } from "@tiptap/core";
+import MarkdownIt from "markdown-it";
 import {
   DndContext,
   closestCenter,
@@ -340,7 +341,7 @@ function UrlInputModal({ type, onConfirm, onCancel }: UrlInputModalProps) {
   return createPortal(modalContent, document.body);
 }
 
-// Parse content - support both JSON array and HTML
+// Parse content - support both JSON array, HTML, and Markdown
 function parseContent(content: string): Block[] {
   if (!content || !content.trim()) {
     return [{ id: generateId(), content: "" }];
@@ -355,7 +356,88 @@ function parseContent(content: string): Block[] {
       }));
     }
   } catch {
-    // Not JSON, treat as HTML
+    // Not JSON, check if it's Markdown
+    const trimmedContent = content.trim();
+
+    // Check if content looks like Markdown (has markdown syntax)
+    const hasMarkdownHeadings = /^#{1,6}\s/m.test(trimmedContent);
+    const hasMarkdownLists =
+      /^[-*+]\s/m.test(trimmedContent) || /^\d+\.\s/m.test(trimmedContent);
+    const hasMarkdownFormatting =
+      trimmedContent.includes("**") ||
+      trimmedContent.includes("*") ||
+      trimmedContent.includes("`");
+    const isMarkdown =
+      hasMarkdownHeadings || hasMarkdownLists || hasMarkdownFormatting;
+
+    // If it's Markdown, convert to HTML
+    if (isMarkdown && typeof window !== "undefined") {
+      try {
+        // Extract text from HTML if content is wrapped in HTML tags
+        let cleanedText = trimmedContent;
+        if (cleanedText.startsWith("<") && cleanedText.includes(">")) {
+          cleanedText = cleanedText
+            .replace(/<[^>]*>/g, "") // Remove all HTML tags
+            .replace(/&nbsp;/g, " ") // Replace &nbsp; with space
+            .replace(/&amp;/g, "&") // Decode &amp;
+            .replace(/&lt;/g, "<") // Decode &lt;
+            .replace(/&gt;/g, ">") // Decode &gt;
+            .replace(/&quot;/g, '"') // Decode &quot;
+            .replace(/&#39;/g, "'") // Decode &#39;
+            .trim();
+        }
+
+        // Normalize line breaks
+        let normalizedText = cleanedText
+          .replace(/\r\n/g, "\n")
+          .replace(/\r/g, "\n")
+          .replace(/\n{3,}/g, "\n\n");
+
+        // Ensure headings have proper line breaks before them
+        normalizedText = normalizedText.replace(/([^\n])(\n*#+\s)/g, "$1\n$2");
+
+        // Ensure list items have proper line breaks
+        normalizedText = normalizedText.replace(
+          /([^\n])(\n*[-*+]\s)/g,
+          "$1\n$2"
+        );
+        normalizedText = normalizedText.replace(
+          /([^\n])(\n*\d+\.\s)/g,
+          "$1\n$2"
+        );
+
+        // Convert Markdown to HTML
+        const md = new MarkdownIt({
+          html: true,
+          breaks: false,
+          linkify: true,
+          typographer: true,
+        });
+
+        const html = md.render(normalizedText);
+
+        console.log(
+          "[NotionBlockEditor] parseContent - Converted Markdown to HTML:",
+          {
+            originalLength: content.length,
+            htmlLength: html.length,
+            hasH1: html.includes("<h1"),
+            hasH2: html.includes("<h2"),
+          }
+        );
+
+        return [{ id: generateId(), content: html }];
+      } catch (error) {
+        console.error(
+          "[NotionBlockEditor] parseContent - Error converting Markdown:",
+          error
+        );
+        // Fallback: treat as HTML
+        return [{ id: generateId(), content: content }];
+      }
+    }
+
+    // Not Markdown, treat as HTML
     return [{ id: generateId(), content: content }];
   }
 
@@ -1178,6 +1260,241 @@ function BlockItem({
     ]
   );
 
+  // Handle paste - convert Markdown to HTML
+  const handlePaste = useCallback(
+    (
+      view: {
+        state: {
+          selection: { from: number; to: number };
+        };
+      },
+      event: ClipboardEvent
+    ) => {
+      const editor = editorRef.current;
+      if (!editor) return false;
+
+      const clipboardData = event.clipboardData;
+      if (!clipboardData) return false;
+
+      const pastedText = clipboardData.getData("text/plain");
+      if (!pastedText || !pastedText.trim()) return false;
+
+      // Check if the pasted text looks like Markdown
+      // More specific check for Markdown patterns
+      const hasMarkdownHeadings =
+        /^#{1,6}\s/m.test(pastedText) || /\n#{1,6}\s/m.test(pastedText);
+      const hasMarkdownLists =
+        /^[-*+]\s/m.test(pastedText) ||
+        /^\d+\.\s/m.test(pastedText) ||
+        /\n[-*+]\s/m.test(pastedText) ||
+        /\n\d+\.\s/m.test(pastedText);
+      const hasMarkdownFormatting =
+        pastedText.includes("**") ||
+        pastedText.includes("*") ||
+        pastedText.includes("`");
+
+      // Check for structured content (like GPT responses with emojis and formatting)
+      const hasEmojisWithStructure = /[🧘🌏📘🔹❌🎯🏛️🧩🟢✔️🟡🔴⚪🟣🔵🟠]/u.test(
+        pastedText
+      );
+      const hasMultipleLines = pastedText.split("\n").length > 3;
+      const hasStructuredFormat =
+        /^[A-Z][^.!?]*\n\n/m.test(pastedText) || // Title-like lines followed by blank lines
+        /^[🧘🌏📘🔹❌🎯🏛️🧩🟢✔️]/.test(pastedText); // Starts with emoji
+
+      const looksLikeMarkdown =
+        hasMarkdownHeadings ||
+        hasMarkdownLists ||
+        hasMarkdownFormatting ||
+        (hasEmojisWithStructure && hasMultipleLines) ||
+        (hasStructuredFormat && hasMultipleLines);
+
+      if (looksLikeMarkdown) {
+        event.preventDefault();
+
+        // Extract text from HTML if content is wrapped in HTML tags
+        let cleanedText = pastedText.trim();
+        if (cleanedText.startsWith("<") && cleanedText.includes(">")) {
+          cleanedText = cleanedText
+            .replace(/<[^>]*>/g, "") // Remove all HTML tags
+            .replace(/&nbsp;/g, " ") // Replace &nbsp; with space
+            .replace(/&amp;/g, "&") // Decode &amp;
+            .replace(/&lt;/g, "<") // Decode &lt;
+            .replace(/&gt;/g, ">") // Decode &gt;
+            .replace(/&quot;/g, '"') // Decode &quot;
+            .replace(/&#39;/g, "'") // Decode &#39;
+            .trim();
+        }
+
+        // Normalize line breaks - ensure headings have proper spacing
+        // Preserve indentation (leading spaces/tabs) before normalizing
+        let normalizedText = cleanedText
+          .replace(/\r\n/g, "\n")
+          .replace(/\r/g, "\n")
+          .replace(/\n{3,}/g, "\n\n");
+
+        // Convert leading spaces/tabs to non-breaking spaces or preserve them
+        // This will be handled by markdown-it and CSS white-space: pre-wrap
+
+        // Convert GPT-style structured text to Markdown
+        // Lines starting with emoji + text that looks like headings become headings
+        normalizedText = normalizedText.replace(
+          /^([🧘🌏📘🔹❌🎯🏛️🧩🟢✔️🟡🔴⚪🟣🔵🟠][^\n]*?)(\n|$)/gm,
+          (match, content) => {
+            // If it looks like a heading (short line, ends with ? or :, or has bold formatting, or is followed by content)
+            const trimmedContent = content.trim();
+            if (
+              trimmedContent.length < 100 &&
+              (trimmedContent.endsWith("?") ||
+                trimmedContent.endsWith(":") ||
+                trimmedContent.includes("**") ||
+                trimmedContent.match(/^[🧘🌏📘🔹❌🎯🏛️🧩🟢✔️]/))
+            ) {
+              // Remove bold formatting if present and convert to heading
+              const headingText = trimmedContent.replace(/\*\*/g, "").trim();
+              return `## ${headingText}\n`;
+            }
+            return match;
+          }
+        );
+
+        // Also convert lines that are questions or section titles (even without emojis)
+        normalizedText = normalizedText.replace(
+          /^([A-Z][^.!?\n]{0,80}[?:])\s*$/gm,
+          (match, content) => {
+            // If it's a short line ending with ? or :, make it a heading
+            if (content.length < 80 && !content.includes("\n")) {
+              return `## ${content}\n`;
+            }
+            return match;
+          }
+        );
+
+        // Convert numbered lists with emojis to proper Markdown lists
+        normalizedText = normalizedText.replace(
+          /^(\d+)\.\s*([🧘🌏📘🔹❌🎯🏛️🧩🟢✔️🟡🔴⚪🟣🔵🟠][^\n]*)/gm,
+          "$1. $2"
+        );
+
+        // Ensure headings have proper line breaks before them
+        normalizedText = normalizedText.replace(/([^\n])(\n*#+\s)/g, "$1\n$2");
+
+        // Ensure list items have proper line breaks
+        normalizedText = normalizedText.replace(
+          /([^\n])(\n*[-*+]\s)/g,
+          "$1\n$2"
+        );
+        normalizedText = normalizedText.replace(
+          /([^\n])(\n*\d+\.\s)/g,
+          "$1\n$2"
+        );
+
+        console.log("[NotionBlockEditor] Paste - Normalized Markdown:", {
+          length: normalizedText.length,
+          first300: normalizedText.substring(0, 300),
+          hasH1: normalizedText.includes("# "),
+          hasH2: normalizedText.includes("## "),
+        });
+
+        // Convert Markdown to HTML
+        const md = new MarkdownIt({
+          html: true,
+          breaks: false, // Don't convert single \n to <br>, preserve structure
+          linkify: true,
+          typographer: true,
+        });
+
+        // Render Markdown to HTML
+        let html = md.render(normalizedText);
+
+        // Preserve indentation by converting leading spaces in paragraphs to padding
+        html = html.replace(/<p>(\s+)([^<]+)/g, (match, spaces, content) => {
+          const indentLevel = spaces.length;
+          if (indentLevel > 0) {
+            // Use padding-left to create visual indentation
+            return `<p style="padding-left: ${
+              indentLevel * 1.5
+            }em;">${content}`;
+          }
+          return match;
+        });
+
+        console.log("[NotionBlockEditor] Paste - Rendered HTML:", {
+          length: html.length,
+          first500: html.substring(0, 500),
+          hasH1: html.includes("<h1"),
+          hasH2: html.includes("<h2"),
+          hasH3: html.includes("<h3"),
+          h1Count: (html.match(/<h1>/g) || []).length,
+          h2Count: (html.match(/<h2>/g) || []).length,
+        });
+
+        // Insert the HTML into the editor at the cursor position
+        const { from, to } = view.state.selection;
+
+        // Delete selected content if any
+        if (from !== to) {
+          editor.commands.deleteRange({ from, to });
+        }
+
+        // Use insertContent - Tiptap will parse HTML correctly
+        // The HTML from markdown-it should be valid and parseable
+        try {
+          // Clear current block content first if it's empty or just whitespace
+          const currentContent = editor.getText().trim();
+          if (!currentContent || currentContent.length === 0) {
+            editor.commands.clearContent();
+          }
+
+          // Insert the HTML content
+          // Tiptap's insertContent should automatically parse HTML elements
+          editor.commands.insertContent(html, {
+            parseOptions: {
+              preserveWhitespace: "full",
+            },
+          });
+
+          // Verify the content was inserted correctly
+          requestAnimationFrame(() => {
+            const insertedHTML = editor.getHTML();
+            const insertedText = editor.getText();
+
+            console.log(
+              "[NotionBlockEditor] Paste - Content inserted, verification:",
+              {
+                htmlLength: insertedHTML.length,
+                textLength: insertedText.length,
+                editorHTML: insertedHTML.substring(0, 500),
+                hasH1: insertedHTML.includes("<h1"),
+                hasH2: insertedHTML.includes("<h2"),
+                hasH3: insertedHTML.includes("<h3"),
+                hasP: insertedHTML.includes("<p"),
+                hasUl: insertedHTML.includes("<ul"),
+                editorText: insertedText.substring(0, 200),
+                // Check if headings are actually in the editor
+                h1Elements: insertedHTML.match(/<h1[^>]*>.*?<\/h1>/g) || [],
+                h2Elements: insertedHTML.match(/<h2[^>]*>.*?<\/h2>/g) || [],
+                h3Elements: insertedHTML.match(/<h3[^>]*>.*?<\/h3>/g) || [],
+              }
+            );
+          });
+        } catch (error) {
+          console.error(
+            "[NotionBlockEditor] Paste - Error inserting content:",
+            error
+          );
+          // Fallback: insert as plain text if HTML insertion fails
+          editor.commands.insertContent(pastedText);
+        }
+
+        return true;
+      }
+
+      return false;
+    },
+    []
+  );
+
   const editor = useEditor({
     immediatelyRender: false,
     extensions: blockExtensions,
@@ -1185,10 +1502,11 @@ function BlockItem({
     editorProps: {
       attributes: {
         class:
-          "prose prose-sm max-w-none focus:outline-none min-h-[1.5em] py-0.5 px-2 leading-normal [&_p]:my-0 [&_p:last-child]:mb-0 [&_p]:leading-[1.6] [&_ul]:list-disc [&_ol]:list-decimal [&_li]:list-item",
+          "prose prose-sm max-w-none focus:outline-none min-h-[1.5em] py-0.5 px-4 leading-normal [&_p]:my-0 [&_p]:last-child]:mb-0 [&_p]:leading-[1.6] [&_ul]:list-disc [&_ol]:list-decimal [&_li]:list-item",
         spellcheck: spellcheckEnabled ? "true" : "false",
       },
       handleKeyDown,
+      handlePaste,
     },
     onUpdate: ({ editor }) => {
       const html = editor.getHTML();
