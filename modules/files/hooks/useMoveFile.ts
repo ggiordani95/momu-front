@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
+import { useWorkspaceStore } from "@/modules/workspace/stores/workspaceStore";
 import { fileService } from "../services/fileService";
 import { fileKeys } from "../services/useFilesQuery";
-import { buildHierarchy, findItemById } from "../utils/hierarchy";
+import { buildHierarchy, findFileById } from "../utils/hierarchy";
 import type { HierarchicalFile } from "@/lib/types";
 
 interface MoveFileParams {
@@ -57,7 +57,7 @@ export function useMoveFile(workspaceId: string, options?: MoveFileOptions) {
         // Get files in the target parent
         let targetFiles: HierarchicalFile[] = [];
         if (parentId) {
-          const parentFolder = findItemById(hierarchy, parentId);
+          const parentFolder = findFileById(hierarchy, parentId);
           targetFiles = parentFolder?.children || [];
         } else {
           // Root level files

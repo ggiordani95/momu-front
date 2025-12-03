@@ -149,19 +149,19 @@ export function usePermanentDeleteItem(workspaceId: string) {
 /**
  * Hook to update file order
  */
-export function useUpdateItemOrder(workspaceId: string) {
+export function useUpdateFileOrder(workspaceId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({
-      itemId,
+      fileId,
       orderIndex,
       parentId,
     }: {
-      itemId: string;
+      fileId: string;
       orderIndex: number;
       parentId?: string | null;
-    }) => fileService.updateOrder(itemId, orderIndex, parentId),
+    }) => fileService.updateOrder(fileId, orderIndex, parentId),
     onSuccess: () => {
       // Invalidate workspace items query
       queryClient.invalidateQueries({

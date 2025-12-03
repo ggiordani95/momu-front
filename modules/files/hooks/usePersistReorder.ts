@@ -3,17 +3,17 @@ import { toast } from "sonner";
 
 interface UsePersistReorderProps {
   workspaceId: string;
-  updateItemOrderMutation: UseMutationResult<
+  updateFileOrderMutation: UseMutationResult<
     void,
     Error,
-    { itemId: string; orderIndex: number; parentId: string | null },
+    { fileId: string; orderIndex: number; parentId: string | null },
     unknown
   >;
   updates: Array<{
-    itemId: string;
+    fileId: string;
     orderIndex: number;
   }>;
-  currentFolderId: string | null;
+  currentFileId: string | null;
 }
 
 /**
@@ -21,21 +21,21 @@ interface UsePersistReorderProps {
  */
 export async function persistReorder({
   workspaceId,
-  updateItemOrderMutation,
+  updateFileOrderMutation,
   updates,
-  currentFolderId,
+  currentFileId,
 }: UsePersistReorderProps) {
-  if (!workspaceId || !updateItemOrderMutation) {
+  if (!workspaceId || !updateFileOrderMutation) {
     return;
   }
 
   try {
     await Promise.all(
       updates.map((update) =>
-        updateItemOrderMutation.mutateAsync({
-          itemId: update.itemId,
+        updateFileOrderMutation.mutateAsync({
+          fileId: update.fileId,
           orderIndex: update.orderIndex,
-          parentId: currentFolderId || null,
+          parentId: currentFileId || null,
         })
       )
     );
@@ -45,4 +45,3 @@ export async function persistReorder({
     throw error;
   }
 }
-

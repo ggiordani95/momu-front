@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { HierarchicalFile } from "@/lib/types";
 import { useRouter } from "next/navigation";
-import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
+import { useWorkspaceStore } from "@/modules/workspace/stores/workspaceStore";
 import { buildHierarchy } from "@/modules/files";
 
 interface SearchFile extends HierarchicalFile {

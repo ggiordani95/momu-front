@@ -54,7 +54,7 @@ export function useOfflineSync() {
         clearPendingOperations(); // Clear all operations
         // Trigger sync-files to refresh all data (apenas se não estiver já sincronizando)
         const { useWorkspaceStore } = await import(
-          "@/lib/stores/workspaceStore"
+          "@/modules/workspace/stores/workspaceStore"
         );
         const storeState = useWorkspaceStore.getState();
         if (!storeState.isSyncing) {
@@ -67,7 +67,7 @@ export function useOfflineSync() {
         clearPendingOperations(); // Clear all for now
         // Trigger sync-files to refresh all data (apenas se não estiver já sincronizando)
         const { useWorkspaceStore } = await import(
-          "@/lib/stores/workspaceStore"
+          "@/modules/workspace/stores/workspaceStore"
         );
         const storeState = useWorkspaceStore.getState();
         if (!storeState.isSyncing) {

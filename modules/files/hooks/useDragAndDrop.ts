@@ -4,43 +4,41 @@ import { useDragHandlers } from "./useDragHandlers";
 import { useItemReorder } from "./useItemReorder";
 import { applyOptimisticUpdate } from "./useOptimisticUpdate";
 import { persistReorder } from "./usePersistReorder";
-import { useUpdateItemOrder } from "../services/useFilesQuery";
-import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
+import { useUpdateFileOrder } from "../services/useFilesQuery";
+import { useWorkspaceStore } from "@/modules/workspace/stores/workspaceStore";
 import { buildHierarchy } from "../utils/hierarchy";
-import { findItemById } from "../utils/hierarchy";
+import { findFileById } from "../utils/hierarchy";
 
 interface UseDragAndDropProps {
   workspaceId: string;
-  currentFolderId?: string | null;
+  currentFileId?: string | null;
 }
 
 /**
  * Hook principal para drag and drop - orquestra os hooks menores
- * Agora recebe apenas workspaceId e currentFolderId, calculando o resto internamente
+ * Agora recebe apenas workspaceId e currentFileId, calculando o resto internamente
  */
 export function useDragAndDrop({
   workspaceId,
-  currentFolderId = null,
+  currentFileId = null,
 }: UseDragAndDropProps) {
   // Obter files do Zustand store
   const { getFilesByWorkspace } = useWorkspaceStore();
   const workspaceFiles = getFilesByWorkspace(workspaceId);
-  const items = buildHierarchy(workspaceFiles);
+  const files = buildHierarchy(workspaceFiles);
 
   // Criar mutation dentro do hook
-  const updateItemOrderMutation = useUpdateItemOrder(workspaceId || "");
+  const updateFileOrderMutation = useUpdateFileOrder(workspaceId || "");
 
   // Calcular sortedFolders e sortedFiles
-  const currentFolder = currentFolderId
-    ? findItemById(items, currentFolderId)
-    : null;
+  const currentFile = currentFileId ? findFileById(files, currentFileId) : null;
 
-  const displayItems = currentFolder
-    ? currentFolder.children || []
-    : items.filter((item) => !item.parent_id);
+  const displayFiles = currentFile
+    ? currentFile.children || []
+    : files.filter((file) => !file.parent_id);
 
   // Sort ALL items together by order_index (folders and files mixed)
-  const sortedItems = [...displayItems].sort(
+  const sortedFiles = [...displayFiles].sort(
     (a, b) => (a.order_index || 0) - (b.order_index || 0)
   );
 
@@ -49,17 +47,17 @@ export function useDragAndDrop({
 
   // Handlers básicos
   const handlers = useDragHandlers({
-    draggedItemIdRef: dragState.draggedItemIdRef,
-    setDraggedItemId: dragState.setDraggedItemId,
-    setDragOverItemId: dragState.setDragOverItemId,
+    draggedFileIdRef: dragState.draggedFileIdRef,
+    setDraggedFileId: dragState.setDraggedFileId,
+    setDragOverFileId: dragState.setDragOverFileId,
     resetDragState: dragState.resetDragState,
   });
 
   // Lógica de reordenação
   const { calculateReorder } = useItemReorder({
-    items,
-    sortedItems,
-    draggedItemIdRef: dragState.draggedItemIdRef,
+    files,
+    sortedFiles,
+    draggedFileIdRef: dragState.draggedFileIdRef,
     workspaceId,
   });
 
@@ -74,29 +72,29 @@ export function useDragAndDrop({
       return;
     }
 
-    const { reorderedItems, updates } = reorderResult;
+    const { reorderedFiles, updates } = reorderResult;
 
     // Atualização otimista
     applyOptimisticUpdate({
-      items,
-      itemsContext: null, // Zustand handles state updates
-      currentFolderId: currentFolderId || null,
-      reorderedItems,
+      files,
+      filesContext: null, // Zustand handles state updates
+      currentFileId: currentFileId || null,
+      reorderedFiles,
     });
 
     // Persistir no backend
     try {
       await persistReorder({
         workspaceId,
-        updateItemOrderMutation:
-          updateItemOrderMutation as unknown as UseMutationResult<
+        updateFileOrderMutation:
+          updateFileOrderMutation as unknown as UseMutationResult<
             void,
             Error,
-            { itemId: string; orderIndex: number; parentId: string | null },
+            { fileId: string; orderIndex: number; parentId: string | null },
             unknown
           >,
         updates,
-        currentFolderId: currentFolderId || null,
+        currentFileId: currentFileId || null,
       });
     } catch {
       // O erro já foi tratado em persistReorder (toast)
@@ -112,7 +110,7 @@ export function useDragAndDrop({
     handleDragLeave: handlers.handleDragLeave,
     handleDrop,
     handleDragEnd: handlers.handleDragEnd,
-    draggedItemId: dragState.draggedItemId,
-    dragOverItemId: dragState.dragOverItemId,
+    draggedFileId: dragState.draggedFileId,
+    dragOverFileId: dragState.dragOverFileId,
   };
 }

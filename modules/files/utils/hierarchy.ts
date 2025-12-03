@@ -31,14 +31,14 @@ export function buildHierarchy(items: File[]): HierarchicalFile[] {
   return rootItems;
 }
 
-export function findItemById(
+export function findFileById(
   items: HierarchicalFile[],
   id: string
 ): HierarchicalFile | null {
   for (const item of items) {
     if (item.id === id) return item;
     if (item.children) {
-      const found = findItemById(item.children, id);
+      const found = findFileById(item.children, id);
       if (found) return found;
     }
   }

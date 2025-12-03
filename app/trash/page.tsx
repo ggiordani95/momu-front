@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
-import { useWorkspaceData } from "@/lib/hooks/useSyncFiles";
-import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
-import WorkspaceView from "../[workspaceId]/WorkspaceView";
+import { useWorkspaceData } from "@/modules/workspace/hooks/useSyncWorkspaceFiles";
+import { useWorkspaceStore } from "@/modules/workspace/stores/workspaceStore";
+import WorkspaceView from "@/modules/workspace/components/WorkspaceView";
 
 export default function TrashPage() {
   const { workspaces } = useWorkspaceData();

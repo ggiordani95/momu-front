@@ -1,9 +1,9 @@
 import type React from "react";
 
 interface UseDragHandlersProps {
-  draggedItemIdRef: React.RefObject<string | null>;
-  setDraggedItemId: (itemId: string | null) => void;
-  setDragOverItemId: (itemId: string | null) => void;
+  draggedFileIdRef: React.RefObject<string | null>;
+  setDraggedFileId: (fileId: string | null) => void;
+  setDragOverFileId: (fileId: string | null) => void;
   resetDragState: () => void;
 }
 
@@ -11,27 +11,27 @@ interface UseDragHandlersProps {
  * Hook para handlers básicos de drag and drop
  */
 export function useDragHandlers({
-  draggedItemIdRef,
-  setDraggedItemId,
-  setDragOverItemId,
+  draggedFileIdRef,
+  setDraggedFileId,
+  setDragOverFileId,
   resetDragState,
 }: UseDragHandlersProps) {
-  const handleDragStart = (itemId: string) => {
-    draggedItemIdRef.current = itemId;
-    setDraggedItemId(itemId);
+  const handleDragStart = (fileId: string) => {
+    draggedFileIdRef.current = fileId;
+    setDraggedFileId(fileId);
   };
 
-  const handleDragOver = (e: React.DragEvent, targetItemId: string) => {
+  const handleDragOver = (e: React.DragEvent, targetFileId: string) => {
     e.preventDefault();
     e.stopPropagation();
 
-    if (draggedItemIdRef.current && draggedItemIdRef.current !== targetItemId) {
-      setDragOverItemId(targetItemId);
+    if (draggedFileIdRef.current && draggedFileIdRef.current !== targetFileId) {
+      setDragOverFileId(targetFileId);
     }
   };
 
   const handleDragLeave = () => {
-    setDragOverItemId(null);
+    setDragOverFileId(null);
   };
 
   const handleDragEnd = () => {

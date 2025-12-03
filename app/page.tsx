@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useWorkspaceData } from "@/lib/hooks/useSyncFiles";
+import { useWorkspaceData } from "@/modules/workspace/hooks/useSyncWorkspaceFiles";
 
 export default function Home() {
   const router = useRouter();

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { X, Search, FileText, Folder, Video } from "lucide-react";
-import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
+import { useWorkspaceStore } from "@/modules/workspace/stores/workspaceStore";
 import type { File } from "@/lib/types";
 
 interface FileLinkPickerProps {

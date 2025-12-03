@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useSyncFiles } from "@/lib/hooks/useSyncFiles";
+import { useSyncWorkspace } from "@/modules/workspace/hooks/useSyncWorkspaceFiles";
 
 /**
  * Provider que sincroniza automaticamente os dados quando a aplicação carrega
@@ -11,7 +11,7 @@ import { useSyncFiles } from "@/lib/hooks/useSyncFiles";
  * então não precisamos chamar syncFiles() novamente aqui
  */
 export function SyncProvider({ children }: { children: React.ReactNode }) {
-  const { isSyncing, error } = useSyncFiles();
+  const { isSyncing, error } = useSyncWorkspace();
 
   // Log de sincronização (opcional, pode remover em produção)
   useEffect(() => {

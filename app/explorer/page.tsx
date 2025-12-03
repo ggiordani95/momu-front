@@ -2,8 +2,8 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useWorkspaceData } from "@/lib/hooks/useSyncFiles";
-import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
+import { useWorkspaceData } from "@/modules/workspace/hooks/useSyncWorkspaceFiles";
+import { useWorkspaceStore } from "@/modules/workspace/stores/workspaceStore";
 
 export default function ExplorerPage() {
   const router = useRouter();

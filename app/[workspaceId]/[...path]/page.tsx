@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
+import { useWorkspaceStore } from "@/modules/workspace/stores/workspaceStore";
 
 export default function WorkspacePathPage() {
   const params = useParams();

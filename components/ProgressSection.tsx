@@ -1,6 +1,6 @@
 "use client";
 
-import { useWorkspaceProgress } from "@/lib/hooks/querys/useProgress";
+import { useWorkspaceProgressQuery } from "@/modules/workspace";
 import { Video, FileText, Folder, TrendingUp } from "lucide-react";
 
 interface ProgressSectionProps {
@@ -8,7 +8,7 @@ interface ProgressSectionProps {
 }
 
 export function ProgressSection({ workspaceId }: ProgressSectionProps) {
-  const { data: progress, isLoading } = useWorkspaceProgress(workspaceId);
+  const { data: progress, isLoading } = useWorkspaceProgressQuery(workspaceId);
 
   if (!workspaceId || isLoading || !progress) {
     return null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useWorkspaceProgress } from "@/lib/hooks/querys/useProgress";
+import { useWorkspaceProgressQuery } from "@/modules/workspace";
 
 interface ProgressBarProps {
   workspaceId: string | null;
@@ -15,7 +15,7 @@ export function ProgressBar({
   showLabel = true,
   compact = false,
 }: ProgressBarProps) {
-  const { data: progress, isLoading } = useWorkspaceProgress(workspaceId);
+  const { data: progress, isLoading } = useWorkspaceProgressQuery(workspaceId);
 
   if (!workspaceId || isLoading || !progress) {
     return null;
@@ -66,4 +66,3 @@ export function ProgressBar({
     </div>
   );
 }
-

@@ -5,8 +5,8 @@ import { FileEdit, Trash2, RotateCcw, X, Check } from "lucide-react";
 import Image from "next/image";
 import ContextMenu, {
   type ContextMenuAnchorRect,
-} from "@/components/editors/ContextMenu";
-import { ExplorerIcon } from "@/components/views/explorer/ExplorerIcon";
+} from "@/modules/editor/components/ContextMenu";
+import { ExplorerIcon } from "@/modules/explorer/components/ExplorerIcon";
 import React from "react";
 import type { HierarchicalFile } from "@/lib/types";
 
@@ -29,12 +29,12 @@ interface FileCardProps {
   onDelete?: (id: string) => void;
   onComplete?: (id: string, completed: boolean) => void;
   appearanceOrder?: number;
-  draggedItemId?: string | null;
-  dragOverItemId?: string | null;
-  onDragStart?: (itemId: string) => void;
-  onDragOver?: (e: React.DragEvent, itemId: string) => void;
+  draggedFileId?: string | null;
+  dragOverFileId?: string | null;
+  onDragStart?: (fileId: string) => void;
+  onDragOver?: (e: React.DragEvent, fileId: string) => void;
   onDragLeave?: () => void;
-  onDrop?: (e: React.DragEvent, itemId: string) => void;
+  onDrop?: (e: React.DragEvent, fileId: string) => void;
   onDragEnd?: () => void;
   isTrashView?: boolean;
   onRestore?: (id: string) => void;
@@ -50,8 +50,8 @@ export default function FileCard({
   onDelete,
   onComplete,
   appearanceOrder = 0,
-  draggedItemId,
-  dragOverItemId,
+  draggedFileId,
+  dragOverFileId,
   onDragStart,
   onDragOver,
   onDragLeave,
@@ -177,7 +177,7 @@ export default function FileCard({
           }
         }}
         onDragOver={(e) => {
-          if (onDragOver && draggedItemId !== file.id && !isTrashView) {
+          if (onDragOver && draggedFileId !== file.id && !isTrashView) {
             onDragOver(e, file.id);
           }
         }}
@@ -191,9 +191,9 @@ export default function FileCard({
         onClick={onClick}
         onContextMenu={handleContextMenu}
         className={`flex flex-col h-full justify-center items-center gap-3 p-4 rounded-3xl transition-all hover:bg-hover/50 hover:scale-105 group w-full min-h-[120px] ${
-          draggedItemId === file.id ? "opacity-50" : ""
+          draggedFileId === file.id ? "opacity-50" : ""
         } ${
-          dragOverItemId === file.id
+          dragOverFileId === file.id
             ? file.type === "folder"
               ? "ring-2 ring-green-500 border-2 border-green-500 bg-green-500/10"
               : "ring-2 ring-blue-500 border-2 border-blue-500"

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { X, Folder } from "lucide-react";
 import type { HierarchicalFile } from "@/lib/types";
-import { findItemById } from "../utils/hierarchy";
+import { findFileById } from "../utils/hierarchy";
 
 interface MoveToFolderModalProps {
   file: HierarchicalFile;
@@ -78,7 +78,7 @@ export default function MoveToFolderModal({
 
   // Get all folders from the files hierarchy, excluding the current file and its children
   const getAllFolders = (
-    items: HierarchicalFile[],
+    files: HierarchicalFile[],
     excludeId?: string
   ): HierarchicalFile[] => {
     const folders: HierarchicalFile[] = [];
@@ -87,17 +87,17 @@ export default function MoveToFolderModal({
     // Build set of IDs to exclude (file itself and all its children)
     if (excludeId) {
       excludeIds.add(excludeId);
-      const fileItem = findItemById(items, excludeId);
-      if (fileItem) {
-        const collectChildren = (item: HierarchicalFile) => {
-          if (item.children) {
-            item.children.forEach((child) => {
+      const fileFile = findFileById(files, excludeId);
+      if (fileFile) {
+        const collectChildren = (file: HierarchicalFile) => {
+          if (file.children) {
+            file.children.forEach((child) => {
               excludeIds.add(child.id);
-              collectChildren(child);
+              collectChildren(file);
             });
           }
         };
-        collectChildren(fileItem);
+        collectChildren(fileFile);
       }
     }
 
@@ -123,7 +123,7 @@ export default function MoveToFolderModal({
       });
     };
 
-    collectFolders(items);
+    collectFolders(files);
     return folders;
   };
 
@@ -232,4 +232,3 @@ export default function MoveToFolderModal({
 
   return createPortal(modalContent, document.body);
 }
-

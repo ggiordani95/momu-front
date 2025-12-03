@@ -1,4 +1,4 @@
-import { type ItemType } from "@/lib/itemTypes";
+import { type ItemType } from "@/modules/files/types/filesTypes";
 
 // ============================================
 // Folder Types

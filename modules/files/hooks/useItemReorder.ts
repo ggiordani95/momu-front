@@ -1,11 +1,11 @@
 import type React from "react";
 import type { HierarchicalFile } from "@/lib/types";
-import { findItemById } from "../utils/hierarchy";
+import { findFileById } from "../utils/hierarchy";
 
 interface UseItemReorderProps {
-  items: HierarchicalFile[];
-  sortedItems: HierarchicalFile[]; // All items together, sorted by order_index
-  draggedItemIdRef: React.RefObject<string | null>;
+  files: HierarchicalFile[];
+  sortedFiles: HierarchicalFile[]; // All items together, sorted by order_index
+  draggedFileIdRef: React.RefObject<string | null>;
   workspaceId: string;
 }
 
@@ -13,32 +13,32 @@ interface UseItemReorderProps {
  * Hook para calcular a reordenação de itens
  */
 export function useItemReorder({
-  items,
-  sortedItems,
-  draggedItemIdRef,
+  files,
+  sortedFiles,
+  draggedFileIdRef,
   workspaceId,
 }: UseItemReorderProps) {
-  const calculateReorder = (targetItemId: string) => {
-    const sourceItemId = draggedItemIdRef.current;
-    if (!sourceItemId || sourceItemId === targetItemId || !workspaceId) {
+  const calculateReorder = (targetFileId: string) => {
+    const sourceFileId = draggedFileIdRef.current;
+    if (!sourceFileId || sourceFileId === targetFileId || !workspaceId) {
       return null;
     }
 
     // Find items
-    const sourceItem = findItemById(items, sourceItemId);
-    const targetItem = findItemById(items, targetItemId);
+    const sourceFile = findFileById(files, sourceFileId);
+    const targetFile = findFileById(files, targetFileId);
 
-    if (!sourceItem || !targetItem) {
+    if (!sourceFile || !targetFile) {
       return null;
     }
 
     // Use sortedItems directly (already contains all items in correct order)
-    const allDisplayItems = sortedItems;
-    const sourceIndex = allDisplayItems.findIndex(
-      (item) => item.id === sourceItemId
+    const allDisplayFiles = sortedFiles;
+    const sourceIndex = allDisplayFiles.findIndex(
+      (file) => file.id === sourceFileId
     );
-    const targetIndex = allDisplayItems.findIndex(
-      (item) => item.id === targetItemId
+    const targetIndex = allDisplayFiles.findIndex(
+      (file) => file.id === targetFileId
     );
 
     if (sourceIndex === -1 || targetIndex === -1) {
@@ -46,20 +46,20 @@ export function useItemReorder({
     }
 
     // Reorder items
-    const newItems = [...allDisplayItems];
-    const [removed] = newItems.splice(sourceIndex, 1);
-    newItems.splice(targetIndex, 0, removed);
+    const newFiles = [...allDisplayFiles];
+    const [removed] = newFiles.splice(sourceIndex, 1);
+    newFiles.splice(targetIndex, 0, removed);
 
     // Update order_index for all items in newItems
-    const reorderedItems = newItems.map((item, index) => ({
-      ...item,
+    const reorderedFiles = newFiles.map((file, index) => ({
+      ...file,
       order_index: index,
     }));
 
     return {
-      reorderedItems,
-      updates: reorderedItems.map((item, index) => ({
-        itemId: item.id,
+      reorderedFiles,
+      updates: reorderedFiles.map((file, index) => ({
+        fileId: file.id,
         orderIndex: index,
       })),
     };
