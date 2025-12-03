@@ -4,7 +4,10 @@
  */
 
 import { fileService } from "./fileService";
-import { saveToOfflineQueue, getOfflineQueue } from "../hooks/useOfflineQueue";
+import {
+  saveToOfflineQueue,
+  getOfflineQueue,
+} from "../../modules/files/hooks/useOfflineQueue";
 import type { CreateFileDto, UpdateFileDto } from "@/lib/types";
 
 /**

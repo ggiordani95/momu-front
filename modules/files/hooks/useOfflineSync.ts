@@ -10,10 +10,13 @@ import {
   clearPendingOperations,
 } from "@/lib/services/offlineSync";
 import { fileService } from "@/modules/files";
+import { useWorkspaceStore } from "@/modules/workspace/stores/workspaceStore";
 
 export function useOfflineSync() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [hasSynced, setHasSynced] = useState(false);
+
+  const storeState = useWorkspaceStore.getState();
 
   /**
    * Sincroniza todas as operações pendentes com o backend em uma única requisição
@@ -53,10 +56,7 @@ export function useOfflineSync() {
       if (syncResult.success && syncResult.failed === 0) {
         clearPendingOperations(); // Clear all operations
         // Trigger sync-files to refresh all data (apenas se não estiver já sincronizando)
-        const { useWorkspaceStore } = await import(
-          "@/modules/workspace/stores/workspaceStore"
-        );
-        const storeState = useWorkspaceStore.getState();
+
         if (!storeState.isSyncing) {
           storeState.syncFiles();
         }
@@ -66,10 +66,6 @@ export function useOfflineSync() {
         // Limpar apenas as que foram sincronizadas com sucesso
         clearPendingOperations(); // Clear all for now
         // Trigger sync-files to refresh all data (apenas se não estiver já sincronizando)
-        const { useWorkspaceStore } = await import(
-          "@/modules/workspace/stores/workspaceStore"
-        );
-        const storeState = useWorkspaceStore.getState();
         if (!storeState.isSyncing) {
           storeState.syncFiles();
         }
@@ -94,7 +90,7 @@ export function useOfflineSync() {
     } finally {
       setIsSyncing(false);
     }
-  }, [isSyncing]); // Remover workspaceId e queryClient para evitar múltiplas chamadas
+  }, [isSyncing, storeState]); // Remover workspaceId e queryClient para evitar múltiplas chamadas
 
   /**
    * Sincroniza automaticamente ao montar o componente

@@ -10,7 +10,7 @@ import {
 } from "@/modules/files";
 import { useWorkspaceStore } from "@/modules/workspace/stores/workspaceStore";
 import type { HierarchicalFile } from "@/lib/types";
-import { useMultiSelect } from "@/lib/hooks/useMultiSelect";
+import { useMultiSelect } from "@/modules/explorer/hooks/useMultiSelect";
 import { fileService } from "@/modules/files";
 
 interface TrashWorkspaceProps {

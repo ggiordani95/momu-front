@@ -12,7 +12,7 @@ import {
   useDragAndDrop,
   findFileById,
 } from "@/modules/files";
-import { useMultiSelect } from "@/lib/hooks/useMultiSelect";
+import { useMultiSelect } from "@/modules/explorer/hooks/useMultiSelect";
 import { useWorkspaceStore } from "@/modules/workspace/stores/workspaceStore";
 interface ExplorerWorkspaceProps {
   currentFileId?: string | null;

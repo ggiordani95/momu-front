@@ -1,7 +1,7 @@
 "use client";
 
 import { WifiOff, Wifi, Loader2 } from "lucide-react";
-import { useOfflineQueue } from "@/lib/hooks/useOfflineQueue";
+import { useOfflineQueue } from "@/modules/files/hooks/useOfflineQueue";
 
 /**
  * Indicador visual de status offline/online
