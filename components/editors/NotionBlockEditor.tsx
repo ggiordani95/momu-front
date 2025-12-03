@@ -47,6 +47,8 @@ import {
   Image as ImageIcon,
   Youtube,
   X,
+  SpellCheck,
+  EyeOff,
 } from "lucide-react";
 import { createPortal } from "react-dom";
 
@@ -1013,6 +1015,7 @@ function BlockItem({
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [commandMenuPos, setCommandMenuPos] = useState({ top: 0, left: 0 });
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
+  const [spellcheckEnabled, setSpellcheckEnabled] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const commandMenuRef = useRef<HTMLDivElement>(null);
@@ -1183,6 +1186,7 @@ function BlockItem({
       attributes: {
         class:
           "prose prose-sm max-w-none focus:outline-none min-h-[1.5em] py-0.5 px-2 leading-normal [&_p]:my-0 [&_p:last-child]:mb-0 [&_p]:leading-[1.6] [&_ul]:list-disc [&_ol]:list-decimal [&_li]:list-item",
+        spellcheck: spellcheckEnabled ? "true" : "false",
       },
       handleKeyDown,
     },
@@ -1196,6 +1200,15 @@ function BlockItem({
       }, 300);
     },
   });
+
+  // Update spellcheck attribute when state changes
+  useEffect(() => {
+    if (!editor) return;
+    const editorElement = editor.view.dom;
+    if (editorElement) {
+      editorElement.setAttribute("spellcheck", spellcheckEnabled.toString());
+    }
+  }, [editor, spellcheckEnabled]);
 
   // Update editor ref when editor changes
   useEffect(() => {
@@ -1490,6 +1503,27 @@ function BlockItem({
               title="Link"
             >
               <Link size={14} />
+            </ToolbarButton>
+            <div
+              className="w-px h-4 mx-0.5"
+              style={{ backgroundColor: "var(--border-color)" }}
+            />
+            <ToolbarButton
+              onClick={() => {
+                setSpellcheckEnabled(!spellcheckEnabled);
+              }}
+              active={!spellcheckEnabled}
+              title={
+                spellcheckEnabled
+                  ? "Desativar correção ortográfica"
+                  : "Ativar correção ortográfica"
+              }
+            >
+              {spellcheckEnabled ? (
+                <SpellCheck size={14} />
+              ) : (
+                <EyeOff size={14} />
+              )}
             </ToolbarButton>
           </div>
         )}
