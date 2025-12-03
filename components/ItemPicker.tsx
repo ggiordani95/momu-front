@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { HierarchicalFile } from "@/lib/types";
 import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
-import { buildHierarchy } from "@/lib/utils/hierarchy";
+import { buildHierarchy } from "@/modules/files";
 import { useMemo } from "react";
 
 interface ItemPickerProps {

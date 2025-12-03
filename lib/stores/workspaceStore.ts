@@ -323,7 +323,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
         const updatedFiles = state.files.map((file) =>
           file.id === fileId
-            ? { ...file, ...updates, updated_at: new Date().toISOString() }
+            ? {
+                ...file,
+                ...updates,
+                updated_at: updates.updated_at || new Date().toISOString(),
+              }
             : file
         );
 

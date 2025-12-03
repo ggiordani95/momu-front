@@ -3,13 +3,15 @@
 import { Folder as FolderIcon } from "lucide-react";
 import { type ItemType } from "@/lib/itemTypes";
 import AddItemModal from "@/components/AddItemModal";
-import FolderSkeleton from "@/components/files/FolderSkeleton";
 import Breadcrumb from "@/components/Breadcrumb";
-import FileCard from "@/components/files/FileCard";
 import React, { useState, useMemo, useEffect } from "react";
 import type { HierarchicalFile, CreateFileDto } from "@/lib/types";
-import { findItemById } from "@/lib/utils/hierarchy";
-import { useDragAndDrop } from "@/lib/hooks/useDragAndDrop";
+import {
+  FileCard,
+  FolderSkeleton,
+  useDragAndDrop,
+  findItemById,
+} from "@/modules/files";
 import { useMultiSelect } from "@/lib/hooks/useMultiSelect";
 import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
 interface ExplorerWorkspaceProps {
@@ -30,6 +32,7 @@ interface ExplorerWorkspaceProps {
     field: "title" | "content",
     value: string
   ) => void;
+  onItemMove?: (id: string, parentId: string | null) => void;
   onItemComplete?: (id: string, completed: boolean) => void;
   onItemDelete?: (id: string) => void;
   onItemDeleteBatch?: (ids: string[]) => void;
@@ -46,6 +49,7 @@ export function ExplorerWorkspace({
   onNavigateToWorkspaceRoot,
   onAddItem,
   onItemUpdate,
+  onItemMove,
   onItemComplete,
   onItemDelete,
   onItemDeleteBatch,
@@ -113,17 +117,67 @@ export function ExplorerWorkspace({
   }, [currentFolderId, currentFolder, files]);
 
   const {
-    handleDragStart,
-    handleDragOver,
-    handleDragLeave,
-    handleDrop,
-    handleDragEnd,
+    handleDragStart: baseHandleDragStart,
+    handleDragOver: baseHandleDragOver,
+    handleDragLeave: baseHandleDragLeave,
+    handleDrop: baseHandleDrop,
+    handleDragEnd: baseHandleDragEnd,
     draggedItemId,
     dragOverItemId,
   } = useDragAndDrop({
     workspaceId: currentWorkspace?.id || "",
     currentFolderId: currentFolderId ?? null,
   });
+
+  // Custom handleDrop that supports moving files into folders
+  const handleDrop = (e: React.DragEvent, targetItemId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!draggedItemId || !onItemMove) {
+      // Fallback to default reorder behavior
+      baseHandleDrop(e, targetItemId);
+      return;
+    }
+
+    // Find the dragged item and target item
+    const draggedItem = findItemById(files, draggedItemId);
+    const targetItem = findItemById(files, targetItemId);
+
+    if (!draggedItem || !targetItem) {
+      baseHandleDrop(e, targetItemId);
+      return;
+    }
+
+    // If target is a folder and dragged item is not a folder, move it into the folder
+    if (targetItem.type === "folder" && draggedItem.type !== "folder") {
+      // Check if the item is already in this folder
+      if (draggedItem.parent_id === targetItem.id) {
+        // Already in this folder, just reorder
+        baseHandleDrop(e, targetItemId);
+        return;
+      }
+
+      // Move the file into the folder
+      console.log("[ExplorerWorkspace] Moving file into folder:", {
+        fileId: draggedItem.id,
+        folderId: targetItem.id,
+      });
+      onItemMove(draggedItem.id, targetItem.id);
+      baseHandleDragEnd();
+      return;
+    }
+
+    // If dragging a folder onto another folder, don't allow (prevent nesting issues)
+    if (targetItem.type === "folder" && draggedItem.type === "folder") {
+      console.log("[ExplorerWorkspace] Cannot move folder into folder");
+      baseHandleDragEnd();
+      return;
+    }
+
+    // For all other cases (reordering within same parent), use default reorder behavior
+    baseHandleDrop(e, targetItemId);
+  };
 
   // Multi-select functionality
   const {
@@ -204,6 +258,30 @@ export function ExplorerWorkspace({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onDragOver={(e) => {
+          // Allow dropping on empty area to move to root
+          if (draggedItemId && onItemMove) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = "move";
+          }
+        }}
+        onDrop={(e) => {
+          // Handle drop on empty area to move file to root
+          if (draggedItemId && onItemMove) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const draggedItem = findItemById(files, draggedItemId);
+            if (draggedItem && draggedItem.parent_id !== null) {
+              console.log("[ExplorerWorkspace] Moving file to root:", {
+                fileId: draggedItem.id,
+              });
+              onItemMove(draggedItem.id, null);
+              baseHandleDragEnd();
+            }
+          }
+        }}
       >
         {/* Selection Box */}
         {isSelecting && selectionBox && (
@@ -260,12 +338,12 @@ export function ExplorerWorkspace({
                   appearanceOrder={index}
                   draggedItemId={draggedItemId}
                   dragOverItemId={dragOverItemId}
-                  onDragStart={handleDragStart}
-                  onDragOver={handleDragOver}
+                  onDragStart={baseHandleDragStart}
+                  onDragOver={baseHandleDragOver}
                   startRenaming={false}
-                  onDragLeave={handleDragLeave}
+                  onDragLeave={baseHandleDragLeave}
                   onDrop={handleDrop}
-                  onDragEnd={handleDragEnd}
+                  onDragEnd={baseHandleDragEnd}
                   isSelected={selectedIds.has(item.id)}
                 />
               ))}

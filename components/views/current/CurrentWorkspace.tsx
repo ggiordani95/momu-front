@@ -8,7 +8,7 @@ import {
   useCreateFile,
   useUpdateFile,
   useDeleteFile,
-} from "@/lib/hooks/querys/useFiles";
+} from "@/modules/files";
 import type { HierarchicalFile, CreateFileDto } from "@/lib/types";
 
 import SimpleSidebar from "@/components/SimpleSidebar";

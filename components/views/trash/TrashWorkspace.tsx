@@ -2,12 +2,12 @@
 
 import { Folder } from "lucide-react";
 import { useMemo, useEffect, useCallback } from "react";
-import FileCard from "../../files/FileCard";
-import FolderSkeleton from "../../files/FolderSkeleton";
 import {
+  FileCard,
+  FolderSkeleton,
   useRestoreItem,
   usePermanentDeleteItem,
-} from "@/lib/hooks/querys/useFiles";
+} from "@/modules/files";
 import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
 import type { HierarchicalFile } from "@/lib/types";
 import { useMultiSelect } from "@/lib/hooks/useMultiSelect";

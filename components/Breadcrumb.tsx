@@ -3,7 +3,7 @@
 import { ChevronRight } from "lucide-react";
 import type { HierarchicalFile } from "@/lib/types";
 import { ReactNode, useMemo } from "react";
-import { findItemById } from "@/lib/utils/hierarchy";
+import { findItemById } from "@/modules/files";
 import { WorkspaceSelector } from "./WorkspaceSelector";
 import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
 

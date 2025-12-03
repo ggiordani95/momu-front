@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useState, useCallback } from "react";
-import { fileService } from "@/lib/services/fileService";
+import { fileService } from "@/modules/files";
 import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
 import type { CreateFileDto, UpdateFileDto } from "@/lib/types";
 

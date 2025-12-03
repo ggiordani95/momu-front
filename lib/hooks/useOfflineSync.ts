@@ -9,7 +9,7 @@ import {
   getPendingOperations,
   clearPendingOperations,
 } from "@/lib/services/offlineSync";
-import { fileService } from "@/lib/services/fileService";
+import { fileService } from "@/modules/files";
 
 export function useOfflineSync() {
   const [isSyncing, setIsSyncing] = useState(false);

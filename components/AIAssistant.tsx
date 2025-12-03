@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Sparkles, Loader2, X } from "lucide-react";
 import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
-import { fileService } from "@/lib/services/fileService";
+import { fileService } from "@/modules/files";
 import type { CreateFileDto } from "@/lib/types";
 import {
   AIModelSelector,

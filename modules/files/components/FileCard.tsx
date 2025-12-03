@@ -5,7 +5,7 @@ import { FileEdit, Trash2, RotateCcw, X, Check } from "lucide-react";
 import Image from "next/image";
 import ContextMenu, {
   type ContextMenuAnchorRect,
-} from "../editors/ContextMenu";
+} from "@/components/editors/ContextMenu";
 import { ExplorerIcon } from "@/components/views/explorer/ExplorerIcon";
 import React from "react";
 import type { HierarchicalFile } from "@/lib/types";

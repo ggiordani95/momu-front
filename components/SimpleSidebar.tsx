@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import ContextMenu from "./editors/ContextMenu";
-import { usePermanentDeleteItem } from "@/lib/hooks/querys/useFiles";
+import { usePermanentDeleteItem } from "@/modules/files";
 import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
 import { ProgressSection } from "./ProgressSection";
 
@@ -508,7 +508,7 @@ export default function SimpleSidebar({
   };
   return (
     <aside
-      className="w-52 bg-sidebar shrink-0 border-r flex flex-col relative z-10"
+      className="w-64 bg-sidebar shrink-0 border-r flex flex-col relative z-10"
       style={{
         borderColor: "var(--border-color)",
       }}

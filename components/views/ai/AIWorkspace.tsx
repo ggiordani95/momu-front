@@ -26,10 +26,9 @@ import {
   useGenerateAI,
 } from "@/lib/hooks/querys/useAIChats";
 import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
-import { fileService } from "@/lib/services/fileService";
 import type { CreateFileDto, HierarchicalFile } from "@/lib/types";
 import { WorkspaceSelector } from "@/components/WorkspaceSelector";
-import { buildHierarchy } from "@/lib/utils/hierarchy";
+import { fileService, buildHierarchy } from "@/modules/files";
 import {
   AIModelSelector,
   AI_MODELS,

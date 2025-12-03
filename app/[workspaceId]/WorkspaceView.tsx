@@ -9,9 +9,8 @@ import {
   startTransition,
 } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { useWorkspaceData } from "@/lib/hooks/useSyncFiles";
 import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
-import { buildHierarchy } from "@/lib/utils/hierarchy";
+import { useMoveFile, buildHierarchy } from "@/modules/files";
 import type { HierarchicalFile, CreateFileDto, Workspace } from "@/lib/types";
 import SimpleSidebar from "@/components/SimpleSidebar";
 import NotionBlockEditor from "@/components/editors/NotionBlockEditor";
@@ -287,7 +286,13 @@ export default function WorkspaceView({
 
     return filtered;
   }, [allFiles, workspaceId, isMounted]);
-  const files = useMemo(() => buildHierarchy(workspaceFiles), [workspaceFiles]);
+
+  // Build hierarchy from filtered files
+  // This will automatically rebuild when workspaceFiles changes
+  const files = useMemo(() => {
+    return buildHierarchy(workspaceFiles);
+  }, [workspaceFiles]);
+
   const loading = isMounted ? isSyncing : true;
   const itemsError = null;
   const workspacesItems = useMemo(() => {
@@ -661,6 +666,34 @@ export default function WorkspaceView({
       }
     }
   };
+
+  // Hook customizado para mover arquivos com React Query
+  const moveFileMutation = useMoveFile(workspaceId, {
+    onSuccess: (updatedFile) => {
+      console.log("[handleItemMove] File moved successfully:", updatedFile.id);
+    },
+    onError: (error) => {
+      console.error("[handleItemMove] Error moving file:", error);
+    },
+  });
+
+  const handleItemMove = useCallback(
+    (id: string, parentId: string | null) => {
+      console.log("[handleItemMove] Called with:", {
+        id,
+        parentId,
+        workspaceId,
+      });
+
+      // Usar o hook React Query para mover o arquivo
+      moveFileMutation.mutate({
+        fileId: id,
+        parentId,
+        workspaceId,
+      });
+    },
+    [workspaceId, moveFileMutation]
+  );
 
   const handleItemUpdate = async (
     id: string,
@@ -1136,6 +1169,7 @@ export default function WorkspaceView({
         handleBack={handleBack}
         handleNavigateToWorkspaceRoot={handleNavigateToWorkspaceRoot}
         handleItemUpdate={handleItemUpdate}
+        handleItemMove={handleItemMove}
         handleItemComplete={handleItemComplete}
         handleAddItem={handleAddItem}
         handleItemDelete={handleItemDelete}
@@ -1387,6 +1421,7 @@ function HomeContent({
   handleBack,
   handleNavigateToWorkspaceRoot,
   handleItemUpdate,
+  handleItemMove,
   handleItemComplete,
   handleAddItem,
   handleItemDelete,
@@ -1411,6 +1446,7 @@ function HomeContent({
     field: "title" | "content",
     value: string
   ) => void;
+  handleItemMove: (id: string, parentId: string | null) => void;
   handleItemComplete: (id: string, completed: boolean) => void;
   handleAddItem: (item: CreateFileDto) => void;
   handleItemDelete: (id: string) => void;
@@ -1426,9 +1462,13 @@ function HomeContent({
   >;
   workspacesItems: Workspace[];
 }) {
-  // Use Zustand store instead of React Query
-  const { getFilesByWorkspace } = useWorkspaceData();
-  const workspaceFiles = getFilesByWorkspace(workspaceId);
+  // Use Zustand store directly to ensure we get the latest files
+  const { files: allFiles } = useWorkspaceStore();
+  const workspaceFiles = useMemo(() => {
+    return allFiles.filter(
+      (file) => file.workspace_id === workspaceId && file.active !== false
+    );
+  }, [allFiles, workspaceId]);
   const itemsContextData = useMemo(
     () => buildHierarchy(workspaceFiles),
     [workspaceFiles]
@@ -1667,6 +1707,7 @@ function HomeContent({
               onNavigateToWorkspaceRoot={handleNavigateToWorkspaceRoot}
               onAddItem={handleAddItem}
               onItemUpdate={wrappedHandleItemUpdate}
+              onItemMove={handleItemMove}
               onItemComplete={wrappedHandleItemComplete}
               onItemDelete={wrappedHandleItemDelete}
               onItemDeleteBatch={wrappedHandleItemDeleteBatch}

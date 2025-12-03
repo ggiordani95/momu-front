@@ -11,7 +11,7 @@ import {
   useCreateFile,
   useUpdateFile,
   useUpdateItemOrder,
-} from "@/lib/hooks/querys/useFiles";
+} from "@/modules/files";
 import { toast } from "sonner";
 
 interface TopicItem {

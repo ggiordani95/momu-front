@@ -11,7 +11,7 @@ import {
 import { HierarchicalFile } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useWorkspaceStore } from "@/lib/stores/workspaceStore";
-import { buildHierarchy } from "@/lib/utils/hierarchy";
+import { buildHierarchy } from "@/modules/files";
 
 interface SearchFile extends HierarchicalFile {
   workspaceName?: string;
