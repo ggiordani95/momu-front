@@ -111,7 +111,7 @@ export function useDeleteFile(workspaceId: string) {
 /**
  * Hook to restore a file from trash
  */
-export function useRestoreItem(workspaceId: string) {
+export function useRestoreFile(workspaceId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -130,7 +130,7 @@ export function useRestoreItem(workspaceId: string) {
 /**
  * Hook to permanently delete a file
  */
-export function usePermanentDeleteItem(workspaceId: string) {
+export function usePermanentDeleteFile(workspaceId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({

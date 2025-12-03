@@ -5,8 +5,8 @@ import { useMemo, useEffect, useCallback } from "react";
 import {
   FileCard,
   FolderSkeleton,
-  useRestoreItem,
-  usePermanentDeleteItem,
+  usePermanentDeleteFile,
+  useRestoreFile,
 } from "@/modules/files";
 import { useWorkspaceStore } from "@/modules/workspace/stores/workspaceStore";
 import type { HierarchicalFile } from "@/lib/types";
@@ -46,8 +46,8 @@ export function TrashWorkspace({
 
   const { isSyncing } = useWorkspaceStore();
   const loading = isSyncing;
-  const restoreItemMutation = useRestoreItem(topicId);
-  const permanentDeleteMutation = usePermanentDeleteItem(topicId);
+  const restoreFileMutation = useRestoreFile(topicId);
+  const permanentDeleteFileMutation = usePermanentDeleteFile(topicId);
 
   const handlePermanentDelete = useCallback(
     async (id: string) => {
@@ -92,7 +92,7 @@ export function TrashWorkspace({
         }
 
         // Also call mutation for React Query cache invalidation
-        await permanentDeleteMutation.mutateAsync(id);
+        await permanentDeleteFileMutation.mutateAsync(id);
 
         if (onPermanentDelete) {
           onPermanentDelete(id);
@@ -104,7 +104,7 @@ export function TrashWorkspace({
         markFileAsRestored(id);
       }
     },
-    [permanentDeleteMutation, onPermanentDelete]
+    [permanentDeleteFileMutation, onPermanentDelete]
   );
 
   const handlePermanentDeleteBatch = useCallback(async (ids: string[]) => {
@@ -213,7 +213,7 @@ export function TrashWorkspace({
       const { markFileAsRestored } = useWorkspaceStore.getState();
       markFileAsRestored(id);
 
-      await restoreItemMutation.mutateAsync(id);
+      await restoreFileMutation.mutateAsync(id);
       if (onRestore) {
         onRestore();
       }

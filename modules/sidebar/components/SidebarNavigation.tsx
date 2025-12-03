@@ -4,26 +4,26 @@ import { useState, useEffect } from "react";
 import SidebarItem from "@/modules/sidebar/components/SidebarItem";
 import { useWorkspaceStore } from "@/modules/workspace/stores/workspaceStore";
 import { buildHierarchy } from "@/modules/files";
-import { type ItemType } from "@/modules/files/types/filesTypes";
+import { FileType } from "@/modules/files/types/filesTypes";
 import { HierarchicalFile } from "@/lib/types";
 import { useMemo } from "react";
 import { useUpdateFile } from "@/modules/files";
 
-interface TopicItem {
+interface FileItem {
   id: string;
-  type: ItemType;
+  type: FileType;
   title: string;
   parent_id?: string;
-  children?: TopicItem[];
+  children?: FileItem[];
 }
 
 interface SidebarNavigationProps {
-  items: TopicItem[];
+  files: FileItem[];
   workspaceId?: string;
 }
 
 export default function SidebarNavigation({
-  items: initialItems,
+  files: initialFiles,
   workspaceId,
 }: SidebarNavigationProps) {
   const [activeId, setActiveId] = useState("");
@@ -31,21 +31,21 @@ export default function SidebarNavigation({
   // Get files from Zustand store if workspaceId is provided
   const { getFilesByWorkspace } = useWorkspaceStore();
   const workspaceFiles = workspaceId ? getFilesByWorkspace(workspaceId) : [];
-  const zustandItems = useMemo(
+  const zustandFiles = useMemo(
     () => buildHierarchy(workspaceFiles),
     [workspaceFiles]
   );
 
   const derivedWorkspaceId =
     workspaceId ||
-    (zustandItems[0] as HierarchicalFile | undefined)?.workspace_id ||
-    (initialItems[0] as HierarchicalFile | undefined)?.workspace_id ||
+    (zustandFiles[0] as HierarchicalFile | undefined)?.workspace_id ||
+    (initialFiles[0] as HierarchicalFile | undefined)?.workspace_id ||
     null;
 
-  const updateItemMutation = useUpdateFile(derivedWorkspaceId || "");
+  const updateFileMutation = useUpdateFile(derivedWorkspaceId || "");
 
-  // Use items from Zustand if available, otherwise use initialItems
-  const items = zustandItems.length > 0 ? zustandItems : initialItems;
+  // Use files from Zustand if available, otherwise use initialFiles
+  const files = zustandFiles.length > 0 ? zustandFiles : initialFiles;
 
   useEffect(() => {
     // Set initial activeId from URL hash after mount (only on client)
@@ -95,64 +95,64 @@ export default function SidebarNavigation({
     };
   }, []);
 
-  const updateItem = (id: string, field: "title", value: string) => {
-    const previousItems = items as TopicItem[];
-    const updateItemRecursive = (items: TopicItem[]): TopicItem[] => {
-      return items.map((item) => {
-        if (item.id === id) {
-          return { ...item, [field]: value };
+  const updateFile = (id: string, field: "title", value: string) => {
+    const previousItems = files as FileItem[];
+    const updateFileRecursive = (files: FileItem[]): FileItem[] => {
+      return files.map((file) => {
+        if (file.id === id) {
+          return { ...file, [field]: value };
         }
-        if (item.children) {
-          return { ...item, children: updateItemRecursive(item.children) };
+        if (file.children) {
+          return { ...file, children: updateFileRecursive(file.children) };
         }
-        return item;
+        return file;
       });
     };
 
-    const updatedItems = updateItemRecursive(items as TopicItem[]);
+    const updatedFiles = updateFileRecursive(files as FileItem[]);
     // Zustand handles state updates automatically via mutations
 
     if (!derivedWorkspaceId) {
       console.error(
-        "Não foi possível identificar o workspace para atualizar o item."
+        "Não foi possível identificar o workspace para atualizar o arquivo."
       );
       return;
     }
 
-    updateItemMutation.mutate(
+    updateFileMutation.mutate(
       { fileId: id, data: { [field]: value } },
       {
-        onError: (error) => {
-          console.error("Error updating item:", error);
-          // Zustand will handle rollback via React Query
+        onError: (error: Error) => {
+          console.error("Error updating file:", error);
+          // Zustand irá lidar com o rollback via React Query
         },
       }
     );
   };
 
-  const deleteItem = (id: string) => {
-    const deleteItemRecursive = (items: TopicItem[]): TopicItem[] => {
-      return items
-        .filter((item) => item.id !== id)
-        .map((item) => {
-          if (item.children) {
-            return { ...item, children: deleteItemRecursive(item.children) };
+  const deleteFile = (id: string) => {
+    const deleteFileRecursive = (files: FileItem[]): FileItem[] => {
+      return files
+        .filter((file) => file.id !== id)
+        .map((file) => {
+          if (file.children) {
+            return { ...file, children: deleteFileRecursive(file.children) };
           }
-          return item;
+          return file;
         });
     };
 
-    const updatedItems = deleteItemRecursive(items as TopicItem[]);
+    const updatedFiles = deleteFileRecursive(files as FileItem[]);
     // Zustand handles state updates automatically via mutations
 
     if (!derivedWorkspaceId) {
       console.error(
-        "Não foi possível identificar o workspace para atualizar o item."
+        "Não foi possível identificar o workspace para atualizar o arquivo."
       );
       return;
     }
 
-    updateItemMutation.mutate({
+    updateFileMutation.mutate({
       fileId: id,
       data: { active: false },
     });
@@ -160,14 +160,14 @@ export default function SidebarNavigation({
 
   return (
     <nav className="space-y-1">
-      {items.map((item) => (
+      {files.map((file) => (
         <SidebarItem
-          key={item.id}
-          item={item as TopicItem}
+          key={file.id}
+          item={file as FileItem}
           level={0}
           activeId={activeId}
-          onUpdate={updateItem}
-          onDelete={deleteItem}
+          onUpdate={updateFile}
+          onDelete={deleteFile}
         />
       ))}
     </nav>

@@ -1,13 +1,13 @@
 import type { UseMutationResult } from "@tanstack/react-query";
 import { useDragState } from "./useDragState";
 import { useDragHandlers } from "./useDragHandlers";
-import { useItemReorder } from "./useItemReorder";
 import { applyOptimisticUpdate } from "./useOptimisticUpdate";
 import { persistReorder } from "./usePersistReorder";
 import { useUpdateFileOrder } from "../services/useFilesQuery";
 import { useWorkspaceStore } from "@/modules/workspace/stores/workspaceStore";
 import { buildHierarchy } from "../utils/hierarchy";
 import { findFileById } from "../utils/hierarchy";
+import { useFileReorder } from "./useFileReorder";
 
 interface UseDragAndDropProps {
   workspaceId: string;
@@ -54,7 +54,7 @@ export function useDragAndDrop({
   });
 
   // Lógica de reordenação
-  const { calculateReorder } = useItemReorder({
+  const { calculateReorder } = useFileReorder({
     files,
     sortedFiles,
     draggedFileIdRef: dragState.draggedFileIdRef,

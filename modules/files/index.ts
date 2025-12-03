@@ -3,7 +3,7 @@ export * from "./hooks/useMoveFile";
 export * from "./hooks/useDragAndDrop";
 export * from "./hooks/useDragState";
 export * from "./hooks/useDragHandlers";
-export * from "./hooks/useItemReorder";
+export * from "./hooks/useFileReorder";
 export * from "./hooks/useOptimisticUpdate";
 export * from "./hooks/usePersistReorder";
 

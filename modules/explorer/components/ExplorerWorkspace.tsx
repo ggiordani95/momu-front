@@ -214,8 +214,8 @@ export function ExplorerWorkspace({
     <div className="h-full flex flex-col">
       {/* Breadcrumb Timeline */}
       <Breadcrumb
-        items={files}
-        currentFolderId={currentFileId || null}
+        files={files}
+        currentFileId={currentFileId || null}
         onNavigate={(folderId) => {
           if (folderId) {
             onFileClick(folderId);

@@ -2,7 +2,7 @@ import type React from "react";
 import type { HierarchicalFile } from "@/lib/types";
 import { findFileById } from "../utils/hierarchy";
 
-interface UseItemReorderProps {
+interface UseFileReorderProps {
   files: HierarchicalFile[];
   sortedFiles: HierarchicalFile[]; // All items together, sorted by order_index
   draggedFileIdRef: React.RefObject<string | null>;
@@ -12,12 +12,12 @@ interface UseItemReorderProps {
 /**
  * Hook para calcular a reordenação de itens
  */
-export function useItemReorder({
+export function useFileReorder({
   files,
   sortedFiles,
   draggedFileIdRef,
   workspaceId,
-}: UseItemReorderProps) {
+}: UseFileReorderProps) {
   const calculateReorder = (targetFileId: string) => {
     const sourceFileId = draggedFileIdRef.current;
     if (!sourceFileId || sourceFileId === targetFileId || !workspaceId) {

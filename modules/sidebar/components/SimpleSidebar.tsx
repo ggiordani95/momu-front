@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import ContextMenu from "../../editor/components/ContextMenu";
-import { usePermanentDeleteItem } from "@/modules/files";
+import { usePermanentDeleteFile } from "@/modules/files";
 import { useWorkspaceStore } from "@/modules/workspace/stores/workspaceStore";
 import { ProgressSection } from "../../../components/ProgressSection";
 
@@ -470,7 +470,7 @@ export default function SimpleSidebar({
   // Get trash items from Zustand store (files with active === false)
   const { getDeletedFilesByWorkspace } = useWorkspaceStore();
   const trashItems = workspaceId ? getDeletedFilesByWorkspace(workspaceId) : [];
-  const permanentDeleteMutation = usePermanentDeleteItem(workspaceId);
+  const permanentDeleteMutation = usePermanentDeleteFile(workspaceId);
 
   const handleTrashContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();

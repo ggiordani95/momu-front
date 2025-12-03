@@ -446,34 +446,39 @@ export default function WorkspaceView({
   }, [pathKey, files, pathSegments]);
 
   const handleFolderClick = (folderId: string) => {
-    // Build path to folder (including parent folders)
+    console.log("[WorkspaceView] handleFolderClick called", {
+      folderId,
+      currentFolderId,
+      workspaceId,
+    });
+    // Build path to folder (including parent folders) usando a lista plana (workspaceFiles)
     const buildPathToFolder = (
-      files: HierarchicalFile[],
-      targetId: string,
-      currentPath: string[] = []
+      flatFiles: HierarchicalFile[],
+      targetId: string
     ): string[] | null => {
-      for (const item of files) {
-        if (item.id === targetId) {
-          return [...currentPath, item.id];
-        }
-        // Check children even if empty array (for empty folders)
-        if (item.children && item.children.length >= 0) {
-          const found = buildPathToFolder(item.children, targetId, [
-            ...currentPath,
-            item.id,
-          ]);
-          if (found) return found;
-        }
+      const path: string[] = [];
+      let currentId: string | null = targetId;
+
+      while (currentId) {
+        const file = flatFiles.find((f) => f.id === currentId);
+        if (!file) break;
+        path.unshift(file.id);
+        currentId = file.parent_id || null;
       }
-      return null;
+
+      return path.length > 0 ? path : null;
     };
 
     // Get current view from pathname
     const viewFromPath = pathname?.split("/")[1] || "explorer";
     const baseRoute = `/${viewFromPath}`;
 
-    // First try to find the folder in the files tree
-    const pathToFolder = buildPathToFolder(files, folderId);
+    // First try to find the folder in the flat workspace files
+    const pathToFolder = buildPathToFolder(workspaceFiles, folderId);
+    console.log("[WorkspaceView] handleFolderClick pathToFolder", {
+      folderId,
+      pathToFolder,
+    });
     let newPath: string;
     let newPathSegments: string[] = [];
 
@@ -483,12 +488,12 @@ export default function WorkspaceView({
       newPath = `${baseRoute}/${workspaceId}/${pathToFolder.join("/")}`;
     } else {
       // Fallback: check if folder exists at all (even if empty)
-      const folderExists = findItemById(files, folderId);
+      const folderExists = workspaceFiles.find((f) => f.id === folderId);
       if (folderExists) {
         // Folder exists but path building failed, try to build path from parent
         const parentId = folderExists.parent_id;
         if (parentId) {
-          const parentPath = buildPathToFolder(files, parentId);
+          const parentPath = buildPathToFolder(workspaceFiles, parentId);
           if (parentPath) {
             newPathSegments = [...parentPath, folderId];
             newPath = `${baseRoute}/${workspaceId}/${newPathSegments.join(
@@ -514,13 +519,16 @@ export default function WorkspaceView({
     }
 
     // Update state directly to avoid waiting for pathname to change
-    const targetItem = findItemById(files, folderId);
+    const targetItem = workspaceFiles.find((f) => f.id === folderId) || null;
     if (targetItem && targetItem.type === "folder") {
       // Update state immediately
       prevCurrentFolderIdRef.current = folderId;
       prevSelectedItemIdRef.current = null;
       setCurrentFolderId(folderId);
       setSelectedItem(null);
+      console.log("[WorkspaceView] handleFolderClick state updated", {
+        currentFolderId: folderId,
+      });
     }
 
     // Update URL asynchronously using history API to avoid re-render/flash
@@ -586,18 +594,46 @@ export default function WorkspaceView({
     return `${trimmed}/${segment}`;
   };
 
-  const handleItemClick = (item: HierarchicalFile) => {
+  const handleFileClick = (fileId: string) => {
+    console.log("[WorkspaceView] handleFileClick called", {
+      fileId,
+      workspaceFilesCount: workspaceFiles.length,
+    });
+
     // Handle item click (open page, video, etc.)
-    if (item.type === "video" && item.youtube_url) {
-      window.open(item.youtube_url, "_blank");
-    } else if (item.type === "note") {
+    // Use workspaceFiles (flat list) instead of files (hierarchical)
+    const file = workspaceFiles.find((file) => file.id === fileId);
+    if (!file) {
+      console.log("[WorkspaceView] handleFileClick file not found", { fileId });
+      return;
+    }
+
+    console.log("[WorkspaceView] handleFileClick file found", {
+      fileId: file.id,
+      type: file.type,
+      title: file.title,
+    });
+
+    if (file.type === "video" && file.youtube_url) {
+      window.open(file.youtube_url, "_blank");
+    } else if (file.type === "note") {
+      console.log("[WorkspaceView] handleFileClick opening note editor", {
+        fileId: file.id,
+        parentId: file.parent_id,
+      });
+
       // Update state first
-      setSelectedItem(item);
-      setCurrentFolderId(item.parent_id || null);
+      setSelectedItem(file);
+      setCurrentFolderId(file.parent_id || null);
 
       const basePath = getBasePathWithoutEditor();
       previousEditorPathRef.current = basePath;
-      const nextPath = appendSegment(basePath, item.id);
+      const nextPath = appendSegment(basePath, file.id);
+
+      console.log("[WorkspaceView] handleFileClick updating URL", {
+        basePath,
+        nextPath,
+      });
 
       // Update URL asynchronously using history API to avoid re-render/flash
       // Use requestAnimationFrame to ensure it happens after React's render
@@ -608,6 +644,9 @@ export default function WorkspaceView({
             "",
             nextPath
           );
+          console.log("[WorkspaceView] handleFileClick URL updated", {
+            nextPath,
+          });
         });
       }
     }
@@ -1145,7 +1184,7 @@ export default function WorkspaceView({
         currentFolderId={currentFolderId}
         selectedItem={selectedItem}
         handleFolderClick={handleFolderClick}
-        handleItemClick={handleItemClick}
+        handleFileClick={handleFileClick}
         handleCloseEditor={handleCloseEditor}
         handleBack={handleBack}
         handleNavigateToWorkspaceRoot={handleNavigateToWorkspaceRoot}
@@ -1397,7 +1436,7 @@ function HomeContent({
   currentFolderId,
   selectedItem,
   handleFolderClick,
-  handleItemClick,
+  handleFileClick,
   handleCloseEditor,
   handleBack,
   handleNavigateToWorkspaceRoot,
@@ -1418,7 +1457,7 @@ function HomeContent({
   currentFolderId: string | null;
   selectedItem: HierarchicalFile | null;
   handleFolderClick: (folderId: string) => void;
-  handleItemClick: (item: HierarchicalFile) => void;
+  handleFileClick: (fileId: string) => void;
   handleCloseEditor: () => void;
   handleBack: () => void;
   handleNavigateToWorkspaceRoot: () => void;
@@ -1655,7 +1694,10 @@ function HomeContent({
       {/* Main Content */}
       <main className="flex-1 overflow-hidden relative z-10">
         {currentView === "explorer" ? (
-          selectedItem && selectedItem.type === "note" ? (
+          (() => {
+            const shouldShowNote = selectedItem && selectedItem.type === "note";
+            return shouldShowNote;
+          })() && selectedItem ? (
             <div className="h-full flex flex-col">
               {/* Header with back button and title */}
               <div className="flex items-center gap-4 p-4 border-b border-border">
@@ -1678,7 +1720,7 @@ function HomeContent({
               </div>
               {/* Notion Block Editor - Centered */}
               <div className="flex-1 overflow-auto">
-                <div className="w-full max-w-4xl mx-auto px-12 py-12 bg-foreground/5">
+                <div className="w-full min-h-full max-w-4xl mx-auto px-12 py-12 bg-foreground/5">
                   <NotionBlockEditor
                     content={selectedItem.content || ""}
                     onSave={(content) => {
@@ -1694,7 +1736,8 @@ function HomeContent({
             <ExplorerWorkspace
               currentFileId={currentFolderId}
               onFileClick={(fileId) => {
-                const found = files.find((file) => file.id === fileId) || null;
+                const found =
+                  workspaceFiles.find((file) => file.id === fileId) || null;
                 if (!found) return;
 
                 if (found.type === "folder") {
@@ -1702,10 +1745,10 @@ function HomeContent({
                   handleFolderClick(found.id);
                 } else {
                   // Notas e outros tipos usam a lógica de item (abre editor, etc.)
-                  handleItemClick(found);
+                  handleFileClick(found.id);
                 }
               }}
-              files={files}
+              files={workspaceFiles}
               onBack={currentFolderId ? handleBack : undefined}
               onNavigateToWorkspaceRoot={handleNavigateToWorkspaceRoot}
               onAddFile={handleAddItem}

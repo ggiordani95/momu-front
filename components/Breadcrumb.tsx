@@ -3,8 +3,6 @@
 import { ChevronRight } from "lucide-react";
 import type { HierarchicalFile } from "@/lib/types";
 import { ReactNode, useMemo } from "react";
-import { findFileById } from "@/modules/files";
-import { WorkspaceSelector } from "../modules/workspace/components/WorkspaceSelector";
 import { useWorkspaceStore } from "@/modules/workspace/stores/workspaceStore";
 
 interface BreadcrumbProps {
@@ -25,9 +23,9 @@ function buildBreadcrumbPath(
   const path: HierarchicalFile[] = [];
   let currentId: string | null = currentFileId;
 
-  // Build path by traversing up the hierarchy
+  // Build path a partir da lista plana usando parent_id
   while (currentId) {
-    const file = findFileById(files, currentId);
+    const file = files.find((f) => f.id === currentId);
     if (!file) break;
 
     path.unshift(file); // Add to beginning
@@ -47,10 +45,16 @@ export default function Breadcrumb({
   const { currentWorkspace } = useWorkspaceStore();
 
   // Build breadcrumb path
-  const breadcrumbPath = useMemo(
-    () => buildBreadcrumbPath(files, currentFileId),
-    [files, currentFileId]
-  );
+  const breadcrumbPath = useMemo(() => {
+    const path = buildBreadcrumbPath(files, currentFileId);
+    console.log("[Breadcrumb] compute path", {
+      currentFileId,
+      filesCount: files?.length || 0,
+      pathIds: path.map((f) => f.id),
+      pathTitles: path.map((f) => f.title),
+    });
+    return path;
+  }, [files, currentFileId]);
 
   return (
     <div className="px-6 py-3 flex items-center gap-3 border-b border-border bg-background/50 backdrop-blur-sm relative z-10">

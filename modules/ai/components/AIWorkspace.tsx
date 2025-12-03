@@ -300,7 +300,16 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
   };
 
   const handleCreateNote = async (folderId: string | null) => {
-    if (!selectedText.trim()) return;
+    console.log("[AIWorkspace] handleCreateNote called", {
+      selectedTextLength: selectedText.trim().length,
+      folderId,
+      activeWorkspaceId,
+    });
+
+    if (!selectedText.trim()) {
+      console.log("[AIWorkspace] handleCreateNote: selectedText is empty");
+      return;
+    }
 
     setIsIndexing(true);
     try {
@@ -323,10 +332,22 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
       const { getNextOrderIndex } = useWorkspaceStore.getState();
       const nextOrderIndex = getNextOrderIndex(activeWorkspaceId, folderId);
 
-      await fileService.create(activeWorkspaceId, {
+      console.log("[AIWorkspace] Creating note file", {
+        workspaceId: activeWorkspaceId,
+        noteData,
+        order_index: nextOrderIndex,
+      });
+
+      const createdFile = await fileService.create(activeWorkspaceId, {
         ...noteData,
         order_index: nextOrderIndex,
       });
+
+      console.log("[AIWorkspace] Note created successfully", {
+        fileId: createdFile.id,
+        title: createdFile.title,
+      });
+
       await syncFiles();
 
       setShowNoteModal(false);
@@ -395,6 +416,7 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
 
   // Reset search when modal opens/closes
   useEffect(() => {
+    console.log("[AIWorkspace] showNoteModal changed:", showNoteModal);
     if (showNoteModal) {
       setTimeout(() => folderSearchInputRef.current?.focus(), 100);
     } else {
@@ -529,8 +551,16 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
+                            console.log("[AIWorkspace] Save button clicked", {
+                              messageId: message.id,
+                              contentLength: message.content.length,
+                              showNoteModal: showNoteModal,
+                            });
                             setSelectedText(message.content);
                             setShowNoteModal(true);
+                            console.log(
+                              "[AIWorkspace] showNoteModal set to true"
+                            );
                           }}
                           onMouseDown={(e) => {
                             e.stopPropagation();
@@ -681,8 +711,210 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
         </div>
       </div>
 
-      {/* Note Creation Modal - Simplified version, full modal code would be here */}
-      {/* Similar structure to the original but moved to this component */}
+      {/* Note Creation Modal */}
+      {showNoteModal && typeof window !== "undefined" && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowNoteModal(false);
+              setSelectedText("");
+            }
+          }}
+          style={{ zIndex: 9999 }}
+        >
+          <div className="bg-background border border-border rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-foreground">
+                Criar nota
+              </h2>
+              <button
+                onClick={() => {
+                  setShowNoteModal(false);
+                  setSelectedText("");
+                }}
+                className="p-1 rounded-lg hover:bg-foreground/10 transition-colors"
+              >
+                <X className="w-4 h-4 text-foreground/60" />
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-foreground/70 mb-2">
+                Escolher pasta (opcional)
+              </label>
+              <div className="relative mb-2">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/40" />
+                <input
+                  ref={folderSearchInputRef}
+                  type="text"
+                  placeholder="Buscar pasta..."
+                  value={folderSearchQuery}
+                  onChange={(e) => setFolderSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-foreground/5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                />
+              </div>
+              <div className="max-h-48 overflow-y-auto border border-border rounded-lg bg-foreground/5">
+                <button
+                  onClick={() => handleCreateNote(null)}
+                  disabled={isIndexing}
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-foreground/10 transition-colors border-b border-border/50"
+                >
+                  <Folder className="w-4 h-4 inline mr-2 text-foreground/60" />
+                  <span className="text-foreground">Raiz do workspace</span>
+                </button>
+                {foldersWithPaths.map((folder) => (
+                  <button
+                    key={folder.id}
+                    onClick={() => handleCreateNote(folder.id)}
+                    disabled={isIndexing}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-foreground/10 transition-colors border-b border-border/50 last:border-b-0"
+                  >
+                    <Folder className="w-4 h-4 inline mr-2 text-foreground/60" />
+                    <span className="text-foreground">
+                      {folder.path.join(" / ")}
+                    </span>
+                  </button>
+                ))}
+                {foldersWithPaths.length === 0 && (
+                  <div className="px-3 py-4 text-sm text-foreground/40 text-center">
+                    Nenhuma pasta encontrada
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 justify-end">
+              <button
+                onClick={() => {
+                  setShowNoteModal(false);
+                  setSelectedText("");
+                }}
+                disabled={isIndexing}
+                className="px-4 py-2 text-sm font-medium text-foreground/70 hover:text-foreground transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleCreateNote(null)}
+                disabled={isIndexing || !selectedText.trim()}
+                className="px-4 py-2 text-sm font-medium bg-foreground/10 hover:bg-foreground/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isIndexing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Criando...
+                  </>
+                ) : (
+                  "Criar na raiz"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Folder Selection Modal for Chat Indexing */}
+      {showFolderModal && typeof window !== "undefined" && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowFolderModal(false);
+              setSelectedChatForIndex(null);
+            }
+          }}
+          style={{ zIndex: 9999 }}
+        >
+          <div className="bg-background border border-border rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-foreground">
+                Escolher pasta para nota
+              </h2>
+              <button
+                onClick={() => {
+                  setShowFolderModal(false);
+                  setSelectedChatForIndex(null);
+                }}
+                className="p-1 rounded-lg hover:bg-foreground/10 transition-colors"
+              >
+                <X className="w-4 h-4 text-foreground/60" />
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-foreground/70 mb-2">
+                Escolher pasta (opcional)
+              </label>
+              <div className="relative mb-2">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/40" />
+                <input
+                  type="text"
+                  placeholder="Buscar pasta..."
+                  value={folderSearchQuery}
+                  onChange={(e) => setFolderSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-foreground/5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                />
+              </div>
+              <div className="max-h-48 overflow-y-auto border border-border rounded-lg bg-foreground/5">
+                <button
+                  onClick={() => handleCreateNoteFromChat(null)}
+                  disabled={isIndexing}
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-foreground/10 transition-colors border-b border-border/50"
+                >
+                  <Folder className="w-4 h-4 inline mr-2 text-foreground/60" />
+                  <span className="text-foreground">Raiz do workspace</span>
+                </button>
+                {foldersWithPaths.map((folder) => (
+                  <button
+                    key={folder.id}
+                    onClick={() => handleCreateNoteFromChat(folder.id)}
+                    disabled={isIndexing}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-foreground/10 transition-colors border-b border-border/50 last:border-b-0"
+                  >
+                    <Folder className="w-4 h-4 inline mr-2 text-foreground/60" />
+                    <span className="text-foreground">
+                      {folder.path.join(" / ")}
+                    </span>
+                  </button>
+                ))}
+                {foldersWithPaths.length === 0 && (
+                  <div className="px-3 py-4 text-sm text-foreground/40 text-center">
+                    Nenhuma pasta encontrada
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 justify-end">
+              <button
+                onClick={() => {
+                  setShowFolderModal(false);
+                  setSelectedChatForIndex(null);
+                }}
+                disabled={isIndexing}
+                className="px-4 py-2 text-sm font-medium text-foreground/70 hover:text-foreground transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleCreateNoteFromChat(null)}
+                disabled={isIndexing}
+                className="px-4 py-2 text-sm font-medium bg-foreground/10 hover:bg-foreground/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isIndexing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Criando...
+                  </>
+                ) : (
+                  "Criar na raiz"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
