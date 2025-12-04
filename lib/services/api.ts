@@ -105,12 +105,38 @@ export async function apiRequest<T>(
     });
   }
 
-  // Build headers object, ensuring X-User-Id is always set and not overwritten
   const headers = new Headers();
   headers.set("Content-Type", "application/json");
-  headers.set("X-User-Id", finalUserId);
 
-  // Add any additional headers from options
+  let userIdToUse = finalUserId;
+  if (options?.headers) {
+    if (options.headers instanceof Headers) {
+      const explicitUserId =
+        options.headers.get("X-User-Id") || options.headers.get("x-user-id");
+      if (explicitUserId) {
+        userIdToUse = explicitUserId;
+      }
+    } else if (Array.isArray(options.headers)) {
+      const userIdEntry = options.headers.find(
+        ([key]) => key.toLowerCase() === "x-user-id"
+      );
+      if (userIdEntry && userIdEntry[1]) {
+        userIdToUse = String(userIdEntry[1]);
+      }
+    } else {
+      // Plain object
+      const explicitUserId =
+        options.headers["X-User-Id"] || options.headers["x-user-id"];
+      if (explicitUserId) {
+        userIdToUse = String(explicitUserId);
+      }
+    }
+  }
+
+  // Always set X-User-Id with the determined value
+  headers.set("X-User-Id", userIdToUse);
+
+  // Add any additional headers from options (excluding X-User-Id since we already set it)
   if (options?.headers) {
     if (options.headers instanceof Headers) {
       options.headers.forEach((value, key) => {
@@ -135,6 +161,16 @@ export async function apiRequest<T>(
         }
       });
     }
+  }
+
+  // Debug: log headers for sync-files endpoint
+  if (endpoint.includes("sync-files") && typeof window !== "undefined") {
+    console.log("[apiRequest] Headers for sync-files:", {
+      endpoint,
+      userIdToUse,
+      finalUserId,
+      allHeaders: Object.fromEntries(headers.entries()),
+    });
   }
 
   // Add timeout to prevent hanging requests

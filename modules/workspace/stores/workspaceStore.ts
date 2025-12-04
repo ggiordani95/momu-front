@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Workspace } from "@/lib/types";
 import type { File } from "@/lib/types";
-import { syncWorkspaceFiles } from "../services/syncWorkspaceFilesService";
+import { syncWorkspaces } from "../services/syncWorkspaces";
 
 // ============================================
 // Types
@@ -181,7 +181,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         try {
           const userId = localStorage.getItem("userId") || "user-001";
 
-          const data = await syncWorkspaceFiles(userId);
+          const data = await syncWorkspaces(userId);
 
           const currentState = get();
           const currentWorkspaceId = currentState.currentWorkspace?.id;

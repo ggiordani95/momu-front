@@ -70,6 +70,7 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const isLoadingChatRef = useRef(false);
 
   const { getFilesByWorkspace, syncFiles, currentWorkspace, workspaces } =
     useWorkspaceStore();
@@ -88,33 +89,48 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
   const deleteChatMutation = useDeleteAIChat();
 
   // Save messages to database whenever they change
+  // Use a ref to track if we're loading a chat to avoid saving during load
   useEffect(() => {
+    // Don't save if we're currently loading a chat
+    if (isLoadingChatRef.current) {
+      isLoadingChatRef.current = false;
+      return;
+    }
+
     if (messages.length > 0) {
       const title =
         messages.find((m) => m.role === "user")?.content.substring(0, 50) ||
         "New Chat";
 
       if (currentChatId) {
-        // Update existing chat
+        // Update existing chat with all messages including content
         updateChatMutation.mutate({
           id: currentChatId,
           data: {
             messages: messages.map((m) => ({
-              ...m,
+              id: m.id,
+              role: m.role,
+              content: m.content, // Ensure content is saved
               timestamp: m.timestamp.toISOString(),
+              rawResponse: m.rawResponse,
+              fullResponse: m.fullResponse,
             })),
           },
         });
       } else {
-        // Create new chat
+        // Create new chat with all messages including content
         createChatMutation.mutate(
           {
             userId,
             workspaceId,
             title,
             messages: messages.map((m) => ({
-              ...m,
+              id: m.id,
+              role: m.role,
+              content: m.content, // Ensure content is saved
               timestamp: m.timestamp.toISOString(),
+              rawResponse: m.rawResponse,
+              fullResponse: m.fullResponse,
             })),
           },
           {
@@ -148,16 +164,32 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
   const loadChat = async (chatId: string) => {
     const chat = chats.find((c) => c.id === chatId);
     if (chat) {
+      // Set flag to prevent saving during load
+      isLoadingChatRef.current = true;
+
       setCurrentChatId(chat.id);
-      setMessages(
-        (chat.messages as unknown[]).map((m) => {
-          const msg = m as Record<string, unknown>;
-          return {
-            ...msg,
-            timestamp: new Date(msg.timestamp as string),
-          } as Message;
-        })
-      );
+
+      // Parse and load messages from chat, ensuring content is preserved
+      const loadedMessages = (chat.messages as unknown[]).map((m) => {
+        const msg = m as Record<string, unknown>;
+        return {
+          id: (msg.id as string) || `msg-${Date.now()}-${msg.role}`,
+          role: (msg.role as "user" | "assistant") || "user",
+          content: (msg.content as string) || "", // Ensure content is loaded
+          timestamp: msg.timestamp
+            ? new Date(msg.timestamp as string)
+            : new Date(),
+          rawResponse: msg.rawResponse as string | undefined,
+          fullResponse: msg.fullResponse as Record<string, unknown> | undefined,
+        } as Message;
+      });
+
+      setMessages(loadedMessages);
+
+      // Scroll to bottom after loading chat
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
     }
   };
 

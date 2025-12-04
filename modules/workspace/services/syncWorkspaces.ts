@@ -20,19 +20,16 @@ export interface SyncFilesResponse {
  * @param userId ID do usuário
  * @returns Objeto com workspaces e files
  */
-export async function syncWorkspaceFiles(
+export async function syncWorkspaces(
   userId: string
 ): Promise<SyncFilesResponse> {
   try {
-    const response = await apiRequest<SyncFilesResponse>(
-      `/workspaces/sync-files`,
-      {
-        method: "GET",
-        headers: {
-          "X-User-Id": userId,
-        },
-      }
-    );
+    const response = await apiRequest<SyncFilesResponse>(`/workspaces/sync`, {
+      method: "GET",
+      headers: {
+        "X-User-Id": userId,
+      },
+    });
 
     return {
       workspaces: response.workspaces || [],

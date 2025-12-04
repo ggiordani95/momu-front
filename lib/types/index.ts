@@ -1,4 +1,4 @@
-import { type ItemType } from "@/modules/files/types/filesTypes";
+import { FileType } from "@/modules/files";
 
 // ============================================
 // Folder Types
@@ -35,7 +35,7 @@ export interface UpdateWorkspaceDto {
 export interface File {
   id: string;
   workspace_id: string;
-  type: ItemType;
+  type: FileType;
   title: string;
   content?: string;
   youtube_id?: string;
@@ -55,7 +55,7 @@ export interface HierarchicalFile extends File {
 }
 
 export interface CreateFileDto {
-  type: ItemType;
+  type: FileType;
   title: string;
   content?: string;
   youtube_url?: string;
