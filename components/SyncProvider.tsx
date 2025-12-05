@@ -7,18 +7,11 @@ import { useSyncWorkspace } from "@/modules/workspace/hooks/useSyncWorkspaceFile
  * Provider que sincroniza automaticamente os dados quando a aplicação carrega
  * Use este componente no layout principal para garantir que os dados estejam sempre sincronizados
  *
- * Nota: A sincronização já é feita automaticamente pelo useSyncFiles hook,
- * então não precisamos chamar syncFiles() novamente aqui
+ * Nota: A sincronização já é feita automaticamente pelo useSyncWorkspaces hook,
+ * então não precisamos chamar syncWorkspaces() novamente aqui
  */
 export function SyncProvider({ children }: { children: React.ReactNode }) {
-  const { isSyncing, error } = useSyncWorkspace();
-
-  // Log de sincronização (opcional, pode remover em produção)
-  useEffect(() => {
-    if (isSyncing) {
-      console.log("🔄 Sincronizando workspaces e files...");
-    }
-  }, [isSyncing]);
+  const { error } = useSyncWorkspace();
 
   useEffect(() => {
     if (error) {

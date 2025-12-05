@@ -1703,7 +1703,7 @@ function BlockItem({
               left: `${commandMenuPos.left}px`,
               backgroundColor: "var(--sidebar-bg)",
               backdropFilter: "blur(12px)",
-              borderColor: "var(--border-color)",
+              borderColor: "var(--border)",
             }}
           >
             <div className="py-1 max-h-80 overflow-y-auto">
@@ -1769,7 +1769,7 @@ function BlockItem({
               left: `${toolbarPos.left}px`,
               backgroundColor: "var(--sidebar-bg)",
               backdropFilter: "blur(12px)",
-              borderColor: "var(--border-color)",
+              borderColor: "var(--border)",
               transform: "translateX(-50%)",
             }}
           >
@@ -1803,7 +1803,7 @@ function BlockItem({
             </ToolbarButton>
             <div
               className="w-px h-4 mx-0.5"
-              style={{ backgroundColor: "var(--border-color)" }}
+              style={{ backgroundColor: "var(--border)" }}
             />
             <ToolbarButton
               onClick={() => editor.chain().focus().toggleCode().run()}
@@ -1824,7 +1824,7 @@ function BlockItem({
             </ToolbarButton>
             <div
               className="w-px h-4 mx-0.5"
-              style={{ backgroundColor: "var(--border-color)" }}
+              style={{ backgroundColor: "var(--border)" }}
             />
             <ToolbarButton
               onClick={() => {

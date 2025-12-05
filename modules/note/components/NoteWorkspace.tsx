@@ -758,7 +758,7 @@ export default function PageEditor({
       {/* Header */}
       <div
         className="px-6 py-4 border-b flex items-center gap-4 shrink-0"
-        style={{ borderColor: "var(--border-color)" }}
+        style={{ borderColor: "var(--border)" }}
       >
         <button
           onClick={onBack}
@@ -894,7 +894,7 @@ export default function PageEditor({
 
           <div
             className="w-px h-4 mx-0.5"
-            style={{ backgroundColor: "var(--border-color)" }}
+            style={{ backgroundColor: "var(--border)" }}
           />
 
           {/* Code */}
@@ -1017,7 +1017,7 @@ export default function PageEditor({
 
           <div
             className="w-px h-4 mx-0.5"
-            style={{ backgroundColor: "var(--border-color)" }}
+            style={{ backgroundColor: "var(--border)" }}
           />
 
           {/* Font Size */}
@@ -1077,7 +1077,7 @@ export default function PageEditor({
           style={{
             top: `${blockMenuPosition.top}px`,
             left: `${blockMenuPosition.left}px`,
-            borderColor: "var(--border-color)",
+            borderColor: "var(--border)",
             backgroundColor: "var(--background)",
           }}
         >

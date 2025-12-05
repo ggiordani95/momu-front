@@ -305,7 +305,7 @@ export default function FileCard({
           className="w-full px-2 py-1 text-sm text-center rounded border focus:outline-none focus:ring-2 focus:ring-blue-500/50"
           style={{
             backgroundColor: "var(--background)",
-            borderColor: "var(--border-color)",
+            borderColor: "var(--border)",
             color: "var(--foreground)",
           }}
         />

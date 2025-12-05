@@ -233,7 +233,7 @@ export function ExplorerWorkspace({
       {/* File Grid */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-y-auto p-6 relative"
+        className="flex-1 overflow-y-auto p-6 relative bg-background"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}

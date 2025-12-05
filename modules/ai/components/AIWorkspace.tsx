@@ -72,7 +72,7 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isLoadingChatRef = useRef(false);
 
-  const { getFilesByWorkspace, syncFiles, currentWorkspace, workspaces } =
+  const { getFilesByWorkspace, syncWorkspaces, currentWorkspace, workspaces } =
     useWorkspaceStore();
   const activeWorkspaceId = currentWorkspace?.id || workspaceId;
 
@@ -250,7 +250,7 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
       });
 
       // Sync files to update the store
-      await syncFiles();
+      await syncWorkspaces();
 
       // Close modal and show success
       setShowFolderModal(false);
@@ -380,7 +380,7 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
         title: createdFile.title,
       });
 
-      await syncFiles();
+      await syncWorkspaces();
 
       setShowNoteModal(false);
       setSelectedText("");

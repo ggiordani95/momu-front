@@ -482,7 +482,7 @@ export default function SimpleSidebar({
     if (trashItems.length === 0) return;
 
     try {
-      const { removeFilePermanently, syncFiles } = useWorkspaceStore.getState();
+      const { removeFilePermanently } = useWorkspaceStore.getState();
 
       // Optimistically remove all files from Zustand store immediately
       trashItems.forEach((file) => {
@@ -493,30 +493,13 @@ export default function SimpleSidebar({
       await Promise.all(
         trashItems.map((file) => permanentDeleteMutation.mutateAsync(file.id))
       );
-
-      // Sync files to refresh state from backend
-      if (!useWorkspaceStore.getState().isSyncing) {
-        syncFiles();
-      }
     } catch (_error) {
       // On error, re-sync to get correct state
-      const { syncFiles } = useWorkspaceStore.getState();
-      if (!useWorkspaceStore.getState().isSyncing) {
-        syncFiles();
-      }
     }
   };
   return (
-    <aside
-      className="w-64 bg-sidebar shrink-0 border-r flex flex-col relative z-10"
-      style={{
-        borderColor: "var(--border-color)",
-      }}
-    >
-      <div
-        className="flex items-center border-b"
-        style={{ borderColor: "var(--border-color)" }}
-      >
+    <aside className="w-64 shrink-0 border-r border-border flex flex-col relative z-10">
+      <div className="flex items-center">
         <div className="w-full p-3">
           <WorkspaceSelectorButton
             workspaceId={workspaceId}
@@ -539,37 +522,13 @@ export default function SimpleSidebar({
             Meu explorador
           </button>
 
-          {/* <button
-            onClick={() => onNavigate("social")}
-            className={`w-full flex items-center gap-2 p-2 rounded-md text-md font-medium transition-colors ${
-              currentView === "social"
-                ? "bg-hover text-foreground"
-                : "hover:bg-hover/50 text-foreground/70"
-            }`}
-          >
-            <Share2 size={16} />
-            Redes Sociais
-          </button> */}
-
-          {/* <button
-            onClick={() => onNavigate("planner")}
-            className={`w-full flex items-center gap-2 p-2 rounded-md text-md font-medium transition-colors ${
-              currentView === "planner"
-                ? "bg-hover text-foreground"
-                : "hover:bg-hover/50 text-foreground/70"
-            }`}
-          >
-            <Calendar size={16} />
-            Planejador
-          </button> */}
-
           <button
             onClick={() => handleNavigate("trash")}
             onContextMenu={handleTrashContextMenu}
             className={`w-full flex items-center gap-2 p-2 rounded-md text-sm font-medium transition-colors ${
               activeView === "trash"
-                ? "bg-hover text-foreground"
-                : "hover:bg-hover/50 text-foreground/70"
+                ? "bg-[var(--hover-bg)] text-foreground"
+                : "hover:bg-[var(--hover-bg)]/50 text-foreground/70"
             }`}
           >
             <Trash2 size={18} />

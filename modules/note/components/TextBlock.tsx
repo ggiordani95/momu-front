@@ -339,7 +339,7 @@ export default function TextBlock({
             backgroundColor: "var(--sidebar-bg)",
             backdropFilter: "blur(12px) saturate(180%)",
             WebkitBackdropFilter: "blur(12px) saturate(180%)",
-            borderColor: "var(--border-color)",
+            borderColor: "var(--border)",
             transform: "translateX(-50%)",
             color: "var(--foreground)",
           }}
@@ -399,7 +399,7 @@ export default function TextBlock({
 
           <div
             className="w-px h-4 mx-0.5"
-            style={{ backgroundColor: "var(--border-color)" }}
+            style={{ backgroundColor: "var(--border)" }}
           />
 
           <button
@@ -431,7 +431,7 @@ export default function TextBlock({
 
           <div
             className="w-px h-4 mx-0.5"
-            style={{ backgroundColor: "var(--border-color)" }}
+            style={{ backgroundColor: "var(--border)" }}
           />
 
           <div className="relative">
@@ -455,7 +455,7 @@ export default function TextBlock({
                   backgroundColor: "var(--sidebar-bg)",
                   backdropFilter: "blur(12px) saturate(180%)",
                   WebkitBackdropFilter: "blur(12px) saturate(180%)",
-                  borderColor: "var(--border-color)",
+                  borderColor: "var(--border)",
                 }}
               >
                 {colors.map((color) => (
@@ -469,7 +469,7 @@ export default function TextBlock({
                     className="w-5 h-5 rounded border hover:scale-110 transition-transform"
                     style={{
                       backgroundColor: color,
-                      borderColor: "var(--border-color)",
+                      borderColor: "var(--border)",
                     }}
                     title={color}
                   />

@@ -97,14 +97,6 @@ export async function apiRequest<T>(
   const userId = getUserId();
   const finalUserId = userId || TEST_USER_ID;
 
-  // Debug: log the userId being sent
-  if (typeof window !== "undefined") {
-    console.log(`[API Request] ${options?.method || "GET"} ${endpoint}`, {
-      userId: finalUserId,
-      hasLocalStorage: !!localStorage.getItem("userId"),
-    });
-  }
-
   const headers = new Headers();
   headers.set("Content-Type", "application/json");
 
@@ -113,24 +105,41 @@ export async function apiRequest<T>(
     if (options.headers instanceof Headers) {
       const explicitUserId =
         options.headers.get("X-User-Id") || options.headers.get("x-user-id");
-      if (explicitUserId) {
-        userIdToUse = explicitUserId;
+      // Validate that explicit userId is not empty
+      if (explicitUserId && explicitUserId.trim() !== "") {
+        userIdToUse = explicitUserId.trim();
       }
     } else if (Array.isArray(options.headers)) {
       const userIdEntry = options.headers.find(
         ([key]) => key.toLowerCase() === "x-user-id"
       );
-      if (userIdEntry && userIdEntry[1]) {
-        userIdToUse = String(userIdEntry[1]);
+      if (
+        userIdEntry &&
+        userIdEntry[1] &&
+        String(userIdEntry[1]).trim() !== ""
+      ) {
+        userIdToUse = String(userIdEntry[1]).trim();
       }
     } else {
       // Plain object
       const explicitUserId =
         options.headers["X-User-Id"] || options.headers["x-user-id"];
-      if (explicitUserId) {
-        userIdToUse = String(explicitUserId);
+      // Validate that explicit userId is not empty
+      if (explicitUserId && String(explicitUserId).trim() !== "") {
+        userIdToUse = String(explicitUserId).trim();
       }
     }
+  }
+
+  // Final validation - ensure userIdToUse is valid
+  if (!userIdToUse || userIdToUse.trim() === "") {
+    console.error("[apiRequest] Invalid userId after processing:", {
+      userIdToUse,
+      finalUserId,
+      endpoint,
+      explicitHeader: options?.headers,
+    });
+    userIdToUse = TEST_USER_ID; // Fallback to test user
   }
 
   // Always set X-User-Id with the determined value
@@ -163,16 +172,6 @@ export async function apiRequest<T>(
     }
   }
 
-  // Debug: log headers for sync-files endpoint
-  if (endpoint.includes("sync-files") && typeof window !== "undefined") {
-    console.log("[apiRequest] Headers for sync-files:", {
-      endpoint,
-      userIdToUse,
-      finalUserId,
-      allHeaders: Object.fromEntries(headers.entries()),
-    });
-  }
-
   // Add timeout to prevent hanging requests
   // AI endpoints need more time (130s), others use default (30s)
   const defaultTimeout = 30000; // 30 seconds
@@ -181,20 +180,20 @@ export async function apiRequest<T>(
     options?.timeout ??
     (endpoint.includes("/ai/") ? aiTimeout : defaultTimeout);
 
-  // Log timeout for AI requests for debugging
-  if (endpoint.includes("/ai/") && typeof window !== "undefined") {
-    console.log(
-      `[API] Using ${timeout / 1000}s timeout for AI endpoint: ${endpoint}`
-    );
-  }
-
-  // Remove timeout from options before passing to fetch (it's not a valid RequestInit property)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { timeout: _removedTimeout, ...fetchOptions } = options || {};
+  // Remove timeout and headers from options before passing to fetch
+  // We handle headers separately to ensure X-User-Id is always set correctly
+  const {
+    timeout: _removedTimeout,
+    headers: _removedHeaders,
+    ...fetchOptions
+  } = options || {};
+  // Suppress unused variable warnings - we intentionally remove these
+  void _removedTimeout;
+  void _removedHeaders;
 
   const config: RequestInit = {
     ...fetchOptions,
-    headers: headers,
+    headers: headers, // Our processed headers (including X-User-Id) take precedence
   };
 
   const controller = new AbortController();

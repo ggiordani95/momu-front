@@ -28,7 +28,7 @@ export function AIAssistant({
   );
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { addOptimisticFile, syncFiles } = useWorkspaceStore();
+  const { addOptimisticFile, syncWorkspaces } = useWorkspaceStore();
 
   const handleGenerate = async () => {
     if (!topic.trim()) {
@@ -136,7 +136,7 @@ export function AIAssistant({
       }
 
       // Sync files to update store with real IDs
-      await syncFiles();
+      await syncWorkspaces();
 
       // Clear topic and close
       setTopic("");
@@ -151,7 +151,7 @@ export function AIAssistant({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-[var(--sidebar-bg)] rounded-lg p-6 w-full max-w-md border border-[var(--border-color)]">
+      <div className="bg-sidebar rounded-lg p-6 w-full max-w-md border border-border">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-purple-500" />
@@ -194,7 +194,7 @@ export function AIAssistant({
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
               placeholder="Ex: Aprendizado de Machine Learning, História do Brasil, Receitas de Culinária..."
-              className="w-full px-3 py-2 bg-background border border-[var(--border-color)] rounded-md text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
+              className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
               rows={4}
               disabled={isGenerating}
               onKeyDown={(e) => {
@@ -233,7 +233,7 @@ export function AIAssistant({
             <button
               onClick={onClose}
               disabled={isGenerating}
-              className="px-4 py-2 border border-[var(--border-color)] rounded-md text-foreground/70 hover:text-foreground hover:bg-hover/50 transition-colors disabled:opacity-50"
+              className="px-4 py-2 border border-border rounded-md text-foreground/70 hover:text-foreground hover:bg-hover/50 transition-colors disabled:opacity-50"
             >
               Cancelar
             </button>

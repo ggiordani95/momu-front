@@ -150,8 +150,8 @@ export default function WorkspaceView({
         target?.isContentEditable ||
         target?.closest("input, textarea, [contenteditable]");
 
-      // Open search with Ctrl+K or Cmd+K
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      // Open search with Ctrl+/ or Cmd+/ (doesn't conflict with browser)
+      if ((e.metaKey || e.ctrlKey) && e.key === "/") {
         e.preventDefault();
         setIsSearchOpen(true);
         setShowSearchHint(false);
@@ -909,10 +909,8 @@ export default function WorkspaceView({
 
         if (result.success) {
           // Sync files to get latest state from backend
-          const { syncFiles } = useWorkspaceStore.getState();
-          if (!useWorkspaceStore.getState().isSyncing) {
-            await syncFiles();
-          }
+          const { syncWorkspaces } = useWorkspaceStore.getState();
+          await syncWorkspaces();
         } else {
           throw new Error("Delete batch failed");
         }
@@ -956,9 +954,9 @@ export default function WorkspaceView({
       try {
         await fileService.delete(id);
         // Sync files to refresh state and include deleted files
-        const { syncFiles } = useWorkspaceStore.getState();
+        const { syncWorkspaces } = useWorkspaceStore.getState();
         if (!useWorkspaceStore.getState().isSyncing) {
-          await syncFiles();
+          await syncWorkspaces();
         }
       } catch (error) {
         console.error("[handleItemDelete] Error deleting file:", error);
@@ -1057,9 +1055,9 @@ export default function WorkspaceView({
         } as CreateFileDto & { id: string });
 
         // Sync files to refresh all data and ensure consistency
-        const { syncFiles } = useWorkspaceStore.getState();
+        const { syncWorkspaces } = useWorkspaceStore.getState();
         if (!useWorkspaceStore.getState().isSyncing) {
-          await syncFiles();
+          await syncWorkspaces();
         }
 
         // Navigate to the parent folder to show the new file
@@ -1270,7 +1268,7 @@ export default function WorkspaceView({
               <div className="p-2.5 rounded-xl flex items-center justify-center gap-2 text-foreground bg-background/80 backdrop-blur-sm">
                 <span className="text-sm font-medium">Pressione</span>
                 <kbd className="px-2.5 py-1 rounded-lg text-sm text-foreground/70 font-semibold bg-foreground/5">
-                  {isMac ? "Cmd" : "Ctrl"} + K
+                  {isMac ? "Cmd" : "Ctrl"} + /
                 </kbd>
                 <span className="text-sm font-medium">para buscar</span>
               </div>

@@ -9,7 +9,7 @@ import { useAuth } from "@/lib/contexts/AuthContext";
 export function useSyncWorkspace() {
   const { userId } = useAuth();
   const {
-    syncFiles: syncStore,
+    syncWorkspaces: syncStore,
     isSyncing,
     error,
     lastSyncAt,

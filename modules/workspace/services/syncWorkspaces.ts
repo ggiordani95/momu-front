@@ -23,11 +23,22 @@ export interface SyncFilesResponse {
 export async function syncWorkspaces(
   userId: string
 ): Promise<SyncFilesResponse> {
+  // Validate userId before making the request
+  if (!userId || userId.trim() === "") {
+    return {
+      workspaces: [],
+      files: [],
+      error: "User ID is required",
+    };
+  }
+
   try {
+    const normalizedUserId = userId.trim();
+
     const response = await apiRequest<SyncFilesResponse>(`/workspaces/sync`, {
       method: "GET",
       headers: {
-        "X-User-Id": userId,
+        "X-User-Id": normalizedUserId,
       },
     });
 

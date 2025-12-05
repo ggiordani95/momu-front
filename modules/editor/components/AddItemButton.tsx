@@ -18,7 +18,7 @@ export default function AddItemButton({
       <button
         onClick={onClick}
         className="flex items-center gap-2 px-4 py-2 text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 border-2 border-dashed rounded-lg transition-colors hover:border-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-900/10 bg-background/70"
-        style={{ borderColor: "var(--border-color)" }}
+        style={{ borderColor: "var(--border)" }}
       >
         <Plus size={16} />
         <span>{label}</span>

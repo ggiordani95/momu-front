@@ -2,13 +2,13 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Workspace } from "@/lib/types";
 import type { File } from "@/lib/types";
-import { syncWorkspaces } from "../services/syncWorkspaces";
+import { syncWorkspaces } from "@/modules/workspace/services/syncWorkspaces";
 
 // ============================================
 // Types
 // ============================================
 
-export interface SyncFilesResponse {
+export interface SyncWorkspacesResponse {
   workspaces: Workspace[];
   files: File[];
   error?: string;
@@ -43,10 +43,10 @@ interface WorkspaceState {
   // Actions
   setWorkspaces: (workspaces: Workspace[]) => void;
   setFiles: (files: File[]) => void;
-  setSyncData: (data: SyncFilesResponse) => void;
+  setSyncData: (data: SyncWorkspacesResponse) => void;
   setCurrentWorkspace: (workspace: CurrentWorkspace | null | string) => void;
   setCurrentView: (view: ViewType) => void;
-  syncFiles: () => Promise<void>;
+  syncWorkspaces: () => Promise<void>;
   addOptimisticFile: (file: File) => void;
   markFileAsDeleted: (fileId: string) => void;
   markFilesAsDeleted: (fileIds: string[]) => void;
@@ -168,7 +168,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       // Sync action
-      syncFiles: async () => {
+      syncWorkspaces: async () => {
         const state = get();
 
         // Evitar múltiplas chamadas simultâneas
@@ -179,7 +179,17 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         set({ isSyncing: true, error: null });
 
         try {
-          const userId = localStorage.getItem("userId") || "user-001";
+          // Get userId from localStorage and validate it
+          const rawUserId = localStorage.getItem("userId");
+          const userId =
+            rawUserId && rawUserId.trim() !== ""
+              ? rawUserId.trim()
+              : "user-001";
+
+          // Ensure userId is valid before making the request
+          if (!userId || userId.trim() === "") {
+            throw new Error("User ID is required");
+          }
 
           const data = await syncWorkspaces(userId);
 

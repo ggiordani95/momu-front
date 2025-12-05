@@ -351,7 +351,7 @@ export default function RichTextEditor({
             backgroundColor: "var(--sidebar-bg)",
             backdropFilter: "blur(12px) saturate(180%)",
             WebkitBackdropFilter: "blur(12px) saturate(180%)",
-            borderColor: "var(--border-color)",
+            borderColor: "var(--border)",
             transform: "translateX(-50%)",
             color: "var(--foreground)",
           }}
@@ -416,7 +416,7 @@ export default function RichTextEditor({
 
           <div
             className="w-px h-4 mx-0.5"
-            style={{ backgroundColor: "var(--border-color)" }}
+            style={{ backgroundColor: "var(--border)" }}
           />
 
           {/* Code */}
@@ -450,7 +450,7 @@ export default function RichTextEditor({
 
           <div
             className="w-px h-4 mx-0.5"
-            style={{ backgroundColor: "var(--border-color)" }}
+            style={{ backgroundColor: "var(--border)" }}
           />
 
           {/* Color Picker */}
@@ -475,7 +475,7 @@ export default function RichTextEditor({
                   backgroundColor: "var(--sidebar-bg)",
                   backdropFilter: "blur(12px) saturate(180%)",
                   WebkitBackdropFilter: "blur(12px) saturate(180%)",
-                  borderColor: "var(--border-color)",
+                  borderColor: "var(--border)",
                 }}
               >
                 {colors.map((color) => (
@@ -489,7 +489,7 @@ export default function RichTextEditor({
                     className="w-5 h-5 rounded border hover:scale-110 transition-transform"
                     style={{
                       backgroundColor: color,
-                      borderColor: "var(--border-color)",
+                      borderColor: "var(--border)",
                     }}
                     title={color}
                   />
@@ -501,7 +501,7 @@ export default function RichTextEditor({
           {/* More Options */}
           <div
             className="w-px h-4 mx-0.5"
-            style={{ backgroundColor: "var(--border-color)" }}
+            style={{ backgroundColor: "var(--border)" }}
           />
 
           <button
@@ -518,8 +518,7 @@ export default function RichTextEditor({
       <div
         className="border rounded-lg"
         style={{
-          borderColor:
-            isEditing || autoFocus ? "var(--border-color)" : "transparent",
+          borderColor: isEditing || autoFocus ? "var(--border)" : "transparent",
         }}
       >
         <EditorContent editor={editor} />

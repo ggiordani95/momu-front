@@ -1,17 +1,38 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useMemo, useEffect, useState } from "react";
 import {
   Search,
-  File as FileIcon,
-  Folder,
-  CornerDownLeft,
-  X,
+  Settings,
+  Trash2,
+  Sparkles,
+  User,
+  LogOut,
+  FolderTree,
+  Copy,
 } from "lucide-react";
+import { FolderIcon, NoteIcon, VideoIcon } from "@/components/Icons";
 import { HierarchicalFile } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useWorkspaceStore } from "@/modules/workspace/stores/workspaceStore";
 import { buildHierarchy } from "@/modules/files";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { useCommandState } from "cmdk";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface SearchFile extends HierarchicalFile {
   workspaceName?: string;
@@ -24,37 +45,26 @@ interface GlobalSearchProps {
   workspaceId: string;
 }
 
-export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
-  const [query, setQuery] = useState("");
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
+// Component to access search value from Command
+function CommandSearchResults({ onClose }: { onClose: () => void }) {
+  const search = useCommandState((state) => state.search);
   const router = useRouter();
-
-  // Get files from all workspaces
   const { files: allFilesFromStore, getWorkspaceById } = useWorkspaceStore();
 
-  // Filter active files from all workspaces - search directly in flat array
+  // Get files from all workspaces
   const activeFiles = useMemo(() => {
     const filtered = allFilesFromStore.filter((file) => {
-      // Filter out temporary/optimistic files that haven't been created yet
       const isTemporary = file.id.startsWith("temp-");
       const isActive = file.active !== false;
       const hasWorkspace = !!file.workspace_id;
-
-      // Additional check: ensure file has a valid created_at timestamp
-      // Optimistic files might not have this or might have a very recent timestamp
       const hasValidTimestamp = !!file.created_at;
-
       const shouldInclude =
         !isTemporary && isActive && hasWorkspace && hasValidTimestamp;
-
       return shouldInclude;
     });
-
     return filtered;
   }, [allFilesFromStore]);
 
-  // Build hierarchy for navigation purposes (only when needed for path building)
   const files = useMemo(() => {
     try {
       return buildHierarchy(activeFiles as HierarchicalFile[]);
@@ -64,22 +74,20 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
     }
   }, [activeFiles]);
 
-  // Search directly in the flat array of active files (no need to flatten hierarchy)
-  const filteredItems: SearchFile[] = useMemo(() => {
-    if (!query) return [];
+  const filterFiles = (search: string): SearchFile[] => {
+    if (!search) return [];
 
     const filtered = activeFiles
       .filter((file) => {
         const matches =
-          file.title.toLowerCase().includes(query.toLowerCase()) &&
+          file.title.toLowerCase().includes(search.toLowerCase()) &&
           !file.id.startsWith("temp-") &&
           file.active !== false &&
-          !!file.workspace_id; // Ensure file has a workspace
+          !!file.workspace_id;
         return matches;
       })
       .slice(0, 10)
       .map((file) => {
-        // Get workspace info for this file
         const workspace = getWorkspaceById(file.workspace_id || "");
         return {
           ...file,
@@ -89,58 +97,6 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
       });
 
     return filtered;
-  }, [activeFiles, query, getWorkspaceById]);
-
-  useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 100);
-      setTimeout(() => setQuery(""), 100);
-      setTimeout(() => setSelectedIndex(0), 100);
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    setTimeout(() => setSelectedIndex(0), 100);
-  }, [query]);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setSelectedIndex((prev) => Math.min(prev + 1, filteredItems.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setSelectedIndex((prev) => Math.max(prev - 1, 0));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      if (filteredItems[selectedIndex]) {
-        handleSelect(filteredItems[selectedIndex]);
-      }
-    } else if (e.key === "Escape") {
-      onClose();
-    }
-  };
-
-  const handleSelect = (file: SearchFile) => {
-    // Switch workspace if needed
-    if (file.workspaceId) {
-      const { setCurrentWorkspace, workspaces } = useWorkspaceStore.getState();
-      const workspace = workspaces.find((w) => w.id === file.workspaceId);
-      if (workspace) {
-        setCurrentWorkspace({
-          id: workspace.id,
-          title: workspace.title,
-        });
-      }
-    }
-
-    const path = buildPath(files, file.id);
-    // Always navigate to explorer view (workspace managed by Zustand)
-    if (path) {
-      router.push(`/explorer/${path.join("/")}`);
-    } else {
-      router.push(`/explorer/${file.id}`);
-    }
-    onClose();
   };
 
   const buildPath = (
@@ -163,390 +119,285 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
     return null;
   };
 
-  if (!isOpen) return null;
+  const handleSelect = (file: SearchFile) => {
+    if (file.workspaceId) {
+      const { setCurrentWorkspace, workspaces } = useWorkspaceStore.getState();
+      const workspace = workspaces.find((w) => w.id === file.workspaceId);
+      if (workspace) {
+        setCurrentWorkspace({
+          id: workspace.id,
+          title: workspace.title,
+        });
+      }
+    }
 
-  // Detect dark mode
-  const isDarkMode =
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const path = buildPath(files, file.id);
+    if (path) {
+      router.push(`/explorer/${path.join("/")}`);
+    } else {
+      router.push(`/explorer/${file.id}`);
+    }
+    onClose();
+  };
 
-  const darkModeBackground = isDarkMode
-    ? "rgba(255, 255, 255, 0.12)"
-    : "rgba(255, 255, 255, 0.5)";
-  const darkModeText = isDarkMode
-    ? "rgba(255, 255, 255, 0.9)"
-    : "rgba(0, 0, 0, 0.9)";
+  const filteredFiles = filterFiles(search);
+
+  if (!search) return null;
 
   return (
-    <div className="fixed inset-0 z-100 flex items-start justify-center pt-[28vh] px-4">
-      {/* Backdrop with blur - Glass effect */}
-      <div
-        className="fixed inset-0 transition-opacity duration-500"
-        onClick={onClose}
-        style={{
-          backgroundColor: isDarkMode
-            ? "rgba(0, 0, 0, 0.2)"
-            : "rgba(255, 255, 255, 0.6)",
-          backdropFilter: "blur(1px) saturate(120%)",
-          WebkitBackdropFilter: "blur(1px) saturate(120%)",
-        }}
-      />
-
-      {/* Search Container - Glass effect Style */}
-      <div
-        className="w-full max-w-[700px] relative z-10 animate-in fade-in zoom-in-95 duration-200"
-        style={{
-          animation: "spotlight-in 0.1s cubic-bezier(0.16, 1, 0.3, 1)",
-        }}
-      >
-        <div
-          className="rounded-3xl overflow-hidden shadow-2xl border"
-          style={{
-            backgroundColor: isDarkMode
-              ? "rgba(0, 0, 0, 0.2)"
-              : "rgba(255, 255, 255, 0.6)",
-            backdropFilter: "blur(80px) saturate(180%)",
-            WebkitBackdropFilter: "blur(80px) saturate(180%)",
-            border: isDarkMode
-              ? "1px solid rgba(255, 255, 255, 0.15)"
-              : "1px solid rgba(255, 255, 255, 0.5)",
-            boxShadow: isDarkMode
-              ? "0 20px 60px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15), inset 0 -1px 0 rgba(255, 255, 255, 0.05)"
-              : "0 20px 60px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(255, 255, 255, 0.3)",
-          }}
+    <>
+      {filteredFiles.map((file) => (
+        <CommandItem
+          key={file.id}
+          value={`${file.title} ${file.workspaceName || ""}`}
+          onSelect={() => handleSelect(file)}
+          className="mx-2 rounded-lg py-2.5"
         >
-          {/* Search Input */}
-          <div
-            className="flex items-center px-6 py-5 border-b"
-            style={{
-              borderColor: isDarkMode
-                ? "rgba(255, 255, 255, 0.12)"
-                : "rgba(255, 255, 255, 0.3)",
-              backgroundColor: darkModeBackground,
-              backdropFilter: "blur(20px) saturate(180%)",
-              WebkitBackdropFilter: "blur(20px) saturate(180%)",
-            }}
-          >
-            <input
-              ref={inputRef}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Buscar arquivos e pastas..."
-              className="flex-1 bg-transparent border-none outline-none text-lg placeholder:opacity-50 font-normal"
-              style={{
-                color: isDarkMode
-                  ? "rgba(255, 255, 255, 0.9)"
-                  : "rgba(0, 0, 0, 0.9)",
-                caretColor: "#007AFF",
-              }}
-            />
-            {query && (
-              <button
-                onClick={() => setQuery("")}
-                className="ml-3 p-2 rounded-lg transition-colors"
-                style={{
-                  color: isDarkMode
-                    ? "rgba(255, 255, 255, 0.5)"
-                    : "rgba(0, 0, 0, 0.5)",
-                  backgroundColor: darkModeBackground,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = isDarkMode
-                    ? "rgba(255, 255, 255, 0.15)"
-                    : "rgba(0, 0, 0, 0.1)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = isDarkMode
-                    ? "rgba(255, 255, 255, 0.1)"
-                    : "rgba(0, 0, 0, 0.05)";
-                }}
-              >
-                <X size={18} />
-              </button>
-            )}
-          </div>
+          <div className="flex items-center gap-4">
+            <div className="shrink-0 flex items-center justify-center w-10 h-10">
+              {file.type === "folder" ? (
+                <FolderIcon size={20} />
+              ) : file.type === "video" ? (
+                <VideoIcon size={20} />
+              ) : (
+                <NoteIcon size={20} />
+              )}
+            </div>
 
-          {/* Results List */}
-          <div
-            className="max-h-[500px] overflow-y-auto"
-            style={{
-              scrollbarWidth: "thin",
-              scrollbarColor: isDarkMode
-                ? "rgba(255, 255, 255, 0.2) transparent"
-                : "rgba(0, 0, 0, 0.2) transparent",
-            }}
-          >
-            {query && filteredItems.length === 0 ? (
-              <div
-                className="py-16 text-center"
-                style={{
-                  backgroundColor: darkModeBackground,
-                  backdropFilter: "blur(20px) saturate(180%)",
-                  WebkitBackdropFilter: "blur(20px) saturate(180%)",
-                }}
-              >
-                <div
-                  className="text-sm"
-                  style={{
-                    color: isDarkMode
-                      ? "rgba(255, 255, 255, 0.5)"
-                      : "rgba(0, 0, 0, 0.5)",
-                  }}
-                >
-                  No results found
-                </div>
+            <div className="flex-1 overflow-hidden min-w-0">
+              <div className="text-sm font-medium truncate mb-0.5">
+                {file.title}
               </div>
-            ) : query ? (
-              <div
-                className="py-2"
-                style={{ backgroundColor: darkModeBackground }}
-              >
-                {filteredItems.map((item, index) => (
-                  <div
-                    key={item.id}
-                    onClick={() => handleSelect(item)}
-                    className="flex items-center  gap-4 px-6 py-4 cursor-pointer transition-all duration-150"
-                  >
-                    {/* Icon */}
-                    <div
-                      className="shrink-0 flex items-center justify-center"
-                      style={{
-                        width: "40px",
-                        height: "40px",
-                      }}
-                    >
-                      {item.type === "folder" ? (
-                        <Folder size={24} style={{ color: "#3b82f6" }} />
-                      ) : item.type === "video" ? (
-                        <FileIcon size={24} style={{ color: "#ef4444" }} />
-                      ) : (
-                        <FileIcon size={24} style={{ color: "#8b5cf6" }} />
-                      )}
-                    </div>
-
-                    {/* Text Content */}
-                    <div className="flex-1 overflow-hidden min-w-0">
-                      <div
-                        className="text-base font-medium truncate mb-1"
-                        style={{
-                          color: isDarkMode
-                            ? "rgba(255, 255, 255, 0.9)"
-                            : "rgba(0, 0, 0, 0.9)",
-                        }}
-                      >
-                        {item.title}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="text-sm truncate"
-                          style={{
-                            color: isDarkMode
-                              ? "rgba(255, 255, 255, 0.6)"
-                              : "rgba(0, 0, 0, 0.6)",
-                          }}
-                        >
-                          {item.type === "folder"
-                            ? "Folder"
-                            : item.type === "video"
-                            ? "Video"
-                            : item.type === "note"
-                            ? "Note"
-                            : "File"}
-                        </div>
-                        {item.workspaceName && (
-                          <>
-                            <span
-                              style={{
-                                color: isDarkMode
-                                  ? "rgba(255, 255, 255, 0.3)"
-                                  : "rgba(0, 0, 0, 0.3)",
-                              }}
-                            >
-                              •
-                            </span>
-                            <div
-                              className="text-sm truncate"
-                              style={{
-                                color: isDarkMode
-                                  ? "rgba(255, 255, 255, 0.5)"
-                                  : "rgba(0, 0, 0, 0.5)",
-                              }}
-                            >
-                              {item.workspaceName}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Enter indicator */}
-                    {index === selectedIndex && (
-                      <div
-                        className="flex items-center gap-1 text-xs font-medium shrink-0"
-                        style={{
-                          color: isDarkMode
-                            ? darkModeText
-                            : "rgba(0, 0, 0, 0.4)",
-                        }}
-                      >
-                        <CornerDownLeft size={16} />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div
-                className="py-16 text-center"
-                style={{
-                  backgroundColor: darkModeBackground,
-                  backdropFilter: "blur(20px) saturate(180%)",
-                  WebkitBackdropFilter: "blur(20px) saturate(180%)",
-                }}
-              >
-                <Search
-                  size={36}
-                  className="mx-auto mb-4"
-                  style={{
-                    color: isDarkMode
-                      ? "rgba(255, 255, 255, 0.2)"
-                      : "rgba(0, 0, 0, 0.2)",
-                  }}
-                />
-                <div
-                  className="text-base mb-2"
-                  style={{
-                    color: isDarkMode
-                      ? "rgba(255, 255, 255, 0.6)"
-                      : "rgba(0, 0, 0, 0.6)",
-                  }}
-                >
-                  Comece a digitar para buscar
-                </div>
-                <div
-                  className="text-sm"
-                  style={{
-                    color: isDarkMode
-                      ? "rgba(255, 255, 255, 0.4)"
-                      : "rgba(0, 0, 0, 0.4)",
-                  }}
-                >
-                  Arquivos, pastas e mais
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Footer with keyboard shortcuts */}
-          {query && filteredItems.length > 0 && (
-            <div
-              className="px-6 py-4 border-t flex items-center justify-between"
-              style={{
-                backgroundColor: isDarkMode
-                  ? "rgba(255, 255, 255, 0.05)"
-                  : "rgba(0, 0, 0, 0.02)",
-                borderColor: isDarkMode
-                  ? "rgba(255, 255, 255, 0.1)"
-                  : "rgba(255, 255, 255, 0.2)",
-              }}
-            >
-              <div
-                className="flex gap-6 text-xs"
-                style={{
-                  color: isDarkMode
-                    ? "rgba(255, 255, 255, 0.6)"
-                    : "rgba(0, 0, 0, 0.6)",
-                }}
-              >
-                <span className="flex items-center gap-2">
-                  <kbd
-                    className="px-2 py-1 rounded-md border font-mono text-xs"
-                    style={{
-                      backgroundColor: isDarkMode
-                        ? "rgba(255, 255, 255, 0.1)"
-                        : "rgba(255, 255, 255, 0.5)",
-                      borderColor: isDarkMode
-                        ? "rgba(255, 255, 255, 0.2)"
-                        : "rgba(0, 0, 0, 0.1)",
-                      color: isDarkMode
-                        ? "rgba(255, 255, 255, 0.7)"
-                        : "rgba(0, 0, 0, 0.7)",
-                    }}
-                  >
-                    ↑↓
-                  </kbd>
-                  Navigate
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>
+                  {file.type === "folder"
+                    ? "Pasta"
+                    : file.type === "video"
+                    ? "Vídeo"
+                    : file.type === "note"
+                    ? "Nota"
+                    : "Arquivo"}
                 </span>
-                <span className="flex items-center gap-2">
-                  <kbd
-                    className="px-2 py-1 rounded-md border font-mono text-xs"
-                    style={{
-                      backgroundColor: isDarkMode
-                        ? "rgba(255, 255, 255, 0.1)"
-                        : "rgba(255, 255, 255, 0.5)",
-                      borderColor: isDarkMode
-                        ? "rgba(255, 255, 255, 0.2)"
-                        : "rgba(0, 0, 0, 0.1)",
-                      color: isDarkMode
-                        ? "rgba(255, 255, 255, 0.7)"
-                        : "rgba(0, 0, 0, 0.7)",
-                    }}
-                  >
-                    ↵
-                  </kbd>
-                  Open
-                </span>
-                <span className="flex items-center gap-2">
-                  <kbd
-                    className="px-2 py-1 rounded-md border font-mono text-xs"
-                    style={{
-                      backgroundColor: isDarkMode
-                        ? "rgba(255, 255, 255, 0.1)"
-                        : "rgba(255, 255, 255, 0.5)",
-                      borderColor: isDarkMode
-                        ? "rgba(255, 255, 255, 0.2)"
-                        : "rgba(0, 0, 0, 0.1)",
-                      color: isDarkMode
-                        ? "rgba(255, 255, 255, 0.7)"
-                        : "rgba(0, 0, 0, 0.7)",
-                    }}
-                  >
-                    ESC
-                  </kbd>
-                  Close
-                </span>
-              </div>
-              <div
-                className="text-xs"
-                style={{
-                  color: isDarkMode
-                    ? "rgba(255, 255, 255, 0.6)"
-                    : "rgba(0, 0, 0, 0.6)",
-                }}
-              >
-                {filteredItems.length}{" "}
-                {filteredItems.length === 1 ? "result" : "results"}
+                {file.workspaceName && (
+                  <>
+                    <span className="text-muted-foreground/50">•</span>
+                    <span className="truncate">{file.workspaceName}</span>
+                  </>
+                )}
               </div>
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+        </CommandItem>
+      ))}
+    </>
+  );
+}
 
-      <style jsx global>{`
-        @keyframes spotlight-in {
-          from {
-            opacity: 0;
-            transform: scale(0.96) translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: scale(1) translateY(0);
-          }
-        }
-      `}</style>
-    </div>
+export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
+  const router = useRouter();
+  const { setCurrentView, currentWorkspace } = useWorkspaceStore();
+  const [inputValue, setInputValue] = useState("");
+
+  // Detect OS for keyboard shortcuts
+  const [isMac, setIsMac] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const platform = navigator.platform.toLowerCase();
+      const userAgent = navigator.userAgent.toLowerCase();
+      const isMacOS =
+        platform.includes("mac") ||
+        platform.includes("iphone") ||
+        platform.includes("ipad") ||
+        userAgent.includes("mac os x");
+      setTimeout(() => {
+        setIsMac(isMacOS);
+      }, 0);
+    }
+  }, []);
+
+  const handleNavigateToView = (
+    view: "explorer" | "settings" | "trash" | "ai"
+  ) => {
+    setCurrentView(view);
+    if (currentWorkspace?.id) {
+      router.push(`/explorer/${currentWorkspace.id}`);
+    }
+    onClose();
+  };
+
+  const handleCreateFile = (type: "note" | "folder" | "video") => {
+    // TODO: Implementar criação de arquivo
+    console.log("Criar arquivo:", type);
+    onClose();
+  };
+
+  return (
+    <Dialog onOpenChange={onClose} open={isOpen}>
+      <DialogHeader className="sr-only">
+        <DialogTitle>Menu de Comandos</DialogTitle>
+        <DialogDescription>
+          Use o menu de comandos para navegar e executar ações.
+        </DialogDescription>
+      </DialogHeader>
+      <DialogContent
+        className="gap-0 overflow-hidden rounded-xl border-border/50 p-0 shadow-lg sm:max-w-lg"
+        showCloseButton={false}
+      >
+        <Command
+          shouldFilter={false}
+          className="flex h-full w-full flex-col overflow-hidden bg-popover **:data-[slot=command-input-wrapper]:h-auto **:data-[slot=command-input-wrapper]:grow **:data-[slot=command-input-wrapper]:border-0 **:data-[slot=command-input-wrapper]:px-0"
+        >
+          <div className="flex h-12 items-center gap-2 border-b border-border/50 px-4">
+            <CommandInput
+              className="h-10 text-[15px]"
+              onValueChange={setInputValue}
+              placeholder="O que você precisa?"
+              value={inputValue}
+            />
+            <button
+              className="flex shrink-0 items-center"
+              onClick={onClose}
+              type="button"
+            >
+              <Kbd>Esc</Kbd>
+            </button>
+          </div>
+
+          <CommandList className="max-h-[500px] py-2">
+            <CommandEmpty>Nenhum resultado encontrado.</CommandEmpty>
+
+            {/* Files Search Group */}
+            <CommandGroup heading="Arquivos">
+              <CommandSearchResults onClose={onClose} />
+            </CommandGroup>
+
+            {/* Navigation Group */}
+            <CommandGroup heading="Navegação">
+              <CommandItem
+                className="mx-2 rounded-lg py-2.5"
+                onSelect={() => handleNavigateToView("explorer")}
+              >
+                <FolderTree size={18} aria-hidden />
+                Ir para Explorer
+                <KbdGroup className="ml-auto">
+                  <Kbd>{isMac ? "⌘" : "Ctrl"}</Kbd>
+                  <Kbd>E</Kbd>
+                </KbdGroup>
+              </CommandItem>
+              <CommandItem
+                className="mx-2 rounded-lg py-2.5"
+                onSelect={() => handleNavigateToView("trash")}
+              >
+                <Trash2 size={18} aria-hidden />
+                Ir para Lixeira
+              </CommandItem>
+              <CommandItem
+                className="mx-2 rounded-lg py-2.5"
+                onSelect={() => handleNavigateToView("settings")}
+              >
+                <Settings size={18} aria-hidden />
+                Ir para Configurações
+                <KbdGroup className="ml-auto">
+                  <Kbd>{isMac ? "⌘" : "Ctrl"}</Kbd>
+                  <Kbd>,</Kbd>
+                </KbdGroup>
+              </CommandItem>
+              <CommandItem
+                className="mx-2 rounded-lg py-2.5"
+                onSelect={() => handleNavigateToView("ai")}
+              >
+                <Sparkles size={18} aria-hidden />
+                Ir para IA
+              </CommandItem>
+            </CommandGroup>
+
+            {/* Create Files Group */}
+            {!inputValue && (
+              <CommandGroup heading="Criar">
+                <CommandItem
+                  className="mx-2 rounded-lg py-2.5"
+                  onSelect={() => handleCreateFile("note")}
+                >
+                  <NoteIcon size={18} />
+                  Criar Nota
+                  <KbdGroup className="ml-auto">
+                    <Kbd>{isMac ? "⌘" : "Ctrl"}</Kbd>
+                    <Kbd>N</Kbd>
+                  </KbdGroup>
+                </CommandItem>
+                <CommandItem
+                  className="mx-2 rounded-lg py-2.5"
+                  onSelect={() => handleCreateFile("folder")}
+                >
+                  <FolderIcon size={18} />
+                  Criar Pasta
+                </CommandItem>
+                <CommandItem
+                  className="mx-2 rounded-lg py-2.5"
+                  onSelect={() => handleCreateFile("video")}
+                >
+                  <VideoIcon size={18} />
+                  Criar Vídeo
+                </CommandItem>
+              </CommandGroup>
+            )}
+
+            {/* Quick Actions Group */}
+            {!inputValue && (
+              <CommandGroup heading="Ações Rápidas">
+                <CommandItem
+                  className="mx-2 rounded-lg py-2.5"
+                  onSelect={() => {
+                    // TODO: Implementar cópia de URL
+                    navigator.clipboard.writeText(window.location.href);
+                    onClose();
+                  }}
+                >
+                  <Copy size={18} aria-hidden />
+                  Copiar URL Atual
+                  <KbdGroup className="ml-auto">
+                    <Kbd>{isMac ? "⌘" : "Ctrl"}</Kbd>
+                    <Kbd>⇧</Kbd>
+                    <Kbd>C</Kbd>
+                  </KbdGroup>
+                </CommandItem>
+              </CommandGroup>
+            )}
+
+            {/* Account Group */}
+            {!inputValue && (
+              <CommandGroup heading="Conta">
+                <CommandItem
+                  className="mx-2 rounded-lg py-2.5"
+                  onSelect={() => {
+                    // TODO: Implementar troca de workspace
+                    onClose();
+                  }}
+                >
+                  <User size={18} aria-hidden />
+                  Trocar Workspace...
+                </CommandItem>
+                <CommandItem
+                  className="mx-2 rounded-lg py-2.5"
+                  onSelect={() => {
+                    // TODO: Implementar logout
+                    onClose();
+                  }}
+                >
+                  <LogOut size={18} aria-hidden />
+                  Sair
+                  <KbdGroup className="ml-auto">
+                    <Kbd>{isMac ? "⌘" : "Ctrl"}</Kbd>
+                    <Kbd>Q</Kbd>
+                  </KbdGroup>
+                </CommandItem>
+              </CommandGroup>
+            )}
+          </CommandList>
+        </Command>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -555,14 +406,14 @@ export function FloatingSearchButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="fixed bottom-6 bg-foreground/10 right-6 z-99999 w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95"
+      className="fixed bottom-6 bg-background/80 border border-border right-6 z-99999 w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 hover:bg-accent"
       style={{
         backdropFilter: "blur(20px) saturate(200%)",
         WebkitBackdropFilter: "blur(20px) saturate(200%)",
       }}
-      title="Buscar arquivos e pastas (Ctrl+K)"
+      title="Buscar arquivos e pastas (Ctrl+/)"
     >
-      <Search size={20} style={{ color: "rgba(116, 116, 116, 0.7)" }} />
+      <Search size={20} className="text-muted-foreground" />
     </button>
   );
 }

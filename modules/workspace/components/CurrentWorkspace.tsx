@@ -339,13 +339,21 @@ function HomeContent({
           ) : (
             <ExplorerWorkspace
               files={items}
-              currentFolderId={currentFolderId}
-              onFolderClick={handleFolderClick}
-              onItemClick={handleItemClick}
+              currentFileId={currentFolderId}
+              onFileClick={(fileId) => {
+                const file = items.find((item) => item.id === fileId);
+                if (file) {
+                  if (file.type === "folder") {
+                    handleFolderClick(fileId);
+                  } else {
+                    handleItemClick(file);
+                  }
+                }
+              }}
               onBack={currentFolderId ? handleBack : undefined}
-              onAddItem={handleAddItem}
-              onItemUpdate={handleItemUpdate}
-              onItemDelete={handleItemDelete}
+              onAddFile={handleAddItem}
+              onFileUpdate={handleItemUpdate}
+              onFileDelete={handleItemDelete}
               loading={loading}
             />
           )

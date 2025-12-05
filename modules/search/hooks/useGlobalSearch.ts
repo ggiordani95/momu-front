@@ -89,8 +89,8 @@ export function useGlobalSearch() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl/Cmd + K to open search
-      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+      // Ctrl/Cmd + / to open search (doesn't conflict with browser)
+      if ((e.ctrlKey || e.metaKey) && e.key === "/") {
         e.preventDefault();
         openSearch();
       }
