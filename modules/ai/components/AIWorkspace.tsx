@@ -5,10 +5,6 @@ import {
   ArrowUp,
   Loader2,
   Search,
-  Settings,
-  Paperclip,
-  Link as LinkIcon,
-  Mic,
   Pencil,
   Trash2,
   Airplay,
@@ -16,6 +12,8 @@ import {
   Folder,
   X,
   FileText,
+  Image as ImageIcon,
+  Sparkles,
 } from "lucide-react";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import {
@@ -29,10 +27,20 @@ import { useWorkspaceStore } from "@/modules/workspace/stores/workspaceStore";
 import type { CreateFileDto, HierarchicalFile } from "@/lib/types";
 import { fileService, buildHierarchy } from "@/modules/files";
 import {
-  AIModelSelector,
   AI_MODELS,
   type AIModelValue,
 } from "@/modules/ai/components/AIModelSelector";
+import { AIProviderLogo } from "@/modules/ai/components/AILogos";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface Message {
   id: string;
@@ -537,7 +545,7 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col w-full">
         {/* Top Header */}
         <div className="border-b border-border p-2 flex items-center justify-between bg-background/95 backdrop-blur-sm sticky top-0 z-10">
           <div className="flex items-center gap-4 ml-4 text-sm text-foreground/60">
@@ -546,12 +554,6 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
               Como fazer
             </button>
           </div>
-          <AIModelSelector
-            selectedModel={selectedModel}
-            onModelChange={setSelectedModel}
-            disabled={generateAIMutation.isPending}
-            compact={true}
-          />
         </div>
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto">
@@ -681,62 +683,129 @@ export function AIWorkspace({ workspaceId }: AIWorkspaceProps) {
           )}
         </div>
 
-        {/* Input Area */}
+        {/* Input Area - estilo ai-02 */}
         <div className="border-t border-border bg-background/95 backdrop-blur-sm sticky bottom-0">
           <div className="max-w-4xl mx-auto p-3">
-            {/* Main Input Container */}
-            <div className="relative bg-foreground/5 border border-border rounded-xl p-3">
-              {/* Main Input */}
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Comece pedindo sobre algo..."
-                className="w-full bg-transparent text-foreground placeholder:text-foreground/40 focus:outline-none resize-none text-sm mb-3"
-                rows={1}
-                disabled={generateAIMutation.isPending}
-                style={{
-                  minHeight: "24px",
-                  maxHeight: "200px",
-                }}
-                onInput={(e) => {
-                  const target = e.target as HTMLTextAreaElement;
-                  target.style.height = "auto";
-                  target.style.height = `${Math.min(
-                    target.scrollHeight,
-                    200
-                  )}px`;
-                }}
-              />
-
-              {/* Input Controls */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <button className="p-1.5 rounded-lg transition-colors">
-                    <Settings className="w-4 h-4 text-foreground/50" />
-                  </button>
-                  <button className="p-1.5 hover:bg-foreground/10 rounded-lg transition-colors">
-                    <Paperclip className="w-4 h-4 text-foreground/50" />
-                  </button>
-                  <button className="p-1.5 hover:bg-foreground/10 rounded-lg transition-colors">
-                    <LinkIcon className="w-4 h-4 text-foreground/50" />
-                  </button>
-                  <button className="p-1.5 hover:bg-foreground/10 rounded-lg transition-colors">
-                    <Mic className="w-4 h-4 text-foreground/50" />
-                  </button>
+            <div className="flex flex-col gap-4">
+              {/* Main Input Container - estilo ai-02 */}
+              <div className="flex min-h-[120px] flex-col rounded-2xl cursor-text bg-card border border-border shadow-lg">
+                <div className="flex-1 relative overflow-y-auto max-h-[258px]">
+                  <Textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Comece pedindo sobre algo..."
+                    className="w-full border-0 p-3 transition-[padding] duration-200 ease-in-out min-h-[48.4px] outline-none text-[16px] text-foreground resize-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent whitespace-pre-wrap wrap-break-word"
+                    disabled={generateAIMutation.isPending}
+                    onInput={(e) => {
+                      const target = e.target as HTMLTextAreaElement;
+                      target.style.height = "auto";
+                      target.style.height = `${Math.min(
+                        target.scrollHeight,
+                        258
+                      )}px`;
+                    }}
+                  />
                 </div>
-                <button
-                  onClick={handleSend}
-                  disabled={!input.trim() || generateAIMutation.isPending}
-                  className="w-9 h-9 rounded-lg bg-foreground/10  disabled:bg-foreground/5 disabled:cursor-not-allowed text-foreground/70 hover:text-foreground flex items-center justify-center transition-all shrink-0 border border-border/50"
-                >
-                  {generateAIMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <ArrowUp className="w-4 h-4" />
-                  )}
-                </button>
+
+                <div className="flex min-h-[40px] items-center gap-2 p-2 pb-1 border-t border-border/50">
+                  <div className="flex aspect-1 items-center gap-1 rounded-full bg-muted p-1.5 text-xs">
+                    <Sparkles className="h-4 w-4 text-muted-foreground" />
+                  </div>
+
+                  <div className="relative flex items-center">
+                    <Select
+                      value={selectedModel}
+                      onValueChange={(value) =>
+                        setSelectedModel(value as AIModelValue)
+                      }
+                      disabled={generateAIMutation.isPending}
+                    >
+                      <SelectTrigger className="w-fit border-none bg-transparent p-0 text-sm text-muted-foreground hover:text-foreground focus:ring-0 shadow-none">
+                        <SelectValue>
+                          <div className="flex items-center gap-2">
+                            {(() => {
+                              const currentModel = AI_MODELS.find(
+                                (m) => m.value === selectedModel
+                              );
+                              return currentModel ? (
+                                <>
+                                  <div className="w-4 h-4 shrink-0 flex items-center justify-center overflow-hidden rounded">
+                                    <AIProviderLogo
+                                      provider={currentModel.provider}
+                                      size={16}
+                                      className="w-full h-full"
+                                    />
+                                  </div>
+                                  <span>{currentModel.name}</span>
+                                </>
+                              ) : (
+                                <span>GPT-4o Mini</span>
+                              );
+                            })()}
+                          </div>
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {AI_MODELS.map((model) => (
+                          <SelectItem key={model.value} value={model.value}>
+                            <div className="flex items-center gap-2">
+                              <div className="w-5 h-5 shrink-0 flex items-center justify-center overflow-hidden rounded">
+                                <AIProviderLogo
+                                  provider={model.provider}
+                                  size={20}
+                                  className="w-full h-full"
+                                />
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-sm font-medium">
+                                  {model.name}
+                                </span>
+                                {model.description && (
+                                  <span className="text-muted-foreground text-xs">
+                                    {model.provider} · {model.description}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="ml-auto flex items-center gap-3">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-foreground transition-all duration-100"
+                      title="Anexar imagens"
+                      disabled={generateAIMutation.isPending}
+                    >
+                      <ImageIcon className="h-5 w-5" />
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn(
+                        "h-6 w-6 rounded-full transition-all duration-100 cursor-pointer",
+                        input && !generateAIMutation.isPending
+                          ? "bg-primary hover:bg-primary/90"
+                          : "bg-muted"
+                      )}
+                      disabled={!input.trim() || generateAIMutation.isPending}
+                      onClick={handleSend}
+                    >
+                      {generateAIMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 text-primary-foreground animate-spin" />
+                      ) : (
+                        <ArrowUp className="h-4 w-4 text-primary-foreground" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

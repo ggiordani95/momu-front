@@ -119,7 +119,7 @@ export function AIModelSelector({
           type="button"
           onClick={() => !disabled && setIsOpen(!isOpen)}
           disabled={disabled}
-          className="flex items-center gap-2 px-3 py-1.5 bg-background border border-border rounded-md text-sm text-foreground hover:bg-hover/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[240px]"
+          className="flex items-center gap-2 px-3 py-1.5 bg-background border border-border rounded-md text-sm text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[240px]"
         >
           <div className="w-6 h-6 shrink-0 flex items-center justify-center overflow-hidden rounded-lg">
             {selectedModelData && (
@@ -254,7 +254,7 @@ export function AIModelSelector({
                     </div>
                   </div>
                   {selectedModel === model.value && (
-                    <Check className="w-5 h-5 text-foreground/70 shrink-0" />
+                    <Check className="w-5 h-5 text-foreground shrink-0" />
                   )}
                 </button>
               ))}

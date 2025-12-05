@@ -12,6 +12,7 @@ import {
 import type { HierarchicalFile, CreateFileDto } from "@/lib/types";
 
 import SimpleSidebar from "@/modules/sidebar/components/SimpleSidebar";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 
 import { TrashWorkspace } from "@/modules/trash";
 import { SettingsWorkspace } from "@/modules/settings";
@@ -297,81 +298,81 @@ function HomeContent({
   loading: boolean;
 }) {
   return (
-    <div
-      className="flex h-screen overflow-hidden relative bg-background"
-      style={{ backgroundColor: "var(--background)" }}
-    >
-      {/* Glassmorphism background */}
-      <div
-        className="fixed inset-0 pointer-events-none z-0 bg-background"
-        style={{
-          backdropFilter: "blur(50px) saturate(180%)",
-          WebkitBackdropFilter: "blur(50px) saturate(180%)",
-        }}
-      />
+    <SidebarProvider>
+      <div className="flex h-screen overflow-hidden relative bg-background w-full">
+        {/* Glassmorphism background */}
+        <div
+          className="fixed inset-0 pointer-events-none z-0 bg-background"
+          style={{
+            backdropFilter: "blur(50px) saturate(180%)",
+            WebkitBackdropFilter: "blur(50px) saturate(180%)",
+          }}
+        />
 
-      {/* Sidebar */}
-      <SimpleSidebar
-        onNavigate={
-          setCurrentView as (
-            view:
-              | "explorer"
-              | "settings"
-              | "trash"
-              | "social"
-              | "planner"
-              | "ai"
-          ) => void
-        }
-        currentView={currentView}
-        workspaceId={workspaceId}
-      />
+        {/* Sidebar */}
+        <SimpleSidebar
+          onNavigate={
+            setCurrentView as (
+              view:
+                | "explorer"
+                | "settings"
+                | "trash"
+                | "social"
+                | "planner"
+                | "ai"
+            ) => void
+          }
+          workspaceId={workspaceId}
+        />
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-hidden relative z-10">
-        {currentView === "explorer" ? (
-          selectedItem && selectedItem.type === "note" ? (
-            <NoteWorkspace
-              file={selectedItem}
-              onBack={handleCloseEditor}
-              onUpdate={handleItemUpdate}
-            />
-          ) : (
-            <ExplorerWorkspace
-              files={items}
-              currentFileId={currentFolderId}
-              onFileClick={(fileId) => {
-                const file = items.find((item) => item.id === fileId);
-                if (file) {
-                  if (file.type === "folder") {
-                    handleFolderClick(fileId);
-                  } else {
-                    handleItemClick(file);
-                  }
-                }
-              }}
-              onBack={currentFolderId ? handleBack : undefined}
-              onAddFile={handleAddItem}
-              onFileUpdate={handleItemUpdate}
-              onFileDelete={handleItemDelete}
-              loading={loading}
-            />
-          )
-        ) : currentView === "trash" ? (
-          <TrashWorkspace
-            topicId={workspaceId}
-            onRestore={() => {
-              // React Query will automatically refetch
-            }}
-            onPermanentDelete={() => {
-              // React Query will automatically refetch
-            }}
-          />
-        ) : (
-          <SettingsWorkspace />
-        )}
-      </main>
-    </div>
+        {/* Main Content */}
+        <SidebarInset>
+          <main className="flex-1 overflow-hidden relative z-10">
+            {currentView === "explorer" ? (
+              selectedItem && selectedItem.type === "note" ? (
+                <NoteWorkspace
+                  file={selectedItem}
+                  onBack={handleCloseEditor}
+                  onUpdate={handleItemUpdate}
+                />
+              ) : (
+                <ExplorerWorkspace
+                  files={items}
+                  currentFileId={currentFolderId}
+                  onFileClick={(fileId) => {
+                    const file = items.find((item) => item.id === fileId);
+                    if (file) {
+                      if (file.type === "folder") {
+                        handleFolderClick(fileId);
+                      } else {
+                        handleItemClick(file);
+                      }
+                    }
+                  }}
+                  onBack={currentFolderId ? handleBack : undefined}
+                  onAddFile={handleAddItem}
+                  onFileUpdate={handleItemUpdate}
+                  onFileDelete={handleItemDelete}
+                  loading={loading}
+                />
+              )
+            ) : currentView === "trash" ? (
+              <TrashWorkspace
+                topicId={workspaceId}
+                onRestore={() => {
+                  // React Query will automatically refetch
+                }}
+                onPermanentDelete={() => {
+                  // React Query will automatically refetch
+                }}
+              />
+            ) : (
+              <SettingsWorkspace />
+            )}
+          </main>
+        </SidebarInset>
+      </div>
+    </SidebarProvider>
   );
 }
 

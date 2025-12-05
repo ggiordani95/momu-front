@@ -13,6 +13,7 @@ import { useWorkspaceStore } from "@/modules/workspace/stores/workspaceStore";
 import { useMoveFile, buildHierarchy, fileService } from "@/modules/files";
 import type { HierarchicalFile, CreateFileDto, Workspace } from "@/lib/types";
 import SimpleSidebar from "@/modules/sidebar/components/SimpleSidebar";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import NotionBlockEditor from "@/modules/note/components/NotionBlockEditor";
 import { TrashWorkspace } from "@/modules/trash";
 import { SettingsWorkspace } from "@/modules/settings";
@@ -39,49 +40,26 @@ export default function WorkspaceView({
   // Get current view from Zustand store (single source of truth)
   const { currentView: storeView, setCurrentView } = useWorkspaceStore();
 
-  // Sync URL with store ONLY on initial load or direct URL navigation (not internal navigation)
+  // Sync URL with store on initial load or when pathname changes
   // Use a ref to track if we've already synced to avoid unnecessary updates
   const hasSyncedRef = useRef(false);
   const prevPathnameRef = useRef<string | null>(null);
-  const isInternalNavRef = useRef(false);
 
+  // Sync URL with store ONLY on initial load or browser navigation (back/forward)
+  // Internal navigation (sidebar clicks) updates store directly, so we skip syncing
   useEffect(() => {
-    // Check if this is an internal navigation FIRST (before checking pathname change)
-    // This prevents the effect from running when SimpleSidebar updates the URL
-    if (
-      typeof window !== "undefined" &&
-      (window as Window & { __isInternalNavigation?: boolean })
-        .__isInternalNavigation
-    ) {
-      isInternalNavRef.current = true;
-      // Update prevPathnameRef to prevent this effect from running again
-      prevPathnameRef.current = pathname;
-      return;
-    }
-
-    // Reset internal nav flag if it was set
-    if (isInternalNavRef.current) {
-      isInternalNavRef.current = false;
-    }
-
-    // Skip if pathname hasn't actually changed (and it's not an internal nav)
-    if (prevPathnameRef.current === pathname && hasSyncedRef.current) {
-      return;
-    }
-    prevPathnameRef.current = pathname;
-
-    // Get view from URL pathname (e.g., /explorer, /trash, /ai)
-    const viewFromPath = pathname?.split("/")[1] as
-      | "explorer"
-      | "settings"
-      | "trash"
-      | "social"
-      | "planner"
-      | "ai"
-      | undefined;
-
-    // Only sync on initial load or when pathname changes from external navigation
+    // Only sync on initial load
     if (!hasSyncedRef.current) {
+      // Get view from URL pathname (e.g., /explorer, /trash, /ai)
+      const viewFromPath = pathname?.split("/")[1] as
+        | "explorer"
+        | "settings"
+        | "trash"
+        | "social"
+        | "planner"
+        | "ai"
+        | undefined;
+
       // Initial load: sync URL to store
       if (viewFromPath) {
         setCurrentView(viewFromPath);
@@ -99,8 +77,29 @@ export default function WorkspaceView({
         }
       }
       hasSyncedRef.current = true;
-    } else if (viewFromPath && viewFromPath !== storeView) {
-      // External navigation (user typed URL directly or used browser back/forward)
+      prevPathnameRef.current = pathname;
+      return;
+    }
+
+    // After initial sync, only sync if pathname changed (browser back/forward or direct URL)
+    // Skip if pathname hasn't actually changed
+    if (prevPathnameRef.current === pathname) {
+      return;
+    }
+    prevPathnameRef.current = pathname;
+
+    // Get view from URL pathname
+    const viewFromPath = pathname?.split("/")[1] as
+      | "explorer"
+      | "settings"
+      | "trash"
+      | "social"
+      | "planner"
+      | "ai"
+      | undefined;
+
+    // Sync store to pathname only if they differ (browser navigation)
+    if (viewFromPath && viewFromPath !== storeView) {
       setCurrentView(viewFromPath);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -244,8 +243,23 @@ export default function WorkspaceView({
 
     // Use capture phase to catch events earlier
     document.addEventListener("keydown", handleKeyDown, true);
+
+    // Handle custom event from SimpleSidebar (when clicking search in sidebar)
+    const handleOpenSearch = () => {
+      setIsSearchOpen(true);
+      setShowSearchHint(false);
+    };
+    window.addEventListener(
+      "openGlobalSearch",
+      handleOpenSearch as EventListener
+    );
+
     return () => {
       document.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener(
+        "openGlobalSearch",
+        handleOpenSearch as EventListener
+      );
       if (searchHintTimeoutRef.current) {
         clearTimeout(searchHintTimeoutRef.current);
       }
@@ -1671,113 +1685,121 @@ function HomeContent({
   }, [itemsContext, mergedFiles]);
 
   return (
-    <div
-      className="flex h-screen overflow-hidden relative bg-background"
-      style={{ backgroundColor: "var(--background)" }}
-      suppressHydrationWarning
-    >
-      {/* Glassmorphism background */}
+    <SidebarProvider>
       <div
-        className="fixed inset-0 pointer-events-none z-0 bg-background"
-        style={{
-          backdropFilter: "blur(50px) saturate(180%)",
-          WebkitBackdropFilter: "blur(50px) saturate(180%)",
-        }}
+        className="flex h-screen overflow-hidden relative bg-background w-full"
         suppressHydrationWarning
-      />
+      >
+        {/* Glassmorphism background */}
+        <div
+          className="fixed inset-0 pointer-events-none z-0 bg-background"
+          style={{
+            backdropFilter: "blur(50px) saturate(180%)",
+            WebkitBackdropFilter: "blur(50px) saturate(180%)",
+          }}
+          suppressHydrationWarning
+        />
 
-      {/* Sidebar */}
-      <SimpleSidebar currentView={currentView} workspaceId={workspaceId} />
+        {/* Sidebar */}
+        <SimpleSidebar workspaceId={workspaceId} />
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-hidden relative z-10">
-        {currentView === "explorer" ? (
-          (() => {
-            const shouldShowNote = selectedItem && selectedItem.type === "note";
-            return shouldShowNote;
-          })() && selectedItem ? (
-            <div className="h-full flex flex-col">
-              {/* Header with back button and title */}
-              <div className="flex items-center gap-4 p-4 border-b border-border">
-                <button
-                  onClick={handleCloseEditor}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-foreground/5 transition-colors text-sm text-foreground/70 hover:text-foreground"
-                >
-                  <ArrowLeft size={18} />
-                  Voltar
-                </button>
-                <input
-                  type="text"
-                  value={selectedItem.title}
-                  onChange={(e) => {
-                    handleItemUpdate(selectedItem.id, "title", e.target.value);
-                  }}
-                  className="flex-1 text-lg font-semibold bg-transparent border-none outline-none text-foreground placeholder:text-foreground/40"
-                  placeholder="Sem título"
-                />
-              </div>
-              {/* Notion Block Editor - Centered */}
-              <div className="flex-1 overflow-auto">
-                <div className="w-full min-h-full max-w-4xl mx-auto px-12 py-12 bg-foreground/5">
-                  <NotionBlockEditor
-                    content={selectedItem.content || ""}
-                    onSave={(content) => {
-                      handleItemUpdate(selectedItem.id, "content", content);
-                    }}
-                    placeholder="Pressione '/' para comandos"
-                    autoFocus={pendingItems.has(selectedItem.id)}
-                  />
+        {/* Main Content */}
+        <SidebarInset>
+          <main className="flex-1 overflow-hidden relative z-10">
+            {currentView === "explorer" ? (
+              (() => {
+                const shouldShowNote =
+                  selectedItem && selectedItem.type === "note";
+                return shouldShowNote;
+              })() && selectedItem ? (
+                <div className="h-full flex flex-col">
+                  {/* Header with back button and title */}
+                  <div className="flex items-center gap-4 p-4 border-b border-border">
+                    <button
+                      onClick={handleCloseEditor}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-foreground/5 transition-colors text-sm text-foreground/70 hover:text-foreground"
+                    >
+                      <ArrowLeft size={18} />
+                      Voltar
+                    </button>
+                    <input
+                      type="text"
+                      value={selectedItem.title}
+                      onChange={(e) => {
+                        handleItemUpdate(
+                          selectedItem.id,
+                          "title",
+                          e.target.value
+                        );
+                      }}
+                      className="flex-1 text-lg font-semibold bg-transparent border-none outline-none text-foreground placeholder:text-foreground/40"
+                      placeholder="Sem título"
+                    />
+                  </div>
+                  {/* Notion Block Editor - Centered */}
+                  <div className="flex-1 overflow-auto">
+                    <div className="w-full min-h-full max-w-4xl mx-auto px-12 py-12 bg-foreground/5">
+                      <NotionBlockEditor
+                        content={selectedItem.content || ""}
+                        onSave={(content) => {
+                          handleItemUpdate(selectedItem.id, "content", content);
+                        }}
+                        placeholder="Pressione '/' para comandos"
+                        autoFocus={pendingItems.has(selectedItem.id)}
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          ) : (
-            <ExplorerWorkspace
-              currentFileId={currentFolderId}
-              onFileClick={(fileId) => {
-                const found =
-                  workspaceFiles.find((file) => file.id === fileId) || null;
-                if (!found) return;
+              ) : (
+                <ExplorerWorkspace
+                  currentFileId={currentFolderId}
+                  onFileClick={(fileId) => {
+                    const found =
+                      workspaceFiles.find((file) => file.id === fileId) || null;
+                    if (!found) return;
 
-                if (found.type === "folder") {
-                  // Navegação de pasta (atualiza URL e currentFolderId)
-                  handleFolderClick(found.id);
-                } else {
-                  // Notas e outros tipos usam a lógica de item (abre editor, etc.)
-                  handleFileClick(found.id);
-                }
-              }}
-              files={workspaceFiles}
-              onBack={currentFolderId ? handleBack : undefined}
-              onNavigateToWorkspaceRoot={handleNavigateToWorkspaceRoot}
-              onAddFile={handleAddItem}
-              onFileUpdate={handleItemUpdate}
-              onFileMove={handleItemMove}
-              onFileComplete={handleItemComplete}
-              onFileDelete={handleItemDelete}
-              onFileDeleteBatch={handleItemDeleteBatch}
-              loading={loading}
-              pendingFiles={pendingFiles}
-            />
-          )
-        ) : currentView === "trash" ? (
-          <TrashWorkspace
-            topicId={workspaceId}
-            onRestore={() => {
-              // React Query will automatically refetch
-            }}
-            onPermanentDelete={() => {
-              // React Query will automatically refetch
-            }}
-          />
-        ) : currentView === "social" ? (
-          <SocialWorkspace />
-        ) : currentView === "ai" ? (
-          <AIWorkspace workspaceId={workspaceId} />
-        ) : (
-          <SettingsWorkspace />
-        )}
-      </main>
-    </div>
+                    if (found.type === "folder") {
+                      // Navegação de pasta (atualiza URL e currentFolderId)
+                      handleFolderClick(found.id);
+                    } else {
+                      // Notas e outros tipos usam a lógica de item (abre editor, etc.)
+                      handleFileClick(found.id);
+                    }
+                  }}
+                  files={workspaceFiles}
+                  onBack={currentFolderId ? handleBack : undefined}
+                  onNavigateToWorkspaceRoot={handleNavigateToWorkspaceRoot}
+                  onAddFile={handleAddItem}
+                  onFileUpdate={handleItemUpdate}
+                  onFileMove={handleItemMove}
+                  onFileComplete={handleItemComplete}
+                  onFileDelete={handleItemDelete}
+                  onFileDeleteBatch={handleItemDeleteBatch}
+                  loading={loading}
+                  pendingFiles={pendingFiles}
+                />
+              )
+            ) : currentView === "trash" ? (
+              <TrashWorkspace
+                topicId={workspaceId}
+                onRestore={() => {
+                  // React Query will automatically refetch
+                }}
+                onPermanentDelete={() => {
+                  // React Query will automatically refetch
+                }}
+              />
+            ) : currentView === "social" ? (
+              <SocialWorkspace />
+            ) : currentView === "ai" ? (
+              <AIWorkspace workspaceId={workspaceId} />
+            ) : (
+              <SettingsWorkspace />
+            )}
+          </main>
+        </SidebarInset>
+      </div>
+    </SidebarProvider>
   );
 }
 

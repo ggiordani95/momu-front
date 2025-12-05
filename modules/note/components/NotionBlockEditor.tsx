@@ -1701,7 +1701,7 @@ function BlockItem({
             style={{
               top: `${commandMenuPos.top + 20}px`,
               left: `${commandMenuPos.left}px`,
-              backgroundColor: "var(--sidebar-bg)",
+              backgroundColor: "var(--sidebar)",
               backdropFilter: "blur(12px)",
               borderColor: "var(--border)",
             }}
@@ -1767,7 +1767,7 @@ function BlockItem({
             style={{
               top: `${toolbarPos.top}px`,
               left: `${toolbarPos.left}px`,
-              backgroundColor: "var(--sidebar-bg)",
+              backgroundColor: "var(--sidebar)",
               backdropFilter: "blur(12px)",
               borderColor: "var(--border)",
               transform: "translateX(-50%)",

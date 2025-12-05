@@ -216,6 +216,17 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
     }
   }, []);
 
+  // Handle dialog open/close state changes
+  // Only close when dialog is being closed (false), ignore open (true)
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      // Dialog is being closed
+      onClose();
+      // Reset input value when closing
+      setInputValue("");
+    }
+  };
+
   const handleNavigateToView = (
     view: "explorer" | "settings" | "trash" | "ai"
   ) => {
@@ -224,16 +235,18 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
       router.push(`/explorer/${currentWorkspace.id}`);
     }
     onClose();
+    setInputValue("");
   };
 
   const handleCreateFile = (type: "note" | "folder" | "video") => {
     // TODO: Implementar criação de arquivo
     console.log("Criar arquivo:", type);
     onClose();
+    setInputValue("");
   };
 
   return (
-    <Dialog onOpenChange={onClose} open={isOpen}>
+    <Dialog onOpenChange={handleOpenChange} open={isOpen}>
       <DialogHeader className="sr-only">
         <DialogTitle>Menu de Comandos</DialogTitle>
         <DialogDescription>
@@ -257,7 +270,10 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
             />
             <button
               className="flex shrink-0 items-center"
-              onClick={onClose}
+              onClick={() => {
+                onClose();
+                setInputValue("");
+              }}
               type="button"
             >
               <Kbd>Esc</Kbd>
@@ -352,6 +368,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                     // TODO: Implementar cópia de URL
                     navigator.clipboard.writeText(window.location.href);
                     onClose();
+                    setInputValue("");
                   }}
                 >
                   <Copy size={18} aria-hidden />
@@ -373,6 +390,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                   onSelect={() => {
                     // TODO: Implementar troca de workspace
                     onClose();
+                    setInputValue("");
                   }}
                 >
                   <User size={18} aria-hidden />
@@ -383,6 +401,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
                   onSelect={() => {
                     // TODO: Implementar logout
                     onClose();
+                    setInputValue("");
                   }}
                 >
                   <LogOut size={18} aria-hidden />

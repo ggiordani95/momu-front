@@ -1,21 +1,57 @@
 "use client";
 
-import { useState } from "react";
-import { Sparkles, Loader2, X } from "lucide-react";
+import { useState, useRef } from "react";
+import {
+  Sparkles,
+  Loader2,
+  X,
+  ArrowUp,
+  Image as ImageIcon,
+} from "lucide-react";
 import { useWorkspaceStore } from "@/modules/workspace/stores/workspaceStore";
 import { fileService } from "@/modules/files";
 import type { CreateFileDto } from "@/lib/types";
 import {
-  AIModelSelector,
   AI_MODELS,
   type AIModelValue,
 } from "@/modules/ai/components/AIModelSelector";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 interface AIAssistantProps {
   workspaceId: string;
   onClose: () => void;
   onFilesCreated?: () => void;
 }
+
+const PROMPTS = [
+  {
+    icon: Sparkles,
+    text: "Criar estrutura de aprendizado",
+    prompt:
+      "Crie uma estrutura organizada de pastas e arquivos sobre [tópico], incluindo módulos, notas e vídeos para facilitar o aprendizado.",
+  },
+  {
+    icon: Sparkles,
+    text: "Gerar conteúdo educacional",
+    prompt:
+      "Gere conteúdo educacional completo sobre [tópico] com organização hierárquica, incluindo conceitos básicos, exemplos práticos e recursos visuais.",
+  },
+  {
+    icon: Sparkles,
+    text: "Organizar material de estudo",
+    prompt:
+      "Organize o material de estudo sobre [tópico] em uma estrutura clara e progressiva, do básico ao avançado, com pastas para cada módulo.",
+  },
+];
 
 export function AIAssistant({
   workspaceId,
@@ -29,6 +65,7 @@ export function AIAssistant({
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { addOptimisticFile, syncWorkspaces } = useWorkspaceStore();
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const handleGenerate = async () => {
     if (!topic.trim()) {
@@ -149,97 +186,161 @@ export function AIAssistant({
     }
   };
 
+  const handlePromptClick = (prompt: string) => {
+    if (inputRef.current) {
+      const promptText = prompt.replace("[tópico]", topic || "[seu tópico]");
+      inputRef.current.value = promptText;
+      setTopic(promptText);
+      inputRef.current.focus();
+    }
+  };
+
+  const handleModelChange = (value: string) => {
+    const model = AI_MODELS.find((m) => m.value === value);
+    if (model) {
+      setSelectedModel(model.value);
+    }
+  };
+
+  const getModelName = () => {
+    return AI_MODELS.find((m) => m.value === selectedModel)?.name || "GPT-4";
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-sidebar rounded-lg p-6 w-full max-w-md border border-border">
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50">
+      <div className="bg-popover rounded-lg p-6 w-full max-w-2xl border border-border shadow-lg">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-purple-500" />
-            <h2 className="text-lg font-semibold">Assistente de IA</h2>
+            <Sparkles className="w-5 h-5 text-primary" />
+            <h2 className="text-lg font-semibold text-popover-foreground">
+              Assistente de IA
+            </h2>
           </div>
           <button
             onClick={onClose}
-            className="text-foreground/60 hover:text-foreground transition-colors"
+            className="text-muted-foreground hover:text-foreground transition-colors"
           >
             <X size={20} />
           </button>
         </div>
 
-        <p className="text-sm text-foreground/70 mb-4">
+        <p className="text-sm text-muted-foreground mb-6">
           Descreva um tópico e a IA criará uma estrutura organizada de pastas e
           arquivos sobre ele.
         </p>
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2 text-foreground/80">
-              Modelo de IA
-            </label>
-            <AIModelSelector
-              selectedModel={selectedModel}
-              onModelChange={setSelectedModel}
-              disabled={isGenerating}
-            />
+        <div className="flex flex-col gap-4">
+          {/* Input Box - estilo ai-02 */}
+          <div className="flex min-h-[120px] flex-col rounded-2xl cursor-text bg-card border border-border shadow-lg">
+            <div className="flex-1 relative overflow-y-auto max-h-[258px]">
+              <Textarea
+                ref={inputRef}
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                placeholder="Ex: Aprendizado de Machine Learning, História do Brasil, Receitas de Culinária..."
+                className="w-full border-0 p-3 transition-[padding] duration-200 ease-in-out min-h-[48.4px] outline-none text-[16px] text-foreground resize-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent whitespace-pre-wrap wrap-break-word"
+                disabled={isGenerating}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    handleGenerate();
+                  }
+                }}
+              />
+            </div>
+
+            <div className="flex min-h-[40px] items-center gap-2 p-2 pb-1 border-t border-border/50">
+              <div className="flex aspect-1 items-center gap-1 rounded-full bg-muted p-1.5 text-xs">
+                <Sparkles className="h-4 w-4 text-muted-foreground" />
+              </div>
+
+              <div className="relative flex items-center">
+                <Select
+                  value={selectedModel}
+                  onValueChange={handleModelChange}
+                  disabled={isGenerating}
+                >
+                  <SelectTrigger className="w-fit border-none bg-transparent p-0 text-sm text-muted-foreground hover:text-foreground focus:ring-0 shadow-none">
+                    <SelectValue>
+                      <span>{getModelName()}</span>
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AI_MODELS.map((model) => (
+                      <SelectItem key={model.value} value={model.value}>
+                        <div className="flex flex-col">
+                          <span>{model.name}</span>
+                          {model.description && (
+                            <span className="text-muted-foreground text-xs">
+                              {model.description}
+                            </span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="ml-auto flex items-center gap-3">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-muted-foreground hover:text-foreground transition-all duration-100"
+                  title="Anexar imagens"
+                  disabled={isGenerating}
+                >
+                  <ImageIcon className="h-5 w-5" />
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-6 w-6 rounded-full transition-all duration-100 cursor-pointer",
+                    topic && !isGenerating
+                      ? "bg-primary hover:bg-primary/90"
+                      : "bg-muted"
+                  )}
+                  disabled={!topic.trim() || isGenerating}
+                  onClick={handleGenerate}
+                >
+                  {isGenerating ? (
+                    <Loader2 className="h-4 w-4 text-primary-foreground animate-spin" />
+                  ) : (
+                    <ArrowUp className="h-4 w-4 text-primary-foreground" />
+                  )}
+                </Button>
+              </div>
+            </div>
           </div>
 
-          <div>
-            <label
-              htmlFor="topic"
-              className="block text-sm font-medium mb-2 text-foreground/80"
-            >
-              Tópico
-            </label>
-            <textarea
-              id="topic"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              placeholder="Ex: Aprendizado de Machine Learning, História do Brasil, Receitas de Culinária..."
-              className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
-              rows={4}
-              disabled={isGenerating}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                  e.preventDefault();
-                  handleGenerate();
-                }
-              }}
-            />
+          {/* Prompt Buttons */}
+          <div className="flex flex-wrap justify-center gap-2">
+            {PROMPTS.map((button) => {
+              const IconComponent = button.icon;
+              return (
+                <Button
+                  key={button.text}
+                  variant="ghost"
+                  className="group flex items-center gap-2 rounded-full border border-border px-3 py-2 text-sm text-foreground transition-all duration-200 hover:bg-muted/30 h-auto bg-transparent"
+                  onClick={() => handlePromptClick(button.prompt)}
+                  disabled={isGenerating}
+                >
+                  <IconComponent className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />
+                  <span>{button.text}</span>
+                </Button>
+              );
+            })}
           </div>
 
           {error && (
-            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-md text-sm text-red-400">
+            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md text-sm text-destructive">
               {error}
             </div>
           )}
 
-          <div className="flex gap-2">
-            <button
-              onClick={handleGenerate}
-              disabled={isGenerating || !topic.trim()}
-              className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-600/50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md font-medium transition-colors flex items-center justify-center gap-2"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Gerando...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  Gerar Estrutura
-                </>
-              )}
-            </button>
-            <button
-              onClick={onClose}
-              disabled={isGenerating}
-              className="px-4 py-2 border border-border rounded-md text-foreground/70 hover:text-foreground hover:bg-hover/50 transition-colors disabled:opacity-50"
-            >
-              Cancelar
-            </button>
-          </div>
-
-          <p className="text-xs text-foreground/50 text-center">
+          <p className="text-xs text-muted-foreground text-center">
             Dica: Pressione Ctrl+Enter para gerar rapidamente
           </p>
         </div>

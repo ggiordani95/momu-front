@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { usePathname } from "next/navigation";
 import {
   FolderTree,
   Settings,
@@ -10,10 +9,8 @@ import {
   ChevronDown,
   ChevronRight,
   UserPlus,
-  Download,
   LogOut,
   Search,
-  Edit,
   Check,
 } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -21,6 +18,23 @@ import ContextMenu from "../../editor/components/ContextMenu";
 import { usePermanentDeleteFile } from "@/modules/files";
 import { useWorkspaceStore } from "@/modules/workspace/stores/workspaceStore";
 import { ProgressSection } from "../../../components/ProgressSection";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarHeader,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import type { NavItem, FavoriteItem } from "@/components/ui/sidebar-01/types";
 
 // Workspace Selector Button Component (Linear-style)
 function WorkspaceSelectorButton({
@@ -40,9 +54,6 @@ function WorkspaceSelectorButton({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [buttonRect, setButtonRect] = useState<DOMRect | null>(null);
-
-  // Detect OS for keyboard shortcuts
-  const [isMac, setIsMac] = useState(false);
 
   // Get current workspace
   const activeWorkspace =
@@ -81,16 +92,8 @@ function WorkspaceSelectorButton({
   // Detect OS and mount state
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const platform = navigator.platform.toLowerCase();
-      const userAgent = navigator.userAgent.toLowerCase();
-      const isMacOS =
-        platform.includes("mac") ||
-        platform.includes("iphone") ||
-        platform.includes("ipad") ||
-        userAgent.includes("mac os x");
       setTimeout(() => {
         setIsMounted(true);
-        setIsMac(isMacOS);
       }, 0);
     }
   }, []);
@@ -235,7 +238,7 @@ function WorkspaceSelectorButton({
   const dropdownContent = isDropdownOpen && buttonRect && (
     <div
       ref={dropdownRef}
-      className="fixed bg-background border border-border rounded-lg shadow-2xl z-[100] min-w-[280px] max-w-[320px]"
+      className="fixed bg-[var(--sidebar)] border border-border rounded-lg shadow-2xl z-100 w-[280px]"
       style={{
         top: buttonRect.bottom + 8,
         left: buttonRect.left,
@@ -258,7 +261,7 @@ function WorkspaceSelectorButton({
                 {/* Back button */}
                 <button
                   onClick={() => setShowWorkspaceSubmenu(false)}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground/70 hover:bg-foreground/5 transition-colors"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground/70 transition-colors"
                 >
                   <ChevronRight size={16} className="rotate-180" />
                   <span>Back</span>
@@ -269,8 +272,10 @@ function WorkspaceSelectorButton({
                     <button
                       key={ws.id}
                       onClick={() => handleWorkspaceSelect(ws.id)}
-                      className={`w-full flex items-center gap-2 px-3 py-2 hover:bg-foreground/5 transition-colors ${
-                        activeWorkspace.id === ws.id ? "bg-foreground/10" : ""
+                      className={`w-full flex items-center gap-2 px-3 py-2   transition-colors ${
+                        activeWorkspace.id === ws.id
+                          ? "bg-[var(--sidebar)]"
+                          : ""
                       }`}
                     >
                       <div
@@ -280,7 +285,7 @@ function WorkspaceSelectorButton({
                       >
                         {getInitials(ws.title)}
                       </div>
-                      <span className="flex-1 text-sm text-left text-foreground">
+                      <span className="flex-1 text-sm text-left text-foreground truncate">
                         {ws.title}
                       </span>
                       {activeWorkspace.id === ws.id && (
@@ -300,7 +305,7 @@ function WorkspaceSelectorButton({
                         // TODO: Implement create/join workspace
                         console.log("Create or join workspace");
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground/70 hover:bg-foreground/5 transition-colors"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground/70   transition-colors"
                     >
                       <span>Create or join a workspace...</span>
                     </button>
@@ -311,7 +316,7 @@ function WorkspaceSelectorButton({
                         // TODO: Implement add account
                         console.log("Add account");
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground/70 hover:bg-foreground/5 transition-colors"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground/70  transition-colors"
                     >
                       <span>Add an account...</span>
                     </button>
@@ -326,9 +331,7 @@ function WorkspaceSelectorButton({
               key={item.id}
               onClick={item.onClick}
               className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
-                item.danger
-                  ? "text-red-400 hover:bg-foreground/5"
-                  : "text-foreground hover:bg-foreground/5"
+                item.danger ? "text-destructive " : "text-foreground "
               }`}
             >
               <span className="shrink-0">{item.icon}</span>
@@ -336,7 +339,7 @@ function WorkspaceSelectorButton({
               {item.hasSubmenu && !showWorkspaceSubmenu && (
                 <ChevronRight
                   size={16}
-                  className="text-foreground/40 shrink-0"
+                  className="text-foreground/60 shrink-0"
                 />
               )}
             </button>
@@ -353,7 +356,7 @@ function WorkspaceSelectorButton({
           <button
             ref={buttonRef}
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="flex-1 flex items-center gap-2 rounded-md hover:bg-foreground/5 transition-colors group"
+            className="flex-1 flex items-center gap-2 rounded-md  transition-colors group"
           >
             {/* Avatar */}
             <div
@@ -364,28 +367,15 @@ function WorkspaceSelectorButton({
               {getInitials(activeWorkspace.title)}
             </div>
             {/* Workspace name */}
-            <span className="flex-1 text-sm font-medium text-foreground truncate text-left">
+            <span className="flex-1 text-sm font-medium text-foreground truncate text-left max-w-[140px]">
               {activeWorkspace.title}
             </span>
             {/* Chevron */}
             <ChevronDown
-              className={`w-4 h-4 text-foreground/40 shrink-0 transition-transform ${
+              className={`w-4 h-4 text-foreground/60 shrink-0 transition-transform ${
                 isDropdownOpen ? "rotate-180" : ""
               }`}
             />
-          </button>
-          {/* Search and Edit icons */}
-          <button
-            className="p-1.5 rounded-md hover:bg-foreground/5 transition-colors text-foreground/40 hover:text-foreground shrink-0"
-            title="Search"
-          >
-            <Search size={16} />
-          </button>
-          <button
-            className="p-1.5 rounded-md hover:bg-foreground/5 transition-colors text-foreground/40 hover:text-foreground shrink-0"
-            title="Edit"
-          >
-            <Edit size={16} />
           </button>
         </div>
       </div>
@@ -398,63 +388,107 @@ function WorkspaceSelectorButton({
   );
 }
 
+// Custom NavHeader with Workspace Selector and Search
+function CustomNavHeader({
+  workspaceId,
+  onNavigate,
+  onSearchOpen,
+}: {
+  workspaceId: string;
+  onNavigate?: (
+    view: "explorer" | "settings" | "trash" | "social" | "planner" | "ai"
+  ) => void;
+  onSearchOpen: () => void;
+}) {
+  const isMac =
+    typeof window !== "undefined" &&
+    (navigator.platform.toLowerCase().includes("mac") ||
+      navigator.userAgent.toLowerCase().includes("mac os x"));
+
+  // Note: Keyboard shortcut is handled globally in WorkspaceView
+  // We only need the click handler here
+
+  return (
+    <SidebarHeader>
+      {/* Search Bar - Top */}
+      <div
+        className="flex items-center justify-between pb-2 pt-3 cursor-pointer"
+        onClick={onSearchOpen}
+      >
+        <div className="flex items-center flex-1 gap-3">
+          <Search className="h-4 w-4 text-foreground/70" />
+          <span className="text-sm text-foreground/70 font-normal">
+            Procurar
+          </span>
+        </div>
+        <div className="flex items-center justify-center px-2 py-1 border border-border rounded-md">
+          <kbd className="text-foreground/70 inline-flex font-[inherit] text-xs font-medium">
+            <span className="opacity-70">
+              {isMac ? "⌘ + " : "Ctrl +"}
+              {"/"}
+            </span>
+          </kbd>
+        </div>
+      </div>
+
+      {/* Workspace Selector - Below Search */}
+      <div className="pb-2 pt-1">
+        <WorkspaceSelectorButton
+          workspaceId={workspaceId}
+          onNavigate={onNavigate}
+        />
+      </div>
+    </SidebarHeader>
+  );
+}
+
 interface SimpleSidebarProps {
   onNavigate?: (
     view: "explorer" | "settings" | "trash" | "social" | "planner" | "ai"
   ) => void;
-  currentView?: "explorer" | "settings" | "trash" | "social" | "planner" | "ai";
   workspaceId: string;
 }
 
 export default function SimpleSidebar({
   onNavigate,
-  currentView,
   workspaceId,
 }: SimpleSidebarProps) {
-  const pathname = usePathname();
-  const { currentView: storeView, setCurrentView } = useWorkspaceStore();
+  const {
+    currentView: storeView,
+    setCurrentView,
+    workspaces,
+  } = useWorkspaceStore();
+  const [trashContextMenu, setTrashContextMenu] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
 
-  // Use store view if currentView prop is not provided
-  const activeView = currentView || storeView;
+  // Use store view as single source of truth
+  // WorkspaceView handles syncing pathname → store on mount/URL changes
+  const activeView = storeView;
 
   const handleNavigate = (
     view: "explorer" | "settings" | "trash" | "social" | "planner" | "ai"
   ) => {
-    // Check if we're already in the target view
-    const currentPathView = pathname?.split("/")[1];
-    if (currentPathView === view && activeView === view) {
+    // Check if we're already in the target view (use store, not pathname)
+    if (storeView === view) {
       // Already in the target view, do nothing
       return;
     }
 
-    // Mark this as internal navigation FIRST to prevent WorkspaceView from re-rendering
-    // We'll set a flag in the window object that WorkspaceView can check
-    if (typeof window !== "undefined") {
-      (
-        window as Window & { __isInternalNavigation?: boolean }
-      ).__isInternalNavigation = true;
-    }
-
-    // Update view in Zustand store (instant UI update)
+    // Update view in Zustand store first (instant UI update)
+    // This will trigger re-render in WorkspaceView to show correct content
     setCurrentView(view);
 
-    // Update URL asynchronously using history API to avoid re-render/flash
-    // Use requestAnimationFrame to ensure it happens after React's render
+    // Update URL using history API (no re-render, smooth navigation)
+    // WorkspaceView already renders based on storeView, so we don't need router.push
     if (typeof window !== "undefined") {
-      requestAnimationFrame(() => {
-        const newUrl = `/${view}`;
-        window.history.replaceState(
-          { ...window.history.state, view },
-          "",
-          newUrl
-        );
-        // Clear the flag after a delay to ensure WorkspaceView's useEffect has run
-        setTimeout(() => {
-          (
-            window as Window & { __isInternalNavigation?: boolean }
-          ).__isInternalNavigation = false;
-        }, 100);
-      });
+      const newUrl = `/${view}`;
+      window.history.replaceState(
+        { ...window.history.state, view },
+        "",
+        newUrl
+      );
     }
 
     // Call onNavigate callback if provided (for backward compatibility)
@@ -462,10 +496,6 @@ export default function SimpleSidebar({
       onNavigate(view);
     }
   };
-  const [trashContextMenu, setTrashContextMenu] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
 
   // Get trash items from Zustand store (files with active === false)
   const { getDeletedFilesByWorkspace } = useWorkspaceStore();
@@ -493,66 +523,165 @@ export default function SimpleSidebar({
       await Promise.all(
         trashItems.map((file) => permanentDeleteMutation.mutateAsync(file.id))
       );
-    } catch (_error) {
+    } catch {
       // On error, re-sync to get correct state
     }
   };
+
+  // Main navigation items
+  const navItems: NavItem[] = [
+    {
+      id: "explorer",
+      title: "Meu explorador",
+      icon: FolderTree,
+      isActive: activeView === "explorer",
+    },
+    {
+      id: "trash",
+      title: "Lixeira",
+      icon: Trash2,
+      isActive: activeView === "trash",
+    },
+    {
+      id: "ai",
+      title: "Assistente de IA",
+      icon: Airplay,
+      isActive: activeView === "ai",
+    },
+  ];
+
+  // Favorite workspaces (first 4 workspaces as favorites)
+  const favoriteWorkspaces: FavoriteItem[] = workspaces
+    .slice(0, 4)
+    .map((ws) => {
+      const colors = [
+        "bg-green-400 dark:bg-green-300",
+        "bg-blue-400 dark:bg-blue-300",
+        "bg-orange-400 dark:bg-orange-300",
+        "bg-red-400 dark:bg-red-300",
+        "bg-purple-400 dark:bg-purple-300",
+        "bg-pink-400 dark:bg-pink-300",
+        "bg-indigo-400 dark:bg-indigo-300",
+        "bg-teal-400 dark:bg-teal-300",
+      ];
+      const colorIndex = ws.title.charCodeAt(0) % colors.length;
+      return {
+        id: ws.id,
+        title: ws.title,
+        href: `/explorer/${ws.id}`,
+        color: colors[colorIndex],
+      };
+    });
+
+  // Handle workspace selection from favorites
+  const handleWorkspaceSelect = (workspaceId: string) => {
+    const workspace = workspaces.find((w) => w.id === workspaceId);
+    if (workspace) {
+      const { setCurrentWorkspace, setCurrentView } =
+        useWorkspaceStore.getState();
+      setCurrentWorkspace({
+        id: workspace.id,
+        title: workspace.title,
+      });
+      setCurrentView("explorer");
+      if (typeof window !== "undefined") {
+        window.history.pushState(
+          { ...window.history.state, workspaceId: workspace.id },
+          "",
+          `/explorer/${workspace.id}`
+        );
+      }
+    }
+  };
+
   return (
-    <aside className="w-64 shrink-0 border-r border-border flex flex-col relative z-10">
-      <div className="flex items-center">
-        <div className="w-full p-3">
-          <WorkspaceSelectorButton
-            workspaceId={workspaceId}
-            onNavigate={onNavigate}
-          />
-        </div>
-      </div>
+    <>
+      <Sidebar collapsible="icon" variant="inset">
+        <CustomNavHeader
+          workspaceId={workspaceId}
+          onNavigate={onNavigate}
+          onSearchOpen={() => {
+            // Dispatch custom event to open search in WorkspaceView
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new CustomEvent("openGlobalSearch"));
+            }
+          }}
+        />
 
-      <nav className="flex-1 overflow-y-auto p-2">
-        <div className="space-y-1">
-          <button
-            onClick={() => handleNavigate("explorer")}
-            className={`w-full flex items-center gap-2 p-2 rounded-md text-sm font-medium transition-colors ${
-              activeView === "explorer"
-                ? "bg-hover text-foreground"
-                : "hover:bg-hover/50 text-foreground/70"
-            }`}
-          >
-            <FolderTree size={18} />
-            Meu explorador
-          </button>
+        <SidebarContent>
+          {/* Main Navigation - using NavMain structure */}
+          <SidebarGroup>
+            <SidebarMenu>
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton
+                      tooltip={item.title}
+                      isActive={item.isActive}
+                      className={"text-foreground hover:text-foreground"}
+                      onClick={() =>
+                        handleNavigate(item.id as typeof activeView)
+                      }
+                      onContextMenu={
+                        item.id === "trash" ? handleTrashContextMenu : undefined
+                      }
+                    >
+                      {Icon && <Icon className="mr-2 h-4 w-4" />}
+                      <span>{item.title}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroup>
 
-          <button
-            onClick={() => handleNavigate("trash")}
-            onContextMenu={handleTrashContextMenu}
-            className={`w-full flex items-center gap-2 p-2 rounded-md text-sm font-medium transition-colors ${
-              activeView === "trash"
-                ? "bg-[var(--hover-bg)] text-foreground"
-                : "hover:bg-[var(--hover-bg)]/50 text-foreground/70"
-            }`}
-          >
-            <Trash2 size={18} />
-            Lixeira
-          </button>
+          {/* Collapsible Sections: Favorites (Workspaces) - using NavCollapsible structure */}
+          {favoriteWorkspaces.length > 0 && (
+            <Collapsible defaultOpen className="group/collapsible">
+              <SidebarGroup>
+                <SidebarGroupLabel
+                  asChild
+                  className="text-sm text-foreground/70"
+                >
+                  <CollapsibleTrigger>
+                    Favoritos
+                    <ChevronDown className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-180 text-foreground/60" />
+                  </CollapsibleTrigger>
+                </SidebarGroupLabel>
+                <CollapsibleContent>
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      {favoriteWorkspaces.map((item) => (
+                        <SidebarMenuItem key={item.id}>
+                          <SidebarMenuButton asChild>
+                            <a
+                              href={item.href}
+                              className="flex items-center gap-3 text-foreground"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleWorkspaceSelect(item.id);
+                              }}
+                            >
+                              <div
+                                className={`h-3 w-3 rounded-[4px] ${item.color}`}
+                              />
+                              <span>{item.title}</span>
+                            </a>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      ))}
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </CollapsibleContent>
+              </SidebarGroup>
+            </Collapsible>
+          )}
 
           {/* Progress Section */}
           <ProgressSection workspaceId={workspaceId} />
-
-          <div className="border-t border-border my-2" />
-
-          <button
-            onClick={() => handleNavigate("ai")}
-            className={`w-full flex items-center gap-2 p-2 rounded-md text-sm font-medium transition-colors ${
-              activeView === "ai"
-                ? "bg-hover text-foreground"
-                : "hover:bg-hover/50 text-foreground/70"
-            }`}
-          >
-            <Airplay size={18} className="text-purple-500" />
-            Assistente de IA
-          </button>
-        </div>
-      </nav>
+        </SidebarContent>
+      </Sidebar>
 
       {/* Context Menu for Trash */}
       {trashContextMenu && (
@@ -579,6 +708,6 @@ export default function SimpleSidebar({
           onClose={() => setTrashContextMenu(null)}
         />
       )}
-    </aside>
+    </>
   );
 }

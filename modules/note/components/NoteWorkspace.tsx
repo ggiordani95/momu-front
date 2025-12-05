@@ -797,7 +797,7 @@ export default function PageEditor({
         <div
           className="relative z-50 flex items-center gap-0.5 px-1.5 py-1.5 rounded-lg shadow-lg"
           style={{
-            backgroundColor: "var(--sidebar-bg)",
+            backgroundColor: "var(--sidebar)",
             backdropFilter: "blur(12px) saturate(120%)",
             WebkitBackdropFilter: "blur(12px) saturate(120%)",
             color: "var(--foreground)",

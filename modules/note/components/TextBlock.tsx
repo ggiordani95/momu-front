@@ -336,7 +336,7 @@ export default function TextBlock({
           style={{
             top: `${toolbarPosition.top}px`,
             left: `${toolbarPosition.left}px`,
-            backgroundColor: "var(--sidebar-bg)",
+            backgroundColor: "var(--sidebar)",
             backdropFilter: "blur(12px) saturate(180%)",
             WebkitBackdropFilter: "blur(12px) saturate(180%)",
             borderColor: "var(--border)",
@@ -452,7 +452,7 @@ export default function TextBlock({
               <div
                 className="absolute top-full left-1/2 -translate-x-1/2 mt-1 p-2 border rounded-lg shadow-lg z-10 grid grid-cols-6 gap-1"
                 style={{
-                  backgroundColor: "var(--sidebar-bg)",
+                  backgroundColor: "var(--sidebar)",
                   backdropFilter: "blur(12px) saturate(180%)",
                   WebkitBackdropFilter: "blur(12px) saturate(180%)",
                   borderColor: "var(--border)",
